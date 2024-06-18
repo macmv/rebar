@@ -3,5 +3,18 @@ name = "rb-parser"
 version = "0.1.0"
 edition = "2021"
 
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+
 [dependencies]
+drop_bomb = "0.1.5"
 rowan = "0.15.15"
+thiserror = "1.0.56"
+
+[build-dependencies]
+rb-build.workspace = true
+
+[dev-dependencies]
+rb-test.workspace = true
+pretty_assertions = "1.4.0"

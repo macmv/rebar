@@ -1,0 +1,27 @@
+// Rebar Un-Grammar.
+//
+// This grammar specifies the structure of Rebar's concrete syntax tree.
+// It does not specify parsing rules (ambiguities, precedence, etc are out of scope).
+// Tokens are processed -- contextual keywords are recognised, compound operators glued.
+//
+// Legend:
+//
+//   //          -- comment
+//   Name =      -- non-terminal definition
+//   'ident'     -- token (terminal)
+//   A B         -- sequence
+//   A | B       -- alternation
+//   A*          -- zero or more repetition
+//   A?          -- zero or one repetition
+//   (A)         -- same as A
+//   label:A     -- suggested name for field of AST node
+
+Expr =
+  Call |
+  'integer' |
+  'string'
+
+Call = Expr '(' ')'
+Stmt = Expr
+
+SourceFile = Stmt*

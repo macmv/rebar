@@ -9,6 +9,9 @@ members = [
   "rb-syntax",
   "rb-typer",
   "rb-test",
+  "rb-build",
 ]
 
-[dependencies]
+[workspace.dependencies]
+rb-test = { path = "rb-test" }
+rb-build = { path = "rb-build" }
