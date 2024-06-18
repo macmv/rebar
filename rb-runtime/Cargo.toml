@@ -4,4 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+cranelift = "0.108.1"
+cranelift-jit = "0.108.1"
+cranelift-module = "0.108.1"
+cranelift-native = "0.108.1"
 rb-syntax.workspace = true
