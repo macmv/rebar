@@ -2,7 +2,9 @@ use crate::{CompletedMarker, Marker, SyntaxKind, T};
 
 use super::*;
 
-pub fn expr(p: &mut Parser) { expr_bp(p, 0); }
+pub fn expr(p: &mut Parser) { expr_bp(p, 0, false); }
+
+fn expr_cond(p: &mut Parser) { expr_bp(p, 0, true); }
 
 fn op_bp(t: SyntaxKind) -> Option<(u8, u8)> {
   // test ok
@@ -23,7 +25,8 @@ fn op_bp(t: SyntaxKind) -> Option<(u8, u8)> {
   }
 }
 
-fn expr_bp(p: &mut Parser, min_bp: u8) {
+// TODO: Use `cond`.
+fn expr_bp(p: &mut Parser, min_bp: u8, cond: bool) {
   let m = p.start();
   let Some(mut lhs) = atom_expr(p, m) else { return };
   lhs = postfix_expr(p, lhs);
@@ -37,7 +40,7 @@ fn expr_bp(p: &mut Parser, min_bp: u8) {
       let m = lhs.precede(p);
       p.bump(); // eat the operator
 
-      expr_bp(p, r_bp);
+      expr_bp(p, r_bp, cond);
       lhs = m.complete(p, BINARY_EXPR);
     } else {
       match p.current() {
@@ -74,6 +77,35 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
 
       p.eat(T!['"']);
       Some(m.complete(p, STRING))
+    }
+
+    T![if] => {
+      p.eat(T![if]);
+      expr_cond(p);
+
+      // test ok
+      // if 1 { print("hello") }
+      super::stmt::block(p);
+
+      while p.at(T![else]) {
+        p.eat(T![else]);
+
+        if p.at(T![if]) {
+          p.eat(T![if]);
+          // test ok
+          // if 1 { print("hello") } else if 2 { print("bye") }
+          // if 1 { print("hello") } else if 2 { print("bye") } else { print("ok") }
+          expr_cond(p);
+          super::stmt::block(p);
+        } else {
+          // test ok
+          // if 1 { print("hello") } else { print("bye") }
+          super::stmt::block(p);
+          break;
+        }
+      }
+
+      Some(m.complete(p, IF_EXPR))
     }
 
     _ => {

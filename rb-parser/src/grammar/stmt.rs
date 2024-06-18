@@ -1,5 +1,17 @@
 use crate::{Parser, SyntaxKind::*, T};
 
+pub fn block(p: &mut Parser) {
+  let m = p.start();
+  p.expect(T!['{']);
+
+  while !p.at(EOF) && !p.at(T!['}']) {
+    stmt(p);
+  }
+
+  p.expect(T!['}']);
+  m.complete(p, BLOCK);
+}
+
 pub fn stmt(p: &mut Parser) {
   match p.current() {
     // test ok
@@ -17,15 +29,25 @@ pub fn stmt(p: &mut Parser) {
     _ => super::expr::expr(p),
   }
 
-  // test err
-  // foo bar
-  if p.current() != T![nl] {
-    p.error("expected end of statement");
+  match p.current() {
+    T![nl] => p.eat(T![nl]),
+    T!['}'] => {}
+    _ => {
+      // test err
+      // foo bar
+      p.error("expected end of statement");
+
+      while !p.at(EOF) && !p.at(T![nl]) && !p.at(T!['}']) {
+        p.bump();
+      }
+
+      match p.current() {
+        T![nl] => p.eat(T![nl]),
+        T!['}'] => {}
+        _ => {}
+      }
+    }
   }
-  while p.current() != T![nl] {
-    p.bump();
-  }
-  p.eat(T![nl]);
 }
 
 fn params(p: &mut Parser) {
