@@ -20,9 +20,10 @@ Name = 'ident'
 
 BinaryOp = '+' | '-' | '*' | '/' | '==' | '!=' | '<' | '<=' | '>' | '>='
 
+Literal = 'integer' | 'float'
+
 Expr =
-  'integer' |
-  'float' |
+  Literal |
   String |
   CallExpr |
   FieldExpr |
@@ -45,7 +46,8 @@ Type = Name
 CallExpr = Expr ParenArgs
 ParenArgs = '(' Expr (',' Expr)* ')'
 
-Stmt = Def | Struct | Assign | Expr
+ExprStmt = Expr
+Stmt = Def | Struct | Assign | ExprStmt
 
 Assign = Expr '=' Expr
 
