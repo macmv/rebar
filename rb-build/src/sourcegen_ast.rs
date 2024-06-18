@@ -32,11 +32,11 @@ pub fn sourcegen_ast() {
   let ast = lower(&grammar);
 
   let ast_tokens = generate_tokens(&ast);
-  let ast_tokens_file = sourcegen::project_root().join("rb-syntax/src/ast/generated/tokens.rs");
+  let ast_tokens_file = sourcegen::project_root().join("rb-syntax/src/generated/tokens.rs");
   sourcegen::ensure_file_contents(ast_tokens_file.as_path(), &ast_tokens);
 
   let ast_nodes = generate_nodes(&ast);
-  let ast_nodes_file = sourcegen::project_root().join("rb-syntax/src/ast/generated/nodes.rs");
+  let ast_nodes_file = sourcegen::project_root().join("rb-syntax/src/generated/nodes.rs");
   sourcegen::ensure_file_contents(ast_nodes_file.as_path(), &ast_nodes);
 }
 
@@ -69,7 +69,7 @@ fn generate_tokens(grammar: &AstSrc) -> String {
     "sourcegen_ast",
     sourcegen::reformat(
       quote! {
-        use crate::{ast::AstToken, node::SyntaxToken};
+        use crate::{ext::AstToken, node::SyntaxToken};
         use rb_parser::SyntaxKind::{self, *};
 
         #(#tokens)*
@@ -184,29 +184,25 @@ fn generate_nodes(grammar: &AstSrc) -> String {
         quote!(impl ast::#trait_name for #name {})
       });
 
-      let ast_node = if en.name == "Stmt" {
-        quote! {}
-      } else {
-        quote! {
-          impl AstNode for #name {
-            fn can_cast(kind: SyntaxKind) -> bool {
-              matches!(kind, #(#kinds)|*)
-            }
-            fn cast(syntax: SyntaxNode) -> Option<Self> {
-              let res = match syntax.kind() {
-                #(
-                #kinds => #name::#variants(#variants { syntax }),
-                )*
-                _ => return None,
-              };
-              Some(res)
-            }
-            fn syntax(&self) -> &SyntaxNode {
-              match self {
-                #(
-                #name::#variants(it) => &it.syntax,
-                )*
-              }
+      let ast_node = quote! {
+        impl AstNode for #name {
+          fn can_cast(kind: SyntaxKind) -> bool {
+            matches!(kind, #(#kinds)|*)
+          }
+          fn cast(syntax: SyntaxNode) -> Option<Self> {
+            let res = match syntax.kind() {
+              #(
+              #kinds => #name::#variants(#variants { syntax }),
+              )*
+              _ => return None,
+            };
+            Some(res)
+          }
+          fn syntax(&self) -> &SyntaxNode {
+            match self {
+              #(
+              #name::#variants(it) => &it.syntax,
+              )*
             }
           }
         }
@@ -302,7 +298,7 @@ fn generate_nodes(grammar: &AstSrc) -> String {
   let ast = quote! {
     #![allow(non_snake_case, non_camel_case_types)]
     use crate::{
-      ast::{support, AstChildren, AstTokenChildren, AstNode},
+      support, ext::{AstChildren, AstTokenChildren, AstNode},
       node::{SyntaxNode, SyntaxToken},
     };
     use rb_parser::{
@@ -602,7 +598,11 @@ impl Field {
         format_ident!("{}_token", name)
       }
       Field::Node { name, .. } => {
-        format_ident!("{}", name)
+        if name == "type" {
+          format_ident!("ty")
+        } else {
+          format_ident!("{}", name)
+        }
       }
     }
   }
@@ -621,11 +621,9 @@ impl Field {
 const TOKEN_SHORTHANDS: &[&str] = &["nl"];
 
 fn lower(grammar: &Grammar) -> AstSrc {
+  // FIXME: Maybe remove tokens?.
   let mut res = AstSrc {
-    tokens: "Whitespace Comment String ByteString IntNumber FloatNumber Char Byte Ident"
-      .split_ascii_whitespace()
-      .map(|it| it.to_string())
-      .collect::<Vec<_>>(),
+    tokens: "Ident".split_ascii_whitespace().map(|it| it.to_string()).collect::<Vec<_>>(),
     grammar_tokens: grammar.tokens().map(|it| grammar[it].name.clone()).collect::<Vec<_>>(),
     ..Default::default()
   };

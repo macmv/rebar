@@ -161,6 +161,11 @@ dependencies = [
 [[package]]
 name = "rb-syntax"
 version = "0.1.0"
+dependencies = [
+ "rb-build",
+ "rb-parser",
+ "rowan",
+]
 
 [[package]]
 name = "rb-test"

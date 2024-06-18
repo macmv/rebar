@@ -2,3 +2,10 @@
 name = "rb-syntax"
 version = "0.1.0"
 edition = "2021"
+
+[dependencies]
+rowan = "0.15.15"
+rb-parser.workspace = true
+
+[build-dependencies]
+rb-build.workspace = true
