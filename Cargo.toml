@@ -1,0 +1,13 @@
+[package]
+name = "rebar"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+members = [
+  "rb-parser",
+  "rb-syntax",
+  "rb-typer",
+]
+
+[dependencies]
