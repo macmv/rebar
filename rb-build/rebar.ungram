@@ -18,23 +18,37 @@
 
 Name = 'ident'
 
+BinaryOp = '+' | '-' | '*' | '/' | '==' | '!=' | '<' | '<=' | '>' | '>='
+
 Expr =
   'integer' |
-  'string' |
+  'float' |
+  String |
   Call |
+  FieldExpr |
+  BinaryExpr |
   Block
 
-Block = '{' Stmt* '}'
+String = '"' Escape* '"'
+Escape = '\\' 'ident'
+
+FieldExpr = Expr '.' Name
+BinaryExpr = Expr BinaryOp Expr
+
+Block = '{' (Stmt 'nl')* '}'
 
 Type = Name
 
 Call = Expr '(' ')'
-Stmt = Def | Struct | Expr
+Stmt = Def | Struct | Assign | Expr
+
+Assign = Expr '=' Expr
 
 Def = 'def' Name ArgsDef Block
 Struct = 'struct' Name StructBlock
 
-ArgsDef = '(' Name ':' Type ',' (Name ':' Type)* ')'
+ArgsDef = '(' ArgDef* ')'
+ArgDef = Name ':' Type
 
 StructBlock = '{' StructItem* '}'
 StructItem = Property | Def | ConstructorDef

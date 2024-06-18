@@ -13,7 +13,7 @@ use quote::{format_ident, quote};
 use ungrammar::{Grammar, Rule};
 
 use super::{
-  ast_src::{AstEnumSrc, AstNodeSrc, AstSrc, Cardinality, Field, KindsSrc, KINDS_SRC},
+  ast_src::{AstEnumSrc, AstNodeSrc, AstSrc, Cardinality, Field},
   sourcegen,
 };
 
@@ -22,7 +22,7 @@ pub fn sourcegen_kinds() {
     include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/rebar.ungram")).parse().unwrap();
   let ast = lower(&grammar);
 
-  let syntax_kinds = generate_syntax_kinds(KINDS_SRC, &ast);
+  let syntax_kinds = generate_syntax_kinds(&ast);
   let syntax_kinds_file = sourcegen::project_root().join("rb-parser/src/syntax_kind/generated.rs");
   sourcegen::ensure_file_contents(syntax_kinds_file.as_path(), &syntax_kinds);
 }
@@ -343,9 +343,7 @@ fn write_doc_comment(contents: &[String], dest: &mut String) {
   }
 }
 
-fn generate_syntax_kinds(kinds: KindsSrc<'_>, ast: &AstSrc) -> String {
-  let literals = kinds.literals.iter().map(|name| format_ident!("{}", name)).collect::<Vec<_>>();
-
+fn generate_syntax_kinds(ast: &AstSrc) -> String {
   let mut keywords: Vec<Ident> = vec![];
   let mut keyword_idents: Vec<Ident> = vec![];
   let mut punctuation: Vec<Ident> = vec![];
@@ -369,11 +367,11 @@ fn generate_syntax_kinds(kinds: KindsSrc<'_>, ast: &AstSrc) -> String {
       let name = token_name(name);
 
       if token == "'" {
-        punctuation_values.push(quote!("'"));
+        punctuation_values.push(quote!('\''));
       } else if token == "\"" {
-        punctuation_values.push(quote!("\""));
-      } else if token == "\"\"\"" {
-        punctuation_values.push(quote!("\"\"\""));
+        punctuation_values.push(quote!('"'));
+      } else if token == "\\" {
+        punctuation_values.push(quote!('\\'));
       } else if "{}[]()".contains(token) {
         let c = token.chars().next().unwrap();
         punctuation_values.push(quote!(#c));
@@ -421,8 +419,6 @@ fn generate_syntax_kinds(kinds: KindsSrc<'_>, ast: &AstSrc) -> String {
       #[comment_separator]
       #(#keywords,)*
       #[comment_separator]
-      #(#literals,)*
-      #[comment_separator]
       #(#nodes,)*
 
       // Technical kind so that we can cast from u16 safely
@@ -438,10 +434,6 @@ fn generate_syntax_kinds(kinds: KindsSrc<'_>, ast: &AstSrc) -> String {
 
       pub fn is_punct(self) -> bool {
         matches!(self, #(#punctuation)|*)
-      }
-
-      pub fn is_literal(self) -> bool {
-        matches!(self, #(#literals)|*)
       }
 
       /*
@@ -476,6 +468,7 @@ fn generate_syntax_kinds(kinds: KindsSrc<'_>, ast: &AstSrc) -> String {
       #([#punctuation_values] => { $crate::SyntaxKind::#punctuation };)*
       #([#keyword_idents] => { $crate::SyntaxKind::#keywords };)*
       [lifetime_ident] => { $crate::SyntaxKind::LIFETIME_IDENT };
+      [ws] => { $crate::SyntaxKind::WHITESPACE };
       [ident] => { $crate::SyntaxKind::IDENT };
       [shebang] => { $crate::SyntaxKind::SHEBANG };
     }
@@ -563,9 +556,16 @@ fn token_name(name: &str) -> &str {
     "&" => "bit_and",
     "|" => "bit_or",
     "^" => "bit_xor",
+    "==" => "eq_eq",
+    "!=" => "not_eq",
+    ">=" => "greater_eq",
+    "<=" => "less_eq",
+    "<" => "less",
+    ">" => "greater",
 
     "'" => "single_quote",
     "\"" => "double_quote",
+    "\\" => "backslash",
 
     _ if name.chars().all(|c| c.is_ascii_lowercase() || c == '_') => name,
     _ => panic!("unknown token {name}"),
@@ -577,8 +577,9 @@ impl Field {
   fn token_kind(&self) -> Option<proc_macro2::TokenStream> {
     match self {
       Field::Token(token) => match token.as_str() {
-        "'" => Some(quote! { T!["'"] }),
-        "\"" => Some(quote! { T!["\""] }),
+        "'" => Some(quote! { T!['\''] }),
+        "\"" => Some(quote! { T!['"'] }),
+        "\\" => Some(quote! { T!['\\'] }),
         _ => {
           let token: proc_macro2::TokenStream = token.parse().unwrap();
           Some(quote! { T![#token] })

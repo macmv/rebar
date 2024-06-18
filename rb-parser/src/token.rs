@@ -2,31 +2,7 @@ use std::ops::Range;
 
 use thiserror::Error;
 
-// Scala's grammar is quite finicky. We expose a `Token` enum that is a
-// parser-usable version of a token. It contains high level concepts like
-// "Identifiers" and "Numbers".
-//
-// In order to actually parse identifiers (of all things), we have a separate
-// inner token type, which implements the various parts of an identifier.
-
-#[derive(Debug, PartialEq)]
-pub enum Token {
-  Ident,
-  Literal(Literal),
-
-  Group(Group),
-  Delimiter(Delimiter),
-  Newline,
-  Whitespace,
-
-  Invalid,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Literal {
-  Integer,
-  Float,
-}
+use crate::{SyntaxKind, T};
 
 pub type Result<T> = std::result::Result<T, LexError>;
 
@@ -39,49 +15,6 @@ pub enum LexError {
   EOF,
 }
 
-// Below we have the lexer internals.
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum InnerToken {
-  Whitespace,
-  Newline,
-
-  Underscore,
-  Letter,
-  Digit,
-
-  Group(Group),
-  Delimiter(Delimiter),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Group {
-  OpenParen,
-  CloseParen,
-
-  OpenBracket,
-  CloseBracket,
-
-  OpenBrace,
-  CloseBrace,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Delimiter {
-  SingleQuote,
-  DoubleQuote,
-  Dot,
-  Comma,
-  Colon,
-  Equals,
-
-  Plus,
-  Minus,
-  Star,
-  Slash,
-  Backslash,
-}
-
 struct Tokenizer<'a> {
   source: &'a str,
   index:  usize,
@@ -92,7 +25,7 @@ impl<'a> Tokenizer<'a> {
 
   pub fn pos(&self) -> usize { self.index }
 
-  pub fn peek(&mut self) -> Result<Option<InnerToken>> {
+  pub fn peek(&mut self) -> Result<Option<SyntaxKind>> {
     if self.index >= self.source.len() {
       Ok(None)
     } else {
@@ -105,44 +38,40 @@ impl<'a> Tokenizer<'a> {
     }
   }
 
-  pub fn eat(&mut self) -> Result<InnerToken> {
+  pub fn eat(&mut self) -> Result<SyntaxKind> {
     let Some(c) = self.source[self.index..].chars().next() else {
       return Err(LexError::EOF);
     };
     self.index += c.len_utf8();
     let t = match c {
-      '\u{0020}' | '\u{0009}' | '\u{000d}' => InnerToken::Whitespace,
-      '\n' => InnerToken::Newline,
+      '\u{0020}' | '\u{0009}' | '\u{000d}' => T![ws],
+      '\n' => T![nl],
 
-      '(' => InnerToken::Group(Group::OpenParen),
-      ')' => InnerToken::Group(Group::CloseParen),
-      '[' => InnerToken::Group(Group::OpenBracket),
-      ']' => InnerToken::Group(Group::CloseBracket),
-      '{' => InnerToken::Group(Group::OpenBrace),
-      '}' => InnerToken::Group(Group::CloseBrace),
+      '(' => T!['('],
+      ')' => T![')'],
+      // '[' => T!['['],
+      // ']' => T![']'],
+      '{' => T!['{'],
+      '}' => T!['}'],
 
-      '+' => InnerToken::Delimiter(Delimiter::Plus),
-      '-' => InnerToken::Delimiter(Delimiter::Minus),
-      '=' => InnerToken::Delimiter(Delimiter::Equals),
-      '\'' => InnerToken::Delimiter(Delimiter::SingleQuote),
-      '"' => InnerToken::Delimiter(Delimiter::DoubleQuote),
-      '.' => InnerToken::Delimiter(Delimiter::Dot),
-      ',' => InnerToken::Delimiter(Delimiter::Comma),
-      '/' => InnerToken::Delimiter(Delimiter::Slash),
-      '\\' => InnerToken::Delimiter(Delimiter::Backslash),
-      '*' => InnerToken::Delimiter(Delimiter::Star),
-      ':' => InnerToken::Delimiter(Delimiter::Colon),
-
-      '_' => InnerToken::Underscore,
-      'a'..='z' | 'A'..='Z' => InnerToken::Letter,
-      '0'..='9' => InnerToken::Digit,
+      '+' => T![+],
+      '-' => T![-],
+      '=' => T![=],
+      // '\'' => T!['\''],
+      '"' => T!['"'],
+      '.' => T![.],
+      // ',' => T![,],
+      '/' => T![/],
+      '\\' => T!['\\'],
+      '*' => T![*],
+      ':' => T![:],
+      'a'..='z' | 'A'..='Z' | '_' => T![ident],
+      '0'..='9' => T![integer],
 
       _ => return Err(LexError::InvalidChar),
     };
     Ok(t)
   }
-
-  pub fn span(&self) -> Range<usize> { self.index - 1..self.index }
 }
 
 pub struct Lexer<'a> {
@@ -153,18 +82,18 @@ pub struct Lexer<'a> {
 impl<'a> Lexer<'a> {
   pub fn new(input: &'a str) -> Self { Lexer { tok: Tokenizer::new(input), span: 0..0 } }
 
-  fn ok(&mut self, start: usize, tok: Token) -> Result<Token> {
+  fn ok(&mut self, start: usize, tok: SyntaxKind) -> Result<SyntaxKind> {
     self.span.start = start;
-    self.span.end = self.tok.span().end;
+    self.span.end = self.tok.pos();
     Ok(tok)
   }
 
-  pub fn eat_whitespace(&mut self) -> Result<Option<Token>> {
+  pub fn eat_whitespace(&mut self) -> Result<Option<SyntaxKind>> {
     loop {
       match self.tok.peek()? {
-        Some(InnerToken::Whitespace) => {
+        Some(T![ws]) => {
           self.tok.eat().unwrap();
-          return Ok(Some(Token::Whitespace));
+          return Ok(Some(T![ws]));
         }
         Some(_) | None => break,
       }
@@ -172,7 +101,7 @@ impl<'a> Lexer<'a> {
     Ok(None)
   }
 
-  pub fn next(&mut self) -> Result<Token> {
+  pub fn next(&mut self) -> Result<SyntaxKind> {
     let start = self.tok.pos();
     match self.next0() {
       Ok(t) => Ok(t),
@@ -193,7 +122,7 @@ impl<'a> Lexer<'a> {
     }
   }
 
-  fn next0(&mut self) -> Result<Token> {
+  fn next0(&mut self) -> Result<SyntaxKind> {
     let start = self.tok.pos();
     if let Some(t) = self.eat_whitespace()? {
       while self.eat_whitespace().is_ok_and(|o| o.is_some()) {}
@@ -203,25 +132,23 @@ impl<'a> Lexer<'a> {
     let first = self.tok.eat()?;
     match first {
       // Line comments.
-      InnerToken::Delimiter(Delimiter::Slash) if self.tok.peek() == Ok(Some(first)) => {
+      T![/] if self.tok.peek() == Ok(Some(first)) => {
         self.tok.eat()?;
 
         loop {
           match self.tok.eat() {
             Err(LexError::EOF) => break,
-            Ok(InnerToken::Newline) => break,
+            Ok(T![nl]) => break,
             Ok(_) => {}
             Err(e) => return Err(e),
           }
         }
 
-        self.ok(start, Token::Whitespace)
+        self.ok(start, T![ws])
       }
 
       // Block comments.
-      InnerToken::Delimiter(Delimiter::Slash)
-        if self.tok.peek() == Ok(Some(InnerToken::Delimiter(Delimiter::Star))) =>
-      {
+      T![/] if self.tok.peek() == Ok(Some(T![*])) => {
         self.tok.eat()?;
 
         let mut depth = 1;
@@ -229,16 +156,12 @@ impl<'a> Lexer<'a> {
         loop {
           match self.tok.eat() {
             // `/*`
-            Ok(InnerToken::Delimiter(Delimiter::Slash))
-              if self.tok.peek() == Ok(Some(InnerToken::Delimiter(Delimiter::Star))) =>
-            {
+            Ok(T![/]) if self.tok.peek() == Ok(Some(T![*])) => {
               depth += 1;
             }
 
             // `*/`
-            Ok(InnerToken::Delimiter(Delimiter::Star))
-              if self.tok.peek() == Ok(Some(InnerToken::Delimiter(Delimiter::Slash))) =>
-            {
+            Ok(T![*]) if self.tok.peek() == Ok(Some(T![/])) => {
               depth -= 1;
             }
 
@@ -253,44 +176,42 @@ impl<'a> Lexer<'a> {
           }
         }
 
-        self.ok(start, Token::Whitespace)
+        self.ok(start, T![ws])
       }
 
       // Plain identifier.
-      InnerToken::Underscore | InnerToken::Letter => {
+      T![ident] => {
         while let Ok(t) = self.tok.peek() {
           match t {
-            Some(InnerToken::Letter | InnerToken::Digit | InnerToken::Underscore) => {}
+            Some(T![ident] | T![integer]) => {}
             Some(_) | None => break,
           }
 
           self.tok.eat().unwrap();
         }
 
-        self.ok(start, Token::Ident)
+        self.ok(start, T![ident])
       }
 
       // Numbers.
-      InnerToken::Digit => {
+      T![integer] => {
         let mut is_float = false;
         loop {
           match self.tok.peek()? {
-            Some(InnerToken::Digit) => {}
-            Some(InnerToken::Delimiter(Delimiter::Dot)) if !is_float => is_float = true,
+            Some(T![integer]) => {}
+            Some(T![.]) if !is_float => is_float = true,
             Some(_) | None => break,
           }
           self.tok.eat().unwrap();
         }
 
-        self.ok(start, Token::Literal(if is_float { Literal::Float } else { Literal::Integer }))
+        self.ok(start, if is_float { T![float] } else { T![integer] })
       }
 
-      InnerToken::Delimiter(d) => self.ok(start, Token::Delimiter(d)),
-      InnerToken::Group(g) => self.ok(start, Token::Group(g)),
-      InnerToken::Newline => self.ok(start, Token::Newline),
-
       // Handled above.
-      InnerToken::Whitespace => unreachable!(),
+      T![ws] => unreachable!(),
+
+      s => self.ok(start, s),
     }
   }
 
@@ -307,46 +228,46 @@ mod tests {
   #[test]
   fn plain_ident() {
     let mut lexer = Lexer::new("abc");
-    assert_eq!(lexer.next(), Ok(Token::Ident));
+    assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "abc");
     assert_eq!(lexer.next(), Err(LexError::EOF));
 
     let mut lexer = Lexer::new("abc_foo");
-    assert_eq!(lexer.next(), Ok(Token::Ident));
+    assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "abc_foo");
     assert_eq!(lexer.next(), Err(LexError::EOF));
 
     let mut lexer = Lexer::new("abc_++");
-    assert_eq!(lexer.next(), Ok(Token::Ident));
+    assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "abc_");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::Plus)));
+    assert_eq!(lexer.next(), Ok(T![+]));
     assert_eq!(lexer.slice(), "+");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::Plus)));
+    assert_eq!(lexer.next(), Ok(T![+]));
     assert_eq!(lexer.slice(), "+");
     assert_eq!(lexer.next(), Err(LexError::EOF));
 
     let mut lexer = Lexer::new("abc++");
-    assert_eq!(lexer.next(), Ok(Token::Ident));
+    assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "abc");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::Plus)));
+    assert_eq!(lexer.next(), Ok(T![+]));
     assert_eq!(lexer.slice(), "+");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::Plus)));
+    assert_eq!(lexer.next(), Ok(T![+]));
     assert_eq!(lexer.slice(), "+");
     assert_eq!(lexer.next(), Err(LexError::EOF));
 
     let mut lexer = Lexer::new("abc_def_+");
-    assert_eq!(lexer.next(), Ok(Token::Ident));
+    assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "abc_def_");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::Plus)));
+    assert_eq!(lexer.next(), Ok(T![+]));
     assert_eq!(lexer.slice(), "+");
     assert_eq!(lexer.next(), Err(LexError::EOF));
 
     let mut lexer = Lexer::new("abc_+_def");
-    assert_eq!(lexer.next(), Ok(Token::Ident));
+    assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "abc_");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::Plus)));
+    assert_eq!(lexer.next(), Ok(T![+]));
     assert_eq!(lexer.slice(), "+");
-    assert_eq!(lexer.next(), Ok(Token::Ident));
+    assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "_def");
     assert_eq!(lexer.next(), Err(LexError::EOF));
   }
@@ -354,9 +275,9 @@ mod tests {
   #[test]
   fn integers() {
     let mut lexer = Lexer::new("123foo");
-    assert_eq!(lexer.next(), Ok(Token::Literal(Literal::Integer)));
+    assert_eq!(lexer.next(), Ok(T![integer]));
     assert_eq!(lexer.slice(), "123");
-    assert_eq!(lexer.next(), Ok(Token::Ident));
+    assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "foo");
     assert_eq!(lexer.next(), Err(LexError::EOF));
   }
@@ -364,7 +285,7 @@ mod tests {
   #[test]
   fn floats() {
     let mut lexer = Lexer::new("2.345");
-    assert_eq!(lexer.next(), Ok(Token::Literal(Literal::Float)));
+    assert_eq!(lexer.next(), Ok(T![float]));
     assert_eq!(lexer.slice(), "2.345");
     assert_eq!(lexer.next(), Err(LexError::EOF));
   }
@@ -372,22 +293,22 @@ mod tests {
   #[test]
   fn strings() {
     let mut lexer = Lexer::new("\"\"");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::DoubleQuote)));
+    assert_eq!(lexer.next(), Ok(T!['"']));
     assert_eq!(lexer.slice(), "\"");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::DoubleQuote)));
+    assert_eq!(lexer.next(), Ok(T!['"']));
     assert_eq!(lexer.slice(), "\"");
     assert_eq!(lexer.next(), Err(LexError::EOF));
 
     let mut lexer = Lexer::new(r#" "hi" "#);
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::DoubleQuote)));
+    assert_eq!(lexer.next(), Ok(T!['"']));
     assert_eq!(lexer.slice(), "\"");
-    assert_eq!(lexer.next(), Ok(Token::Ident));
+    assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "hi");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::DoubleQuote)));
+    assert_eq!(lexer.next(), Ok(T!['"']));
     assert_eq!(lexer.slice(), "\"");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
     assert_eq!(lexer.next(), Err(LexError::EOF));
 
@@ -396,52 +317,52 @@ mod tests {
            world"
       "#,
     );
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::DoubleQuote)));
+    assert_eq!(lexer.next(), Ok(T!['"']));
     assert_eq!(lexer.slice(), "\"");
-    assert_eq!(lexer.next(), Ok(Token::Ident));
+    assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "hello");
-    assert_eq!(lexer.next(), Ok(Token::Newline));
+    assert_eq!(lexer.next(), Ok(T![nl]));
     assert_eq!(lexer.slice(), "\n");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), "           ");
-    assert_eq!(lexer.next(), Ok(Token::Ident));
+    assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "world");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::DoubleQuote)));
+    assert_eq!(lexer.next(), Ok(T!['"']));
     assert_eq!(lexer.slice(), "\"");
-    assert_eq!(lexer.next(), Ok(Token::Newline));
+    assert_eq!(lexer.next(), Ok(T![nl]));
     assert_eq!(lexer.slice(), "\n");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), "      ");
     assert_eq!(lexer.next(), Err(LexError::EOF));
 
     // Escapes.
     let mut lexer = Lexer::new("\"foo: \\\"\"");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::DoubleQuote)));
+    assert_eq!(lexer.next(), Ok(T!['"']));
     assert_eq!(lexer.slice(), "\"");
-    assert_eq!(lexer.next(), Ok(Token::Ident));
+    assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "foo");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::Colon)));
+    assert_eq!(lexer.next(), Ok(T![:]));
     assert_eq!(lexer.slice(), ":");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::Backslash)));
+    assert_eq!(lexer.next(), Ok(T!['\\']));
     assert_eq!(lexer.slice(), "\\");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::DoubleQuote)));
+    assert_eq!(lexer.next(), Ok(T!['"']));
     assert_eq!(lexer.slice(), "\"");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::DoubleQuote)));
+    assert_eq!(lexer.next(), Ok(T!['"']));
     assert_eq!(lexer.slice(), "\"");
     assert_eq!(lexer.next(), Err(LexError::EOF));
 
     let mut lexer = Lexer::new("\"\\\"\"");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::DoubleQuote)));
+    assert_eq!(lexer.next(), Ok(T!['"']));
     assert_eq!(lexer.slice(), "\"");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::Backslash)));
+    assert_eq!(lexer.next(), Ok(T!['\\']));
     assert_eq!(lexer.slice(), "\\");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::DoubleQuote)));
+    assert_eq!(lexer.next(), Ok(T!['"']));
     assert_eq!(lexer.slice(), "\"");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::DoubleQuote)));
+    assert_eq!(lexer.next(), Ok(T!['"']));
     assert_eq!(lexer.slice(), "\"");
     assert_eq!(lexer.next(), Err(LexError::EOF));
   }
@@ -449,17 +370,17 @@ mod tests {
   #[test]
   fn format_strings() {
     let mut lexer = Lexer::new(r#" s"hi" "#);
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Ok(Token::Ident));
+    assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "s");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::DoubleQuote)));
+    assert_eq!(lexer.next(), Ok(T!['"']));
     assert_eq!(lexer.slice(), "\"");
-    assert_eq!(lexer.next(), Ok(Token::Ident));
+    assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "hi");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::DoubleQuote)));
+    assert_eq!(lexer.next(), Ok(T!['"']));
     assert_eq!(lexer.slice(), "\"");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
     assert_eq!(lexer.next(), Err(LexError::EOF));
   }
@@ -470,23 +391,23 @@ mod tests {
       "3 // hi
        2 + 3",
     );
-    assert_eq!(lexer.next(), Ok(Token::Literal(Literal::Integer)));
+    assert_eq!(lexer.next(), Ok(T![integer]));
     assert_eq!(lexer.slice(), "3");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), "// hi\n");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), "       ");
-    assert_eq!(lexer.next(), Ok(Token::Literal(Literal::Integer)));
+    assert_eq!(lexer.next(), Ok(T![integer]));
     assert_eq!(lexer.slice(), "2");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::Plus)));
+    assert_eq!(lexer.next(), Ok(T![+]));
     assert_eq!(lexer.slice(), "+");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Ok(Token::Literal(Literal::Integer)));
+    assert_eq!(lexer.next(), Ok(T![integer]));
     assert_eq!(lexer.slice(), "3");
     assert_eq!(lexer.next(), Err(LexError::EOF));
   }
@@ -494,35 +415,35 @@ mod tests {
   #[test]
   fn block_comments() {
     let mut lexer = Lexer::new("3 /* hi */");
-    assert_eq!(lexer.next(), Ok(Token::Literal(Literal::Integer)));
+    assert_eq!(lexer.next(), Ok(T![integer]));
     assert_eq!(lexer.slice(), "3");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), "/* hi */");
     assert_eq!(lexer.next(), Err(LexError::EOF));
 
     // nested block comments
     let mut lexer = Lexer::new("3 /* hi /* foo */ */");
-    assert_eq!(lexer.next(), Ok(Token::Literal(Literal::Integer)));
+    assert_eq!(lexer.next(), Ok(T![integer]));
     assert_eq!(lexer.slice(), "3");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), "/* hi /* foo */ */");
     assert_eq!(lexer.next(), Err(LexError::EOF));
 
     // block comments over multiple lines
     let mut lexer = Lexer::new("3 /* hi \n */ 4");
-    assert_eq!(lexer.next(), Ok(Token::Literal(Literal::Integer)));
+    assert_eq!(lexer.next(), Ok(T![integer]));
     assert_eq!(lexer.slice(), "3");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), "/* hi \n */");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Ok(Token::Literal(Literal::Integer)));
+    assert_eq!(lexer.next(), Ok(T![integer]));
     assert_eq!(lexer.slice(), "4");
     assert_eq!(lexer.next(), Err(LexError::EOF));
   }
@@ -542,55 +463,55 @@ mod tests {
         def bar(): Int = 2 + 3
       }",
     );
-    assert_eq!(lexer.next(), Ok(Token::Ident));
+    assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "class");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Ok(Token::Ident));
+    assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "Foo");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Ok(Token::Group(Group::OpenBrace)));
+    assert_eq!(lexer.next(), Ok(T!['{']));
     assert_eq!(lexer.slice(), "{");
-    assert_eq!(lexer.next(), Ok(Token::Newline));
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![nl]));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), "        ");
-    assert_eq!(lexer.next(), Ok(Token::Ident));
+    assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "def");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Ok(Token::Ident));
+    assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "bar");
-    assert_eq!(lexer.next(), Ok(Token::Group(Group::OpenParen)));
+    assert_eq!(lexer.next(), Ok(T!['(']));
     assert_eq!(lexer.slice(), "(");
-    assert_eq!(lexer.next(), Ok(Token::Group(Group::CloseParen)));
+    assert_eq!(lexer.next(), Ok(T![')']));
     assert_eq!(lexer.slice(), ")");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::Colon)));
+    assert_eq!(lexer.next(), Ok(T![:]));
     assert_eq!(lexer.slice(), ":");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Ok(Token::Ident));
+    assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "Int");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::Equals)));
+    assert_eq!(lexer.next(), Ok(T![=]));
     assert_eq!(lexer.slice(), "=");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Ok(Token::Literal(Literal::Integer)));
+    assert_eq!(lexer.next(), Ok(T![integer]));
     assert_eq!(lexer.slice(), "2");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Ok(Token::Delimiter(Delimiter::Plus)));
+    assert_eq!(lexer.next(), Ok(T![+]));
     assert_eq!(lexer.slice(), "+");
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Ok(Token::Literal(Literal::Integer)));
+    assert_eq!(lexer.next(), Ok(T![integer]));
     assert_eq!(lexer.slice(), "3");
-    assert_eq!(lexer.next(), Ok(Token::Newline));
-    assert_eq!(lexer.next(), Ok(Token::Whitespace));
+    assert_eq!(lexer.next(), Ok(T![nl]));
+    assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), "      ");
-    assert_eq!(lexer.next(), Ok(Token::Group(Group::CloseBrace)));
+    assert_eq!(lexer.next(), Ok(T!['}']));
     assert_eq!(lexer.slice(), "}");
     assert_eq!(lexer.next(), Err(LexError::EOF));
   }

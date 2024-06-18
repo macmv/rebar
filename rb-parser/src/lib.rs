@@ -10,8 +10,8 @@ use std::{mem, ops::Range};
 
 use drop_bomb::DropBomb;
 pub use syntax_kind::SyntaxKind;
+use token::LexError;
 pub use token::Lexer;
-use token::{LexError, Token};
 
 #[cfg(test)]
 #[macro_use]
@@ -118,8 +118,7 @@ impl EntryPoint {
 impl<'a> Parser<'a> {
   pub fn new(lexer: &'a mut Lexer<'a>) -> Self {
     let first = match lexer.next() {
-      // TODO
-      Ok(_) => SyntaxKind::CHAR,
+      Ok(t) => t,
       Err(_) => todo!(),
     };
 
@@ -208,14 +207,10 @@ impl Parser<'_> {
         // Ignore whitespace tokens here, because we usually don't care about them when parsing. We
         // record that they got skipped, so that we can recover them later if we need a concrete
         // tree.
-        Ok(Token::Whitespace) => {
+        Ok(T![ws]) => {
           self.pending_whitespace += self.lexer.slice().len();
         }
-        Ok(_) => {
-          // TODO
-          // break token_to_kind(t, self.lexer.slice());
-          break SyntaxKind::CHAR;
-        }
+        Ok(t) => break t,
         Err(LexError::EOF) => {
           break SyntaxKind::EOF;
         }
