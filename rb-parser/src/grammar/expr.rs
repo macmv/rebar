@@ -41,7 +41,7 @@ fn expr_bp(p: &mut Parser, min_bp: u8) {
       lhs = m.complete(p, BINARY_EXPR);
     } else {
       match p.current() {
-        T![nl] | T![')'] | T!['}'] => return,
+        T![nl] | T![,] | T![')'] | T!['}'] => return,
         _ => {
           p.error(format!("expected operator, got {:?}", p.current()));
           return;
@@ -75,6 +75,7 @@ fn postfix_expr(p: &mut Parser, mut lhs: CompletedMarker) -> CompletedMarker {
     lhs = match p.current() {
       // test ok
       // hi(3)
+      // hello(2, 3)(4)
       T!['('] => {
         let call = lhs.precede(p);
 
