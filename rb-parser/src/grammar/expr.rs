@@ -1,20 +1,61 @@
-use crate::{CompletedMarker, Marker, T};
+use crate::{CompletedMarker, Marker, SyntaxKind, T};
 
 use super::*;
 
-pub fn expr(p: &mut Parser) { let _ = expr0(p); }
+pub fn expr(p: &mut Parser) { expr_bp(p, 0); }
 
-fn expr0(p: &mut Parser) -> Option<CompletedMarker> {
+fn op_bp(t: SyntaxKind) -> Option<(u8, u8)> {
+  // test ok
+  // 1 + 2 - 3 * 4 / 5
+  let prec = match t {
+    T![+] | T![-] => 1,
+    T![*] | T![/] => 2,
+
+    _ => return None,
+  };
+
+  let is_right_assoc = false;
+
+  if is_right_assoc {
+    Some((prec, prec))
+  } else {
+    Some((prec, prec + 1))
+  }
+}
+
+fn expr_bp(p: &mut Parser, min_bp: u8) {
   let m = p.start();
-  let lhs = atom_expr(p, m)?;
-  let _m = postfix_expr(p, lhs);
+  let Some(mut lhs) = atom_expr(p, m) else { return };
+  lhs = postfix_expr(p, lhs);
 
-  None
+  loop {
+    if let Some((l_bp, r_bp)) = op_bp(p.current()) {
+      if l_bp < min_bp {
+        return;
+      }
+
+      let m = lhs.precede(p);
+      p.bump(); // eat the operator
+
+      expr_bp(p, r_bp);
+      lhs = m.complete(p, BINARY_EXPR);
+    } else {
+      match p.current() {
+        T![nl] | T![')'] | T!['}'] => return,
+        _ => {
+          p.error(format!("expected operator, got {:?}", p.current()));
+          return;
+        }
+      }
+    }
+  }
 }
 
 fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
   match p.current() {
     // test ok
+    // 2
+    // hello
     // 2.345
     t @ (T![ident] | T![integer] | T![float]) => {
       p.bump();
