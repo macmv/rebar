@@ -196,6 +196,7 @@ impl<'a> Lexer<'a> {
 
         res.map(|r| match self.slice() {
           "if" => T![if],
+          "else" => T![else],
           "def" => T![def],
           _ => r,
         })

@@ -25,7 +25,6 @@ fn op_bp(t: SyntaxKind) -> Option<(u8, u8)> {
   }
 }
 
-// TODO: Use `cond`.
 fn expr_bp(p: &mut Parser, min_bp: u8, cond: bool) {
   let m = p.start();
   let Some(mut lhs) = atom_expr(p, m) else { return };
@@ -45,6 +44,7 @@ fn expr_bp(p: &mut Parser, min_bp: u8, cond: bool) {
     } else {
       match p.current() {
         T![nl] | T![,] | T![')'] | T!['}'] => return,
+        T!['{'] if cond => return,
         _ => {
           p.error(format!("expected operator, got {:?}", p.current()));
           return;
@@ -111,6 +111,10 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
     _ => {
       m.abandon(p);
       p.error(format!("expected expression, got {:?}", p.current()));
+
+      // Advance to avoid infinite loop.
+      p.bump();
+
       None
     }
   }
