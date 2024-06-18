@@ -16,12 +16,30 @@
 //   (A)         -- same as A
 //   label:A     -- suggested name for field of AST node
 
+Name = 'ident'
+
 Expr =
-  Call |
   'integer' |
-  'string'
+  'string' |
+  Call |
+  Block
+
+Block = '{' Stmt* '}'
+
+Type = Name
 
 Call = Expr '(' ')'
-Stmt = Expr
+Stmt = Def | Struct | Expr
+
+Def = 'def' Name ArgsDef Block
+Struct = 'struct' Name StructBlock
+
+ArgsDef = '(' Name ':' Type ',' (Name ':' Type)* ')'
+
+StructBlock = '{' StructItem* '}'
+StructItem = Property | Def | ConstructorDef
+ConstructorDef = 'constructor' ArgsDef Block
+
+Property = Name ':' Type
 
 SourceFile = Stmt*
