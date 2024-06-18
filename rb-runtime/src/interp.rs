@@ -88,7 +88,6 @@ impl RuntimeEnv {
           unimplemented!()
         }
       }
-      rb_syntax::Expr::String(str) => Value::String(str.syntax.text().to_string()),
       rb_syntax::Expr::Name(name) => {
         let ident = name.ident_token().unwrap();
         let name = ident.text();
@@ -130,6 +129,12 @@ impl RuntimeEnv {
             (Value::Float(lhs), Value::Float(rhs)) => Value::Float(lhs + rhs),
             _ => unimplemented!(),
           }
+        } else if op.star_token().is_some() {
+          match (lhs, rhs) {
+            (Value::Int(lhs), Value::Int(rhs)) => Value::Int(lhs * rhs),
+            (Value::Float(lhs), Value::Float(rhs)) => Value::Float(lhs * rhs),
+            _ => unimplemented!(),
+          }
         } else {
           unimplemented!()
         }
@@ -154,8 +159,8 @@ mod tests {
   fn foo() {
     interp(
       r#"1 + 2
-        print("Hello, world!")
-        print("Goodbye, world!")
+        print(2 + 3)
+        print(4 * 5)
       "#,
     );
 
