@@ -2,7 +2,11 @@ use super::*;
 
 pub fn source_file(p: &mut Parser) {
   let m = p.start();
-  expr(p);
+
+  while !p.at(EOF) {
+    super::stmt::stmt(p);
+  }
+
   m.complete(p, SOURCE_FILE);
 }
 
