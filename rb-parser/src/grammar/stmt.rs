@@ -2,6 +2,8 @@ use crate::{Parser, SyntaxKind::*, T};
 
 pub fn stmt(p: &mut Parser) {
   match p.current() {
+    // test ok
+    // def foo(bar: int, baz: float) -> string
     T![def] => {
       let m = p.start();
       p.eat(T![def]);
@@ -9,17 +11,7 @@ pub fn stmt(p: &mut Parser) {
 
       params(p);
 
-      if p.at(T![nl]) {
-        p.bump();
-      } else {
-        p.error("expected newline");
-      }
-
-      while !p.at(T!['}']) {
-        stmt(p);
-      }
-
-      p.bump();
+      m.complete(p, DEF);
     }
 
     _ => super::expr::expr(p),
@@ -55,4 +47,9 @@ fn params(p: &mut Parser) {
   }
 
   p.expect(T![')']);
+
+  if p.at(T![->]) {
+    p.eat(T![->]);
+    super::types::ty(p);
+  }
 }

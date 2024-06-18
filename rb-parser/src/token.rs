@@ -65,6 +65,8 @@ impl<'a> Tokenizer<'a> {
       '\\' => T!['\\'],
       '*' => T![*],
       ':' => T![:],
+      '>' => T![>],
+      '<' => T![<],
       'a'..='z' | 'A'..='Z' | '_' => T![ident],
       '0'..='9' => T![integer],
 
@@ -215,6 +217,27 @@ impl<'a> Lexer<'a> {
 
       // Handled above.
       T![ws] => unreachable!(),
+
+      // Double-wide tokens.
+      T![>] | T![<] | T![-] => {
+        let doubles = [
+          (T![>], T![=], T![>=]),
+          (T![<], T![=], T![<=]),
+          (T![-], T![>], T![->]),
+          // (T![|], T![|], T![||]),
+          // (T![&], T![&], T![&&]),
+        ];
+
+        let peeked = self.tok.peek();
+        for (a, b, pair) in doubles {
+          if first == a && peeked == Ok(Some(b)) {
+            self.tok.eat()?;
+            return self.ok(start, pair);
+          }
+        }
+
+        self.ok(start, first)
+      }
 
       s => self.ok(start, s),
     }
@@ -518,6 +541,13 @@ mod tests {
     assert_eq!(lexer.slice(), "      ");
     assert_eq!(lexer.next(), Ok(T!['}']));
     assert_eq!(lexer.slice(), "}");
+    assert_eq!(lexer.next(), Err(LexError::EOF));
+  }
+
+  #[test]
+  fn parses_thin_arrow() {
+    let mut lexer = Lexer::new("->");
+    assert_eq!(lexer.next(), Ok(T![->]));
     assert_eq!(lexer.next(), Err(LexError::EOF));
   }
 }

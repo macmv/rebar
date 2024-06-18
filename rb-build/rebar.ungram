@@ -49,7 +49,7 @@ Assign = Expr '=' Expr
 Def = 'def' Name ArgsDef Block
 Struct = 'struct' Name StructBlock
 
-ArgsDef = '(' ArgDef* ')'
+ArgsDef = '(' ArgDef* ')' ('->' Type)?
 ArgDef = Name ':' Type
 
 StructBlock = '{' StructItem* '}'
