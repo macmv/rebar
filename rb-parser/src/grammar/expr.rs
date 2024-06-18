@@ -3,7 +3,6 @@ use crate::{CompletedMarker, Marker, T};
 use super::*;
 
 // test ok
-// 2 + 3
 // print("hello")
 pub fn expr(p: &mut Parser) {
   let m = p.start();
@@ -14,9 +13,11 @@ pub fn expr(p: &mut Parser) {
 
 fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
   match p.current() {
-    INT_NUMBER => {
-      p.eat(INT_NUMBER);
-      Some(m.complete(p, INT_NUMBER))
+    // test ok
+    // 2.345
+    t @ (T![ident] | T![integer] | T![float]) => {
+      p.bump();
+      Some(m.complete(p, t))
     }
 
     _ => {
