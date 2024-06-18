@@ -190,7 +190,12 @@ impl<'a> Lexer<'a> {
           self.tok.eat().unwrap();
         }
 
-        self.ok(start, T![ident])
+        let res = self.ok(start, T![ident]);
+
+        res.map(|r| match self.slice() {
+          "def" => T![def],
+          _ => r,
+        })
       }
 
       // Numbers.
@@ -476,7 +481,7 @@ mod tests {
     assert_eq!(lexer.next(), Ok(T![nl]));
     assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), "        ");
-    assert_eq!(lexer.next(), Ok(T![ident]));
+    assert_eq!(lexer.next(), Ok(T![def]));
     assert_eq!(lexer.slice(), "def");
     assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
