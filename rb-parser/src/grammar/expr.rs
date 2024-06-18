@@ -62,6 +62,20 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
       Some(m.complete(p, t))
     }
 
+    // test ok
+    // print("hello world!")
+    T!['"'] => {
+      p.bump();
+
+      // TODO: Escapes and such.
+      while !p.at(EOF) && !p.at(T!['"']) {
+        p.bump();
+      }
+
+      p.eat(T!['"']);
+      Some(m.complete(p, STRING))
+    }
+
     _ => {
       m.abandon(p);
       p.error(format!("expected expression, got {:?}", p.current()));

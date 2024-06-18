@@ -70,7 +70,7 @@ impl<'a> Tokenizer<'a> {
       'a'..='z' | 'A'..='Z' | '_' => T![ident],
       '0'..='9' => T![integer],
 
-      _ => return Err(LexError::InvalidChar),
+      _ => T![char],
     };
     Ok(t)
   }
@@ -479,7 +479,7 @@ mod tests {
   #[test]
   fn invalid_chars() {
     let mut lexer = Lexer::new("⊥");
-    assert_eq!(lexer.next(), Err(LexError::InvalidChar));
+    assert_eq!(lexer.next(), Ok(T![char]));
     assert_eq!(lexer.slice(), "⊥");
     assert_eq!(lexer.next(), Err(LexError::EOF));
   }

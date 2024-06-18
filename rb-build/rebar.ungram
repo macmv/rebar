@@ -29,7 +29,7 @@ Expr =
   BinaryExpr |
   Block
 
-String = '"' Escape* '"'
+String = '"' 'char'* Escape* '"'
 Escape = '\\' 'ident'
 
 FieldExpr = Expr '.' Name
