@@ -26,7 +26,11 @@ pub fn stmt(p: &mut Parser) {
       m.complete(p, DEF);
     }
 
-    _ => super::expr::expr(p),
+    _ => {
+      let m = p.start();
+      super::expr::expr(p);
+      m.complete(p, EXPR_STMT);
+    }
   }
 
   match p.current() {

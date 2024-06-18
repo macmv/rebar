@@ -1,11 +1,15 @@
 //! Dead simple interpreter implementation. Should only be used for testing.
 
+use core::fmt;
+use std::sync::Arc;
+
 use rb_syntax::{BinaryOp, SourceFile};
 
 pub struct RuntimeEnv {
-  variables: Vec<Value>,
+  variables: Vec<(String, Value)>,
 }
 
+#[derive(Debug, Clone)]
 pub enum Value {
   Int(i64),
   Float(f64),
@@ -14,22 +18,40 @@ pub enum Value {
   Null,
   Array(Array),
   Table(Table),
-  Function(FunctionImpl),
+  Function(Arc<FunctionImpl>),
 }
 
-pub struct Array(Vec<Value>);
-pub struct Table(Vec<(String, Value)>);
-pub struct FunctionImpl;
+#[derive(Debug, Clone)]
+pub struct Array(Arc<Vec<Value>>);
+#[derive(Debug, Clone)]
+pub struct Table(Arc<Vec<(String, Value)>>);
+
+pub struct FunctionImpl {
+  name: String,
+}
 
 impl RuntimeEnv {
   fn new() -> Self { Self { variables: vec![] } }
+}
+
+impl fmt::Debug for FunctionImpl {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "FunctionImpl({})", self.name)
+  }
+}
+
+impl FunctionImpl {
+  pub fn call(&self, args: Vec<Value>) -> Value {
+    println!("calling {} with args {:?}", self.name, args);
+
+    Value::Null
+  }
 }
 
 pub fn interpret(source: &SourceFile) -> (RuntimeEnv, Option<Error>) {
   let mut env = RuntimeEnv::new();
 
   let mut error = None;
-  dbg!(&source);
   for stmt in source.stmts() {
     if let Err(e) = env.interpret_stmt(&stmt) {
       error = Some(e);
@@ -59,6 +81,41 @@ impl RuntimeEnv {
 
   fn interpret_expr(&mut self, expr: &rb_syntax::Expr) -> Result<Value, Error> {
     Ok(match expr {
+      rb_syntax::Expr::Literal(lit) => {
+        if let Some(lit) = lit.integer_token() {
+          Value::Int(lit.text().parse().unwrap())
+        } else {
+          unimplemented!()
+        }
+      }
+      rb_syntax::Expr::String(str) => Value::String(str.syntax.text().to_string()),
+      rb_syntax::Expr::Name(name) => {
+        let ident = name.ident_token().unwrap();
+        let name = ident.text();
+
+        self
+          .variables
+          .iter()
+          .find(|(n, _)| n == &name)
+          .map(|(_, v)| v.clone())
+          .unwrap_or_else(|| Value::Function(Arc::new(FunctionImpl { name: name.to_string() })))
+      }
+      rb_syntax::Expr::CallExpr(bin) => {
+        let lhs = bin.expr().ok_or(Error::MissingExpr)?;
+        let args = bin.arg_list().ok_or(Error::MissingExpr)?;
+
+        let lhs = self.interpret_expr(&lhs)?;
+
+        let mut values = vec![];
+        for arg in args.exprs() {
+          values.push(self.interpret_expr(&arg)?);
+        }
+
+        match lhs {
+          Value::Function(f) => f.call(values),
+          _ => unimplemented!("cannot call {lhs:?}"),
+        }
+      }
       rb_syntax::Expr::BinaryExpr(bin) => {
         let lhs = bin.lhs().ok_or(Error::MissingExpr)?;
         let rhs = bin.rhs().ok_or(Error::MissingExpr)?;
@@ -77,7 +134,7 @@ impl RuntimeEnv {
           unimplemented!()
         }
       }
-      _ => unimplemented!(),
+      _ => unimplemented!("expr: {expr:?}"),
     })
   }
 }

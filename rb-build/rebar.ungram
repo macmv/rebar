@@ -24,6 +24,7 @@ Literal = 'integer' | 'float'
 
 Expr =
   Literal |
+  Name |
   String |
   CallExpr |
   FieldExpr |
@@ -43,8 +44,8 @@ Block = '{' (Stmt 'nl')* '}'
 
 Type = Name
 
-CallExpr = Expr ParenArgs
-ParenArgs = '(' Expr (',' Expr)* ')'
+CallExpr = Expr '(' ArgList ')'
+ArgList = Expr (',' Expr)*
 
 ExprStmt = Expr
 Stmt = Def | Struct | Assign | ExprStmt

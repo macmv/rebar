@@ -37,7 +37,12 @@ fn expr_bp(p: &mut Parser, min_bp: u8, cond: bool) {
       }
 
       let m = lhs.precede(p);
-      p.bump(); // eat the operator
+
+      {
+        let m = p.start();
+        p.bump(); // eat the operator
+        m.complete(p, BINARY_OP);
+      }
 
       expr_bp(p, r_bp, cond);
       lhs = m.complete(p, BINARY_EXPR);
@@ -58,11 +63,17 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
   match p.current() {
     // test ok
     // 2
-    // hello
     // 2.345
-    t @ (T![ident] | T![integer] | T![float]) => {
+    T![integer] | T![float] => {
       p.bump();
-      Some(m.complete(p, t))
+      Some(m.complete(p, LITERAL))
+    }
+
+    // test ok
+    // hello
+    T![ident] => {
+      p.eat(T![ident]);
+      Some(m.complete(p, NAME))
     }
 
     // test ok
@@ -129,9 +140,7 @@ fn postfix_expr(p: &mut Parser, mut lhs: CompletedMarker) -> CompletedMarker {
       T!['('] => {
         let call = lhs.precede(p);
 
-        let m = p.start();
-        paren_args(p);
-        m.complete(p, PAREN_ARGS);
+        arg_list(p);
 
         call.complete(p, CALL_EXPR)
       }
@@ -142,7 +151,8 @@ fn postfix_expr(p: &mut Parser, mut lhs: CompletedMarker) -> CompletedMarker {
   lhs
 }
 
-fn paren_args(p: &mut Parser) {
+fn arg_list(p: &mut Parser) {
+  let m = p.start();
   p.eat(T!['(']);
 
   while !p.at(EOF) && !p.at(T![')']) {
@@ -158,4 +168,5 @@ fn paren_args(p: &mut Parser) {
   }
 
   p.expect(T![')']);
+  m.complete(p, ARG_LIST);
 }
