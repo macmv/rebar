@@ -17,3 +17,4 @@ members = [
 rb-test = { path = "rb-test" }
 rb-build = { path = "rb-build" }
 rb-parser = { path = "rb-parser" }
+rb-syntax = { path = "rb-syntax" }

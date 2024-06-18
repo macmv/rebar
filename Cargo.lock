@@ -161,6 +161,9 @@ dependencies = [
 [[package]]
 name = "rb-runtime"
 version = "0.1.0"
+dependencies = [
+ "rb-syntax",
+]
 
 [[package]]
 name = "rb-syntax"

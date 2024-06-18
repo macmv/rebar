@@ -2,3 +2,6 @@
 name = "rb-runtime"
 version = "0.1.0"
 edition = "2021"
+
+[dependencies]
+rb-syntax.workspace = true
