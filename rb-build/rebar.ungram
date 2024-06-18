@@ -24,7 +24,7 @@ Expr =
   'integer' |
   'float' |
   String |
-  Call |
+  CallExpr |
   FieldExpr |
   BinaryExpr |
   Block
@@ -39,7 +39,9 @@ Block = '{' (Stmt 'nl')* '}'
 
 Type = Name
 
-Call = Expr '(' ')'
+CallExpr = Expr ParenArgs
+ParenArgs = '(' Expr (',' Expr)* ')'
+
 Stmt = Def | Struct | Assign | Expr
 
 Assign = Expr '=' Expr
