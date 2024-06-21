@@ -5,4 +5,6 @@ pub enum Type {
   Unit,
 
   Function(Vec<Type>, Box<Type>),
+
+  Union(Vec<Type>),
 }
