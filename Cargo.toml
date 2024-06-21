@@ -5,11 +5,13 @@ edition = "2021"
 
 [workspace]
 members = [
+  "rb-build",
+  "rb-test",
   "rb-parser",
   "rb-syntax",
+  "rb-hir",
   "rb-typer",
-  "rb-test",
-  "rb-build",
+  "rb-mir",
   "rb-runtime",
 ]
 
@@ -18,3 +20,6 @@ rb-test = { path = "rb-test" }
 rb-build = { path = "rb-build" }
 rb-parser = { path = "rb-parser" }
 rb-syntax = { path = "rb-syntax" }
+rb-hir = { path = "rb-hir" }
+rb-typer = { path = "rb-typer" }
+rb-mir = { path = "rb-mir" }
