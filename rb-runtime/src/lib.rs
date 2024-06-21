@@ -9,16 +9,21 @@ pub fn eval(src: &str) {
   let id = sources.add(src.into());
   let sources = Arc::new(sources);
 
-  rb_diagnostic::run_or_exit(sources, || {
+  let hir = rb_diagnostic::run_or_exit(sources, || {
     let res = cst::SourceFile::parse(src);
-    for error in res.errors() {
-      emit!(error.message(), Span { file: id, range: error.span() });
-    }
 
-    let hir = rb_hir_lower::lower_source(res.tree(), id);
-    dbg!(&hir);
-    panic!();
+    if res.errors().is_empty() {
+      rb_hir_lower::lower_source(res.tree(), id)
+    } else {
+      for error in res.errors() {
+        emit!(error.message(), Span { file: id, range: error.span() });
+      }
+
+      Default::default()
+    }
   });
+  dbg!(&hir);
+  panic!();
   // let mir = rb_diagnostic::run_or_exit(sources, || {
   //   let mut functions = vec![];
   //   for function in hir.functions {

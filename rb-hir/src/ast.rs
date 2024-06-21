@@ -25,6 +25,8 @@ pub struct Function {
 pub enum Expr {
   Literal(Literal),
   Call(ExprId, Vec<ExprId>),
+  Name(String),
+  BinaryOp(ExprId, BinaryOp, ExprId),
 
   Assign { lhs: ExprId, rhs: ExprId },
 }
@@ -39,4 +41,21 @@ pub enum Literal {
   Int(i64),
   Bool(bool),
   Unit,
+}
+
+#[derive(Debug)]
+pub enum BinaryOp {
+  Add,
+  Sub,
+  Mul,
+  Div,
+  Mod,
+  And,
+  Or,
+  Eq,
+  Neq,
+  Lt,
+  Lte,
+  Gt,
+  Gte,
 }

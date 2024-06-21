@@ -65,6 +65,33 @@ impl FunctionLower<'_> {
         }
       }
 
+      cst::Expr::Name(name) => {
+        let name = name.ident_token().unwrap().to_string();
+
+        Some(hir::Expr::Name(name))
+      }
+
+      cst::Expr::BinaryExpr(expr) => {
+        let lhs = self.expr_opt(expr.lhs(), &expr)?;
+        let rhs = self.expr_opt(expr.rhs(), &expr)?;
+
+        let Some(op) = expr.binary_op() else {
+          emit!("missing binary operator", self.span(&expr));
+          return None;
+        };
+
+        let op = if op.plus_token().is_some() {
+          hir::BinaryOp::Add
+        } else if op.minus_token().is_some() {
+          hir::BinaryOp::Sub
+        } else {
+          emit!("unexpected binary operator", self.span(&expr));
+          return None;
+        };
+
+        Some(hir::Expr::BinaryOp(lhs, op, rhs))
+      }
+
       cst::Expr::CallExpr(expr) => {
         let lhs = self.expr_opt(expr.expr(), &expr)?;
 
