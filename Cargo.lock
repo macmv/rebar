@@ -383,6 +383,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "rb-diagnostic"
+version = "0.1.0"
+
+[[package]]
 name = "rb-hir"
 version = "0.1.0"
 dependencies = [
@@ -419,7 +423,11 @@ dependencies = [
  "cranelift-jit",
  "cranelift-module",
  "cranelift-native",
+ "rb-diagnostic",
+ "rb-hir",
+ "rb-mir",
  "rb-syntax",
+ "rb-typer",
 ]
 
 [[package]]

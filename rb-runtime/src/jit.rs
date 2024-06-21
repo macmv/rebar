@@ -83,6 +83,18 @@ impl FunctionImpl {
 }
 
 pub fn interpret(source: &cst::SourceFile) -> JIT {
+  let hir = rb_diagnostic::run_or_exit(|| {
+    rb_hir::lower(&source);
+  });
+  let mir = rb_diagnostic::run_or_exit(|| {
+    let mut functions = vec![];
+    for function in hir.functions {
+      let typer = rb_typer::Typer::check(&function);
+      functions.push(rb_mir::lower::lower_expr(&typer, function));
+    }
+    functions
+  });
+
   let mut jit = JIT::new();
 
   // This is a little cursed, but we'll just dereference the pointer twice. What

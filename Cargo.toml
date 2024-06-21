@@ -9,6 +9,7 @@ members = [
   "rb-test",
   "rb-parser",
   "rb-syntax",
+  "rb-diagnostic",
   "rb-hir",
   "rb-typer",
   "rb-mir",
@@ -20,6 +21,7 @@ rb-test = { path = "rb-test" }
 rb-build = { path = "rb-build" }
 rb-parser = { path = "rb-parser" }
 rb-syntax = { path = "rb-syntax" }
+rb-diagnostic = { path = "rb-diagnostic" }
 rb-hir = { path = "rb-hir" }
 rb-typer = { path = "rb-typer" }
 rb-mir = { path = "rb-mir" }
