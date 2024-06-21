@@ -84,6 +84,10 @@ impl FunctionLower<'_> {
           hir::BinaryOp::Add
         } else if op.minus_token().is_some() {
           hir::BinaryOp::Sub
+        } else if op.star_token().is_some() {
+          hir::BinaryOp::Mul
+        } else if op.slash_token().is_some() {
+          hir::BinaryOp::Div
         } else {
           emit!("unexpected binary operator", self.span(&expr));
           return None;
