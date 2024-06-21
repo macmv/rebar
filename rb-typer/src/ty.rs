@@ -20,8 +20,10 @@ pub type VarId = Idx<TypeVar>;
 pub struct TypeVar {
   pub values: Vec<Type>,
   pub uses:   Vec<Type>,
+
+  pub description: String,
 }
 
 impl TypeVar {
-  pub fn new() -> Self { TypeVar { values: vec![], uses: vec![] } }
+  pub fn new(description: String) -> Self { TypeVar { values: vec![], uses: vec![], description } }
 }
