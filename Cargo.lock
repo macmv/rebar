@@ -501,6 +501,7 @@ dependencies = [
 name = "rb-typer"
 version = "0.1.0"
 dependencies = [
+ "la-arena",
  "rb-diagnostic",
  "rb-hir",
 ]

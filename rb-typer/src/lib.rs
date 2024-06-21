@@ -1,11 +1,13 @@
 mod ty;
 
+use la_arena::Arena;
 use rb_diagnostic::{emit, Span};
 use rb_hir::{
   ast::{self as hir, ExprId, StmtId},
   SpanMap,
 };
 pub use ty::Type;
+use ty::{TypeVar, VarId};
 
 /// A typechecker for a function body.
 ///
@@ -14,11 +16,14 @@ pub use ty::Type;
 pub struct Typer<'a> {
   function: &'a hir::Function,
   span_map: &'a SpanMap,
+
+  // Type variables.
+  variables: Arena<TypeVar>,
 }
 
 impl<'a> Typer<'a> {
   fn new(function: &'a hir::Function, span_map: &'a SpanMap) -> Self {
-    Typer { function, span_map }
+    Typer { function, span_map, variables: Arena::new() }
   }
 
   /// Typecheck a function body.
@@ -40,6 +45,11 @@ impl<'a> Typer<'a> {
     };
   }
 
+  fn fresh_var(&mut self) -> VarId {
+    let var = TypeVar::new();
+    self.variables.alloc(var)
+  }
+
   fn type_expr(&mut self, expr: ExprId) -> Type {
     match self.function.exprs[expr] {
       hir::Expr::Literal(ref lit) => match lit {
@@ -51,28 +61,16 @@ impl<'a> Typer<'a> {
       hir::Expr::Call(lhs_expr, ref args) => {
         let lhs = self.type_expr(lhs_expr);
 
-        match lhs {
-          Type::Function(sig_args, sig_ret) => {
-            if sig_args.len() != args.len() {
-              emit!(
-                format!("expected {} arguments, found {}", sig_args.len(), args.len()),
-                self.span(expr)
-              );
-            }
+        let ret = Type::Var(self.fresh_var());
 
-            for (&arg, sig) in args.iter().zip(sig_args.into_iter()) {
-              let ty = self.type_expr(arg);
-              self.constrain(&ty, &sig, self.span(arg));
-            }
+        let call_type = Type::Function(
+          args.iter().map(|&arg| self.type_expr(arg)).collect(),
+          Box::new(ret.clone()),
+        );
 
-            *sig_ret
-          }
+        self.constrain(&lhs, &call_type, self.span(lhs_expr));
 
-          _ => {
-            emit!(format!("expected function, found {:?}", lhs), self.span(lhs_expr));
-            Type::Unit
-          }
-        }
+        ret
       }
 
       hir::Expr::Name(_) => Type::Function(vec![Type::Int], Box::new(Type::Unit)),
@@ -98,7 +96,7 @@ enum TypeError<'a> {
 }
 
 impl Typer<'_> {
-  fn constrain<'a>(&self, v: &Type, u: &Type, span: Span) {
+  fn constrain<'a>(&mut self, v: &Type, u: &Type, span: Span) {
     fn render_err(e: &TypeError) -> String {
       match e {
         TypeError::NotSubtype(v, u) => format!("{v:?} is not a subtype of {u:?}"),
@@ -121,12 +119,21 @@ impl Typer<'_> {
     }
   }
 
-  fn constrain0<'a>(&self, v: &'a Type, u: &'a Type, span: Span) -> Result<(), TypeError<'a>> {
+  fn constrain0<'a>(&mut self, v: &'a Type, u: &'a Type, span: Span) -> Result<(), TypeError<'a>> {
     if v == u {
       return Ok(());
     }
 
     match (v, u) {
+      (Type::Var(v), u) => {
+        self.variables[*v].constraints.push(u.clone());
+        Ok(())
+      }
+      (v, Type::Var(u)) => {
+        self.variables[*u].constraints.push(v.clone());
+        Ok(())
+      }
+
       (v, Type::Union(us)) => {
         let mut results = vec![];
 
@@ -139,6 +146,19 @@ impl Typer<'_> {
         } else {
           Err(TypeError::Union(results.into_iter().map(Result::unwrap_err).collect()))
         }
+      }
+
+      (Type::Function(va, vr), Type::Function(ua, ur)) => {
+        if va.len() != ua.len() {
+          return Err(TypeError::NotSubtype(v, u));
+        }
+
+        for (v, u) in va.iter().zip(ua.iter()) {
+          self.constrain0(v, u, span)?;
+        }
+        self.constrain0(vr, ur, span)?;
+
+        Ok(())
       }
 
       // (v, Type::Inter(us)) => {
