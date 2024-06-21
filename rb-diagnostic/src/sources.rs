@@ -11,17 +11,20 @@ pub struct Sources {
 
 pub struct Source {
   pub source:     String,
+  pub name:       String,
   pub line_index: LineIndex,
 }
 
 impl Source {
-  fn new(source: String) -> Self { Source { line_index: LineIndex::new(&source), source } }
+  pub fn new(name: String, source: String) -> Self {
+    Source { line_index: LineIndex::new(&source), source, name }
+  }
 }
 
 impl Sources {
   pub fn new() -> Self { Self { sources: Arena::new() } }
 
-  pub fn add(&mut self, source: String) -> SourceId { self.sources.alloc(Source::new(source)) }
+  pub fn add(&mut self, source: Source) -> SourceId { self.sources.alloc(source) }
 }
 
 impl Index<SourceId> for Sources {

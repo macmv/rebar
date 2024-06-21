@@ -5,7 +5,7 @@ use core::fmt;
 use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, Linkage, Module};
-use rb_diagnostic::{emit, Sources, Span};
+use rb_diagnostic::{emit, Source, Sources, Span};
 use rb_syntax::cst;
 use std::sync::Arc;
 
@@ -87,7 +87,7 @@ impl FunctionImpl {
 pub fn interpret(source: &str) -> JIT {
   let cst = cst::SourceFile::parse(source).tree();
   let mut sources = Sources::new();
-  let id = sources.add(source.into());
+  let id = sources.add(Source::new("inline.rbr".into(), source.into()));
   let sources = Arc::new(sources);
 
   rb_diagnostic::run_or_exit(sources, || {
