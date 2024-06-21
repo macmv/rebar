@@ -8,5 +8,6 @@ edition = "2021"
 [lib]
 
 [dependencies]
+rb-diagnostic.workspace = true
 rb-syntax.workspace = true
 rb-hir.workspace = true

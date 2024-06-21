@@ -418,6 +418,7 @@ dependencies = [
 name = "rb-hir-lower"
 version = "0.1.0"
 dependencies = [
+ "rb-diagnostic",
  "rb-hir",
  "rb-syntax",
 ]

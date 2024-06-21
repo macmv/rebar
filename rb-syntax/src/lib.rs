@@ -6,7 +6,7 @@ mod parse;
 mod support;
 
 pub use error::SyntaxError;
-use ext::AstNode;
+pub use ext::AstNode;
 use node::SyntaxNode;
 use rb_parser::SyntaxKind;
 

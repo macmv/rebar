@@ -15,7 +15,9 @@ pub fn eval(src: &str) {
       emit!(error.message(), Span { file: id, range: error.span() });
     }
 
-    // let hir = rb_hir_lower::lower_expr(&res.tree());
+    let hir = rb_hir_lower::lower_source(res.tree(), id);
+    dbg!(&hir);
+    panic!();
   });
   // let mir = rb_diagnostic::run_or_exit(sources, || {
   //   let mut functions = vec![];
