@@ -4,8 +4,8 @@ mod sources;
 
 use std::sync::Arc;
 
-pub use diagnostic::Diagnostic;
-pub use sources::{Source, Sources};
+pub use diagnostic::*;
+pub use sources::*;
 
 use context::Context;
 
@@ -22,8 +22,7 @@ pub fn run_or_exit<T>(sources: Arc<Sources>, f: impl FnOnce() -> T) -> T {
 pub fn emit(diagnostic: Diagnostic) {
   Context::run(|ctx| {
     ctx.error();
-    // let source = diagnostic.render(ctx.sources());
-    eprintln!("error!");
+    eprintln!("{}", diagnostic.render(ctx.sources()));
   });
 }
 

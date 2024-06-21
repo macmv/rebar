@@ -5,7 +5,7 @@ use core::fmt;
 use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, Linkage, Module};
-use rb_diagnostic::{emit, Sources};
+use rb_diagnostic::{emit, Sources, Span};
 use rb_syntax::cst;
 use std::sync::Arc;
 
@@ -93,7 +93,7 @@ pub fn interpret(source: &str) -> JIT {
   rb_diagnostic::run_or_exit(sources, || {
     let res = cst::SourceFile::parse(source);
     for error in res.errors() {
-      emit!(error.message(), error.span());
+      emit!(error.message(), Span { file: id, range: error.span() });
     }
     // TODO: Lower each file in a thread pool here.
     //
