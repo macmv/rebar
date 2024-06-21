@@ -53,7 +53,7 @@ impl Diagnostic {
       let mut out = String::new();
 
       writeln!(out, "error: {}", self.message).unwrap();
-      writeln!(out, " --> {}:{}:{}", source.name, line_num, col_num).unwrap();
+      writeln!(out, "{}--> {}:{}:{}", margin_str, source.name, line_num, col_num).unwrap();
       writeln!(out, "{} |", margin_str).unwrap();
       writeln!(out, "{} | {}", line_num, line_str).unwrap();
       writeln!(out, "{} | {}", margin_str, underline_str).unwrap();
