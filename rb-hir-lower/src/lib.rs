@@ -1,32 +1,35 @@
 //! Lowers the AST from rb_syntax into an HIR tree. Performs no type inferrence,
 //! and only validates syntax.
 
-use rb_diagnostic::SourceId;
-use rb_hir::ast as hir;
-use rb_syntax::cst;
+use rb_diagnostic::{SourceId, Span};
+use rb_hir::{ast as hir, SpanMap};
+use rb_syntax::{cst, AstNode};
 
-pub fn lower_source(cst: cst::SourceFile, _source: SourceId) -> hir::SourceFile {
+pub fn lower_source(cst: cst::SourceFile, source: SourceId) -> (hir::SourceFile, SpanMap) {
   let mut out = hir::SourceFile::default();
   let mut main = hir::Function::default();
+  let mut span_map = SpanMap::default();
 
-  let mut lower = FunctionLower { f: &mut main };
+  let mut lower = FunctionLower { source, f: &mut main, span_map: &mut span_map };
   for stmt in cst.stmts() {
     let item = lower.stmt(stmt);
     lower.f.items.push(item);
   }
 
   out.main_function = Some(out.functions.alloc(main));
-  out
+  (out, span_map)
 }
 
 struct FunctionLower<'a> {
-  f: &'a mut hir::Function,
+  source:   SourceId,
+  f:        &'a mut hir::Function,
+  span_map: &'a mut SpanMap,
 }
 
 impl FunctionLower<'_> {
   fn stmt(&mut self, cst: cst::Stmt) -> hir::StmtId {
     let stmt = match cst {
-      cst::Stmt::ExprStmt(expr) => {
+      cst::Stmt::ExprStmt(ref expr) => {
         let expr = self.expr_opt(expr.expr());
 
         hir::Stmt::Expr(expr)
@@ -35,6 +38,7 @@ impl FunctionLower<'_> {
       _ => unimplemented!("lowering for {:?}", cst),
     };
 
+    self.span_map.stmts.push(Span { file: self.source, range: cst.syntax().text_range() });
     self.f.stmts.alloc(stmt)
   }
 
@@ -46,7 +50,7 @@ impl FunctionLower<'_> {
   }
   fn expr(&mut self, cst: cst::Expr) -> hir::ExprId {
     let expr = match cst {
-      cst::Expr::Literal(lit) => {
+      cst::Expr::Literal(ref lit) => {
         if let Some(lit) = lit.integer_token() {
           hir::Expr::Literal(hir::Literal::Int(lit.text().parse().unwrap()))
         } else {
@@ -54,13 +58,13 @@ impl FunctionLower<'_> {
         }
       }
 
-      cst::Expr::Name(name) => {
+      cst::Expr::Name(ref name) => {
         let name = name.ident_token().unwrap().to_string();
 
         hir::Expr::Name(name)
       }
 
-      cst::Expr::BinaryExpr(expr) => {
+      cst::Expr::BinaryExpr(ref expr) => {
         let lhs = self.expr_opt(expr.lhs());
         let rhs = self.expr_opt(expr.rhs());
 
@@ -83,7 +87,7 @@ impl FunctionLower<'_> {
         hir::Expr::BinaryOp(lhs, op, rhs)
       }
 
-      cst::Expr::CallExpr(expr) => {
+      cst::Expr::CallExpr(ref expr) => {
         let lhs = self.expr_opt(expr.expr());
 
         let Some(arg_list) = expr.arg_list() else {
@@ -101,6 +105,7 @@ impl FunctionLower<'_> {
       _ => unimplemented!("lowering for {:?}", cst),
     };
 
+    self.span_map.exprs.push(Span { file: self.source, range: cst.syntax().text_range() });
     self.f.exprs.alloc(expr)
   }
 }

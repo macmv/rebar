@@ -9,7 +9,7 @@ pub fn eval(src: &str) {
   let id = sources.add(Source::new("inline.rbr".into(), src.into()));
   let sources = Arc::new(sources);
 
-  let hir = rb_diagnostic::run_or_exit(sources, || {
+  let hir = rb_diagnostic::run_or_exit(sources.clone(), || {
     let res = cst::SourceFile::parse(src);
 
     if res.errors().is_empty() {
@@ -22,16 +22,19 @@ pub fn eval(src: &str) {
       Default::default()
     }
   });
-  dbg!(&hir);
-  panic!();
-  // let mir = rb_diagnostic::run_or_exit(sources, || {
-  //   let mut functions = vec![];
-  //   for function in hir.functions {
-  //     let typer = rb_typer::Typer::check(&function);
-  //     functions.push(rb_mir_lower::lower_expr(&typer, function));
-  //   }
-  //   functions
-  // });
+
+  // TODO: This is where we join all the threads, collect all the functions up,
+  // and then split out to a thread pool to typecheck and lower each function.
+  // let mut functions = vec![];
+
+  rb_diagnostic::run_or_exit(sources, || {
+    let (hir, span_map) = hir;
+
+    for function in hir.functions.values() {
+      let typer = rb_typer::Typer::check(&function, &span_map);
+      // functions.push(rb_mir_lower::lower_expr(&typer, function));
+    }
+  });
 
   rb_jit::jit::interpret(src);
 }

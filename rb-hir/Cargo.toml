@@ -8,4 +8,6 @@ edition = "2021"
 [lib]
 
 [dependencies]
+rb-diagnostic.workspace = true
+
 la-arena = "0.3.1"

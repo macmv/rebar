@@ -412,6 +412,7 @@ name = "rb-hir"
 version = "0.1.0"
 dependencies = [
  "la-arena",
+ "rb-diagnostic",
 ]
 
 [[package]]
@@ -476,6 +477,7 @@ dependencies = [
  "rb-mir",
  "rb-mir-lower",
  "rb-syntax",
+ "rb-typer",
 ]
 
 [[package]]
@@ -499,6 +501,7 @@ dependencies = [
 name = "rb-typer"
 version = "0.1.0"
 dependencies = [
+ "rb-diagnostic",
  "rb-hir",
 ]
 

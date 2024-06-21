@@ -9,6 +9,7 @@ pub struct Diagnostic {
   pub span:    Span,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct Span {
   pub file:  SourceId,
   pub range: TextRange,
