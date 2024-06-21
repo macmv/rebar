@@ -385,6 +385,10 @@ dependencies = [
 [[package]]
 name = "rb-diagnostic"
 version = "0.1.0"
+dependencies = [
+ "la-arena",
+ "rb-syntax",
+]
 
 [[package]]
 name = "rb-hir"

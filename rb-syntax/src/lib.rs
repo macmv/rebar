@@ -14,6 +14,8 @@ use std::{marker::PhantomData, sync::Arc};
 
 use rowan::GreenNode;
 
+pub use rowan::TextRange;
+
 pub mod cst {
   pub use crate::generated::*;
 }

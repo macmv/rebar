@@ -5,7 +5,9 @@ use core::fmt;
 use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, Linkage, Module};
+use rb_diagnostic::Sources;
 use rb_syntax::cst;
+use std::sync::Arc;
 
 pub struct JIT {
   builder_context:  FunctionBuilderContext,
@@ -82,18 +84,25 @@ impl FunctionImpl {
   }
 }
 
-pub fn interpret(source: &cst::SourceFile) -> JIT {
-  let hir = rb_diagnostic::run_or_exit(|| {
-    rb_hir::lower(&source);
+pub fn interpret(source: &str) -> JIT {
+  let cst = cst::SourceFile::parse(source).tree();
+  let mut sources = Sources::new();
+  let id = sources.add(source.into());
+  let sources = Arc::new(sources);
+
+  let hir = rb_diagnostic::run_or_exit(sources, || {
+    // TODO: Lower each file in a thread pool here.
+    //
+    // rb_hir::lower::lower_expr(&id);
   });
-  let mir = rb_diagnostic::run_or_exit(|| {
-    let mut functions = vec![];
-    for function in hir.functions {
-      let typer = rb_typer::Typer::check(&function);
-      functions.push(rb_mir::lower::lower_expr(&typer, function));
-    }
-    functions
-  });
+  // let mir = rb_diagnostic::run_or_exit(sources, || {
+  //   let mut functions = vec![];
+  //   for function in hir.functions {
+  //     let typer = rb_typer::Typer::check(&function);
+  //     functions.push(rb_mir::lower::lower_expr(&typer, function));
+  //   }
+  //   functions
+  // });
 
   let mut jit = JIT::new();
 
@@ -121,14 +130,14 @@ pub fn interpret(source: &cst::SourceFile) -> JIT {
 
   jit.ctx.func.signature.returns.push(AbiParam::new(ir::types::I64));
 
-  let mut block = jit.new_block(source);
+  let mut block = jit.new_block(&cst);
 
   let return_variable = Variable::new(0);
   block.builder.declare_var(return_variable, ir::types::I64);
   let zero = block.builder.ins().iconst(ir::types::I64, 0);
   block.builder.def_var(return_variable, zero);
 
-  for stmt in source.stmts() {
+  for stmt in cst.stmts() {
     let res = block.compile_stmt(&stmt);
     block.builder.def_var(return_variable, res);
   }
@@ -272,7 +281,7 @@ impl BlockBuilder<'_> {
 mod tests {
   use super::*;
 
-  fn interp(source: &str) { interpret(&cst::SourceFile::parse(source).tree()); }
+  fn interp(source: &str) { interpret(&source); }
 
   #[test]
   fn foo() {
