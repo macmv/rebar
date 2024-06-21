@@ -24,6 +24,7 @@ pub struct Function {
 #[derive(Debug)]
 pub enum Expr {
   Literal(Literal),
+  Call(ExprId, Vec<ExprId>),
 
   Assign { lhs: ExprId, rhs: ExprId },
 }

@@ -3,7 +3,7 @@
 
 use rb_diagnostic::{emit, SourceId, Span};
 use rb_hir::ast as hir;
-use rb_syntax::cst;
+use rb_syntax::{cst, AstNode};
 
 pub fn lower_source(cst: cst::SourceFile, source: SourceId) -> hir::SourceFile {
   let mut out = hir::SourceFile::default();
@@ -27,18 +27,14 @@ struct FunctionLower<'a> {
 }
 
 impl FunctionLower<'_> {
-  fn span(&self, node: impl rb_syntax::AstNode) -> Span {
+  fn span(&self, node: &impl rb_syntax::AstNode) -> Span {
     Span { file: self.source, range: node.syntax().text_range() }
   }
 
   fn stmt(&mut self, cst: cst::Stmt) -> Option<hir::StmtId> {
     let stmt = match cst {
       cst::Stmt::ExprStmt(expr) => {
-        let Some(expr) = expr.expr() else {
-          emit!("missing expression", self.span(expr));
-          return None;
-        };
-        let expr = self.expr(expr)?;
+        let expr = self.expr_opt(expr.expr(), &expr)?;
 
         Some(hir::Stmt::Expr(expr))
       }
@@ -49,15 +45,40 @@ impl FunctionLower<'_> {
     stmt.map(|stmt| self.f.stmts.alloc(stmt))
   }
 
+  fn expr_opt(&mut self, cst: Option<cst::Expr>, parent: &impl AstNode) -> Option<hir::ExprId> {
+    match cst {
+      Some(expr) => self.expr(expr),
+      None => {
+        emit!("missing expression", self.span(parent));
+        None
+      }
+    }
+  }
   fn expr(&mut self, cst: cst::Expr) -> Option<hir::ExprId> {
     let expr = match cst {
       cst::Expr::Literal(lit) => {
         if let Some(lit) = lit.integer_token() {
           Some(hir::Expr::Literal(hir::Literal::Int(lit.text().parse().unwrap())))
         } else {
-          emit!("unexpected literal", self.span(lit));
+          emit!("unexpected literal", self.span(&lit));
           None
         }
+      }
+
+      cst::Expr::CallExpr(expr) => {
+        let lhs = self.expr_opt(expr.expr(), &expr)?;
+
+        let Some(arg_list) = expr.arg_list() else {
+          emit!("missing argument list", self.span(&expr));
+          return None;
+        };
+
+        let mut args = Vec::with_capacity(arg_list.exprs().size_hint().0);
+        for arg in arg_list.exprs() {
+          args.push(self.expr(arg)?);
+        }
+
+        Some(hir::Expr::Call(lhs, args))
       }
 
       _ => unimplemented!("lowering for {:?}", cst),
