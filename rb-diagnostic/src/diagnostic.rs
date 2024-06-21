@@ -23,12 +23,36 @@ impl Diagnostic {
     let source = &sources[self.span.file];
 
     let mut lines = source.line_index.lines(self.span.range);
+    let _ = lines.next();
     if lines.next().is_some() {
-      // Multi-line span
-      let _lines = source.line_index.lines(self.span.range);
+      let start = source.line_index.line_col(self.span.range.start());
+      let start_line_num = start.line + 1;
+      let start_col_num = start.col + 1;
 
-      // TODO
-      "".into()
+      let end = source.line_index.line_col(self.span.range.end());
+      let end_line_num = end.line + 1;
+      let _end_col_num = end.col + 1;
+
+      let margin_str = " ".repeat(end_line_num.ilog10() as usize + 1);
+
+      let mut out = String::new();
+
+      writeln!(out, "error: {}", self.message).unwrap();
+      writeln!(out, "{}--> {}:{}:{}", margin_str, source.name, start_line_num, start_col_num)
+        .unwrap();
+
+      let lines = source.line_index.lines(self.span.range);
+      for line in lines {
+        let pos = source.line_index.line_col(line.start());
+        let line_num = pos.line + 1;
+        let _col_num = pos.col + 1;
+
+        let line_str = &source.source[line].trim();
+
+        writeln!(out, "{} | {}", line_num, line_str).unwrap();
+      }
+
+      out
     } else {
       let pos = source.line_index.line_col(self.span.range.start());
       let line_num = pos.line + 1;
