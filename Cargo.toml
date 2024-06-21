@@ -11,8 +11,11 @@ members = [
   "rb-syntax",
   "rb-diagnostic",
   "rb-hir",
+  "rb-hir-lower",
   "rb-typer",
   "rb-mir",
+  "rb-mir-lower",
+  "rb-jit",
   "rb-runtime",
 ]
 
@@ -23,5 +26,8 @@ rb-parser = { path = "rb-parser" }
 rb-syntax = { path = "rb-syntax" }
 rb-diagnostic = { path = "rb-diagnostic" }
 rb-hir = { path = "rb-hir" }
+rb-hir-lower = { path = "rb-hir-lower" }
 rb-typer = { path = "rb-typer" }
 rb-mir = { path = "rb-mir" }
+rb-mir-lower = { path = "rb-mir-lower" }
+rb-jit = { path = "rb-jit" }

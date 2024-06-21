@@ -415,10 +415,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "rb-hir-lower"
+version = "0.1.0"
+dependencies = [
+ "rb-hir",
+ "rb-syntax",
+]
+
+[[package]]
+name = "rb-jit"
+version = "0.1.0"
+dependencies = [
+ "cranelift",
+ "cranelift-jit",
+ "cranelift-module",
+ "cranelift-native",
+ "rb-diagnostic",
+ "rb-mir",
+ "rb-syntax",
+]
+
+[[package]]
 name = "rb-mir"
 version = "0.1.0"
 dependencies = [
  "la-arena",
+ "rb-typer",
+]
+
+[[package]]
+name = "rb-mir-lower"
+version = "0.1.0"
+dependencies = [
+ "rb-hir",
+ "rb-mir",
  "rb-typer",
 ]
 
@@ -438,15 +468,13 @@ dependencies = [
 name = "rb-runtime"
 version = "0.1.0"
 dependencies = [
- "cranelift",
- "cranelift-jit",
- "cranelift-module",
- "cranelift-native",
  "rb-diagnostic",
  "rb-hir",
+ "rb-hir-lower",
+ "rb-jit",
  "rb-mir",
+ "rb-mir-lower",
  "rb-syntax",
- "rb-typer",
 ]
 
 [[package]]
