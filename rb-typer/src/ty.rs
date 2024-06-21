@@ -1,4 +1,5 @@
 use la_arena::Idx;
+use rb_diagnostic::Span;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -21,9 +22,12 @@ pub struct TypeVar {
   pub values: Vec<Type>,
   pub uses:   Vec<Type>,
 
+  pub span:        Span,
   pub description: String,
 }
 
 impl TypeVar {
-  pub fn new(description: String) -> Self { TypeVar { values: vec![], uses: vec![], description } }
+  pub fn new(span: Span, description: String) -> Self {
+    TypeVar { values: vec![], uses: vec![], span, description }
+  }
 }

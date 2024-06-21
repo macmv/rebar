@@ -46,8 +46,8 @@ impl<'a> Typer<'a> {
     };
   }
 
-  fn fresh_var(&mut self, description: String) -> VarId {
-    let var = TypeVar::new(description);
+  fn fresh_var(&mut self, span: Span, description: String) -> VarId {
+    let var = TypeVar::new(span, description);
     self.variables.alloc(var)
   }
 
@@ -62,7 +62,8 @@ impl<'a> Typer<'a> {
       hir::Expr::Call(lhs_expr, ref args) => {
         let lhs = self.type_expr(lhs_expr);
 
-        let ret = Type::Var(self.fresh_var(format!("return type of calling {:?}", lhs)));
+        let ret =
+          Type::Var(self.fresh_var(self.span(expr), format!("return type of calling {:?}", lhs)));
 
         let call_type = Type::Function(
           args.iter().map(|&arg| self.type_expr(arg)).collect(),
@@ -80,7 +81,8 @@ impl<'a> Typer<'a> {
         let lhs = self.type_expr(lhs_expr);
         let rhs = self.type_expr(rhs_expr);
 
-        let ret = Type::Var(self.fresh_var(format!("return type of binary op {op:?}")));
+        let ret =
+          Type::Var(self.fresh_var(self.span(expr), format!("return type of binary op {op:?}")));
 
         let call_type = Type::Function(vec![lhs, rhs], Box::new(ret.clone()));
 
@@ -112,21 +114,21 @@ impl<'a> Typer<'a> {
 enum TypeError {
   NotSubtype(Type, Type),
   Union(Vec<TypeError>),
-  UnresolvedUnion(Type, Type, Vec<(TypeError, Vec<String>)>),
+  UnresolvedUnion(Type, Type, Vec<(TypeError, Vec<(String, Option<Span>)>)>),
 }
 
 struct Constrain<'a: 'b, 'b> {
   typer:  &'b mut Typer<'a>,
-  errors: Vec<(TypeError, Vec<String>)>,
+  errors: Vec<(TypeError, Vec<(String, Option<Span>)>)>,
 
-  ctx: Vec<String>,
+  ctx: Vec<(String, Option<Span>)>,
 }
 
 impl Typer<'_> {
   fn constrain<'a>(&mut self, v: &Type, u: &Type, span: Span) {
     let mut constrain = Constrain { typer: self, errors: vec![], ctx: vec![] };
 
-    fn render_err(e: &TypeError, ctx: &[String]) -> String {
+    fn render_err(e: &TypeError, ctx: &[(String, Option<Span>)]) -> String {
       let mut buf = String::new();
 
       match e {
@@ -151,8 +153,8 @@ impl Typer<'_> {
         }
       }
 
-      for ctx in ctx {
-        buf.push_str(ctx);
+      for (desc, _) in ctx {
+        buf.push_str(desc);
         buf.push('\n');
       }
 
@@ -161,14 +163,19 @@ impl Typer<'_> {
     constrain.constrain(v, u, span);
 
     for (e, ctx) in constrain.errors {
+      for (ctx, span) in &ctx {
+        if let Some(sp) = span {
+          emit!(format!("{ctx:?}"), *sp);
+        }
+      }
       emit!(render_err(&e, &ctx), span);
     }
   }
 }
 
 impl Constrain<'_, '_> {
-  fn ctx(&mut self, ctx: String, f: impl FnOnce(&mut Self)) {
-    self.ctx.push(ctx);
+  fn ctx(&mut self, ctx: String, span: Option<Span>, f: impl FnOnce(&mut Self)) {
+    self.ctx.push((ctx, span));
     f(self);
     self.ctx.pop();
   }
@@ -183,7 +190,8 @@ impl Constrain<'_, '_> {
     match (v, u) {
       (Type::Var(v), u) => {
         let desc = &self.typer.variables[*v].description;
-        self.ctx(format!("constraining {desc} to {u:?}"), |c| {
+        let sp = self.typer.variables[*v].span;
+        self.ctx(format!("constraining {desc} to {u:?}"), Some(sp), |c| {
           let vvar = &mut c.typer.variables[*v];
           vvar.uses.push(u.clone());
           for v0 in vvar.values.clone() {
@@ -193,7 +201,8 @@ impl Constrain<'_, '_> {
       }
       (v, Type::Var(u)) => {
         let desc = &self.typer.variables[*u].description;
-        self.ctx(format!("constraining {v:?} to {desc}"), |c| {
+        let sp = self.typer.variables[*u].span;
+        self.ctx(format!("constraining {v:?} to {desc}"), Some(sp), |c| {
           let uvar = &mut c.typer.variables[*u];
           uvar.values.push(v.clone());
           for u0 in uvar.uses.clone() {
@@ -203,7 +212,7 @@ impl Constrain<'_, '_> {
       }
 
       (Type::Union(vs), u) => {
-        self.ctx(format!("constraining {v:?} to {u:?}"), |c| {
+        self.ctx(format!("constraining {v:?} to {u:?}"), None, |c| {
           for v in vs {
             c.constrain(v, u, span);
           }
@@ -237,7 +246,7 @@ impl Constrain<'_, '_> {
           self.error(TypeError::NotSubtype(v.clone(), u.clone()));
         }
 
-        self.ctx(format!("constraining {v:?} to {u:?}"), |c| {
+        self.ctx(format!("constraining {v:?} to {u:?}"), None, |c| {
           for (v, u) in va.iter().zip(ua.iter()) {
             c.constrain(u, v, span);
           }
