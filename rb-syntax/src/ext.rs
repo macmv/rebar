@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use crate::{
+  cst,
   node::{SyntaxElementChildren, SyntaxNode, SyntaxNodeChildren, SyntaxToken},
   support,
 };
@@ -95,13 +96,13 @@ impl Iterator for AstTokenChildren {
   }
 }
 
-impl crate::BinaryExpr {
-  pub fn lhs(&self) -> Option<crate::Expr> { support::children(&self.syntax).next() }
-  pub fn rhs(&self) -> Option<crate::Expr> { support::children(&self.syntax).nth(1) }
+impl cst::BinaryExpr {
+  pub fn lhs(&self) -> Option<cst::Expr> { support::children(&self.syntax).next() }
+  pub fn rhs(&self) -> Option<cst::Expr> { support::children(&self.syntax).nth(1) }
 }
 
-impl crate::IfExpr {
-  pub fn cond(&self) -> Option<crate::Expr> { support::children(&self.syntax).next() }
-  pub fn then(&self) -> Option<crate::Expr> { support::children(&self.syntax).nth(1) }
-  pub fn els(&self) -> Option<crate::Expr> { support::children(&self.syntax).nth(2) }
+impl cst::IfExpr {
+  pub fn cond(&self) -> Option<cst::Expr> { support::children(&self.syntax).next() }
+  pub fn then(&self) -> Option<cst::Expr> { support::children(&self.syntax).nth(1) }
+  pub fn els(&self) -> Option<cst::Expr> { support::children(&self.syntax).nth(2) }
 }

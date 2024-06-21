@@ -12,8 +12,11 @@ use rb_parser::SyntaxKind;
 
 use std::{marker::PhantomData, sync::Arc};
 
-pub use generated::*;
 use rowan::GreenNode;
+
+pub mod cst {
+  pub use crate::generated::*;
+}
 
 /// `Parse` is the result of the parsing: a syntax tree and a collection of
 /// errors.
@@ -27,8 +30,8 @@ pub struct Parse<T> {
   _ty:    PhantomData<fn() -> T>,
 }
 
-impl SourceFile {
-  pub fn parse(text: &str) -> Parse<SourceFile> {
+impl cst::SourceFile {
+  pub fn parse(text: &str) -> Parse<cst::SourceFile> {
     let (green, errors) = parse::parse_text(text);
     let root = SyntaxNode::new_root(green.clone());
 

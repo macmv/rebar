@@ -3,7 +3,7 @@
 use core::fmt;
 use std::sync::Arc;
 
-use rb_syntax::{BinaryOp, SourceFile};
+use rb_syntax::cst;
 
 pub struct RuntimeEnv {
   variables: Vec<(String, Value)>,
@@ -48,7 +48,7 @@ impl FunctionImpl {
   }
 }
 
-pub fn interpret(source: &SourceFile) -> (RuntimeEnv, Option<Error>) {
+pub fn interpret(source: &cst::SourceFile) -> (RuntimeEnv, Option<Error>) {
   let mut env = RuntimeEnv::new();
 
   let mut error = None;
@@ -68,9 +68,9 @@ pub enum Error {
 }
 
 impl RuntimeEnv {
-  fn interpret_stmt(&mut self, stmt: &rb_syntax::Stmt) -> Result<(), Error> {
+  fn interpret_stmt(&mut self, stmt: &cst::Stmt) -> Result<(), Error> {
     match stmt {
-      rb_syntax::Stmt::ExprStmt(expr) => {
+      cst::Stmt::ExprStmt(expr) => {
         self.interpret_expr(&expr.expr().ok_or(Error::MissingExpr)?)?;
       }
       _ => unimplemented!(),
@@ -79,16 +79,16 @@ impl RuntimeEnv {
     Ok(())
   }
 
-  fn interpret_expr(&mut self, expr: &rb_syntax::Expr) -> Result<Value, Error> {
+  fn interpret_expr(&mut self, expr: &cst::Expr) -> Result<Value, Error> {
     Ok(match expr {
-      rb_syntax::Expr::Literal(lit) => {
+      cst::Expr::Literal(lit) => {
         if let Some(lit) = lit.integer_token() {
           Value::Int(lit.text().parse().unwrap())
         } else {
           unimplemented!()
         }
       }
-      rb_syntax::Expr::Name(name) => {
+      cst::Expr::Name(name) => {
         let ident = name.ident_token().unwrap();
         let name = ident.text();
 
@@ -99,7 +99,7 @@ impl RuntimeEnv {
           .map(|(_, v)| v.clone())
           .unwrap_or_else(|| Value::Function(Arc::new(FunctionImpl { name: name.to_string() })))
       }
-      rb_syntax::Expr::CallExpr(bin) => {
+      cst::Expr::CallExpr(bin) => {
         let lhs = bin.expr().ok_or(Error::MissingExpr)?;
         let args = bin.arg_list().ok_or(Error::MissingExpr)?;
 
@@ -115,7 +115,7 @@ impl RuntimeEnv {
           _ => unimplemented!("cannot call {lhs:?}"),
         }
       }
-      rb_syntax::Expr::BinaryExpr(bin) => {
+      cst::Expr::BinaryExpr(bin) => {
         let lhs = bin.lhs().ok_or(Error::MissingExpr)?;
         let rhs = bin.rhs().ok_or(Error::MissingExpr)?;
         let op = bin.binary_op().ok_or(Error::MissingExpr)?;
@@ -149,7 +149,7 @@ mod tests {
   use super::*;
 
   fn interp(source: &str) {
-    let (_env, res) = interpret(&SourceFile::parse(source).tree());
+    let (_env, res) = interpret(&cst::SourceFile::parse(source).tree());
     if let Some(e) = res {
       panic!("Error: {:?}", e);
     }

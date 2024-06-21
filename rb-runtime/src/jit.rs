@@ -5,8 +5,7 @@ use core::fmt;
 use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, Linkage, Module};
-
-use rb_syntax::SourceFile;
+use rb_syntax::cst;
 
 pub struct JIT {
   builder_context:  FunctionBuilderContext,
@@ -83,7 +82,7 @@ impl FunctionImpl {
   }
 }
 
-pub fn interpret(source: &SourceFile) -> JIT {
+pub fn interpret(source: &cst::SourceFile) -> JIT {
   let mut jit = JIT::new();
 
   // This is a little cursed, but we'll just dereference the pointer twice. What
@@ -141,7 +140,7 @@ pub enum Error {
 }
 
 impl JIT {
-  fn new_block<'a>(&'a mut self, _source: &SourceFile) -> BlockBuilder<'a> {
+  fn new_block<'a>(&'a mut self, _source: &cst::SourceFile) -> BlockBuilder<'a> {
     let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
     let entry_block = builder.create_block();
 
@@ -159,23 +158,23 @@ impl JIT {
 }
 
 impl BlockBuilder<'_> {
-  fn compile_stmt(&mut self, stmt: &rb_syntax::Stmt) -> Value {
+  fn compile_stmt(&mut self, stmt: &cst::Stmt) -> Value {
     match stmt {
-      rb_syntax::Stmt::ExprStmt(expr) => self.compile_expr(&expr.expr().unwrap()),
+      cst::Stmt::ExprStmt(expr) => self.compile_expr(&expr.expr().unwrap()),
       _ => unimplemented!(),
     }
   }
 
-  fn compile_expr(&mut self, expr: &rb_syntax::Expr) -> Value {
+  fn compile_expr(&mut self, expr: &cst::Expr) -> Value {
     match expr {
-      rb_syntax::Expr::Literal(lit) => {
+      cst::Expr::Literal(lit) => {
         if let Some(lit) = lit.integer_token() {
           self.builder.ins().iconst(ir::types::I64, lit.text().parse::<i64>().unwrap())
         } else {
           unimplemented!()
         }
       }
-      rb_syntax::Expr::Name(name) => {
+      cst::Expr::Name(name) => {
         let ident = name.ident_token().unwrap();
         let _name = ident.text();
 
@@ -190,12 +189,12 @@ impl BlockBuilder<'_> {
 
         todo!()
       }
-      rb_syntax::Expr::CallExpr(bin) => {
+      cst::Expr::CallExpr(bin) => {
         let lhs = bin.expr().unwrap();
         let args = bin.arg_list().unwrap();
 
         let name = match lhs {
-          rb_syntax::Expr::Name(name) => {
+          cst::Expr::Name(name) => {
             let ident = name.ident_token().unwrap();
             ident.text().to_string()
           }
@@ -234,7 +233,7 @@ impl BlockBuilder<'_> {
 
         self.builder.ins().iconst(ir::types::I64, 0)
       }
-      rb_syntax::Expr::BinaryExpr(bin) => {
+      cst::Expr::BinaryExpr(bin) => {
         let lhs = bin.lhs().unwrap();
         let rhs = bin.rhs().unwrap();
         let op = bin.binary_op().unwrap();
@@ -261,7 +260,7 @@ impl BlockBuilder<'_> {
 mod tests {
   use super::*;
 
-  fn interp(source: &str) { interpret(&SourceFile::parse(source).tree()); }
+  fn interp(source: &str) { interpret(&cst::SourceFile::parse(source).tree()); }
 
   #[test]
   fn foo() {
