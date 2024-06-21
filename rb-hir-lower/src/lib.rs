@@ -1,20 +1,18 @@
 //! Lowers the AST from rb_syntax into an HIR tree. Performs no type inferrence,
 //! and only validates syntax.
 
-use rb_diagnostic::{emit, SourceId, Span};
+use rb_diagnostic::SourceId;
 use rb_hir::ast as hir;
-use rb_syntax::{cst, AstNode};
+use rb_syntax::cst;
 
-pub fn lower_source(cst: cst::SourceFile, source: SourceId) -> hir::SourceFile {
+pub fn lower_source(cst: cst::SourceFile, _source: SourceId) -> hir::SourceFile {
   let mut out = hir::SourceFile::default();
   let mut main = hir::Function::default();
 
-  let mut lower = FunctionLower { f: &mut main, source };
+  let mut lower = FunctionLower { f: &mut main };
   for stmt in cst.stmts() {
-    match lower.stmt(stmt) {
-      Some(i) => lower.f.items.push(i),
-      None => {}
-    }
+    let item = lower.stmt(stmt);
+    lower.f.items.push(item);
   }
 
   out.main_function = Some(out.functions.alloc(main));
@@ -22,62 +20,52 @@ pub fn lower_source(cst: cst::SourceFile, source: SourceId) -> hir::SourceFile {
 }
 
 struct FunctionLower<'a> {
-  source: SourceId,
-  f:      &'a mut hir::Function,
+  f: &'a mut hir::Function,
 }
 
 impl FunctionLower<'_> {
-  fn span(&self, node: &impl rb_syntax::AstNode) -> Span {
-    Span { file: self.source, range: node.syntax().text_range() }
-  }
-
-  fn stmt(&mut self, cst: cst::Stmt) -> Option<hir::StmtId> {
+  fn stmt(&mut self, cst: cst::Stmt) -> hir::StmtId {
     let stmt = match cst {
       cst::Stmt::ExprStmt(expr) => {
-        let expr = self.expr_opt(expr.expr(), &expr)?;
+        let expr = self.expr_opt(expr.expr());
 
-        Some(hir::Stmt::Expr(expr))
+        hir::Stmt::Expr(expr)
       }
 
       _ => unimplemented!("lowering for {:?}", cst),
     };
 
-    stmt.map(|stmt| self.f.stmts.alloc(stmt))
+    self.f.stmts.alloc(stmt)
   }
 
-  fn expr_opt(&mut self, cst: Option<cst::Expr>, parent: &impl AstNode) -> Option<hir::ExprId> {
+  fn expr_opt(&mut self, cst: Option<cst::Expr>) -> hir::ExprId {
     match cst {
       Some(expr) => self.expr(expr),
-      None => {
-        emit!("missing expression", self.span(parent));
-        None
-      }
+      None => panic!("missing expression"),
     }
   }
-  fn expr(&mut self, cst: cst::Expr) -> Option<hir::ExprId> {
+  fn expr(&mut self, cst: cst::Expr) -> hir::ExprId {
     let expr = match cst {
       cst::Expr::Literal(lit) => {
         if let Some(lit) = lit.integer_token() {
-          Some(hir::Expr::Literal(hir::Literal::Int(lit.text().parse().unwrap())))
+          hir::Expr::Literal(hir::Literal::Int(lit.text().parse().unwrap()))
         } else {
-          emit!("unexpected literal", self.span(&lit));
-          None
+          panic!("unexpected literal {lit}");
         }
       }
 
       cst::Expr::Name(name) => {
         let name = name.ident_token().unwrap().to_string();
 
-        Some(hir::Expr::Name(name))
+        hir::Expr::Name(name)
       }
 
       cst::Expr::BinaryExpr(expr) => {
-        let lhs = self.expr_opt(expr.lhs(), &expr)?;
-        let rhs = self.expr_opt(expr.rhs(), &expr)?;
+        let lhs = self.expr_opt(expr.lhs());
+        let rhs = self.expr_opt(expr.rhs());
 
         let Some(op) = expr.binary_op() else {
-          emit!("missing binary operator", self.span(&expr));
-          return None;
+          panic!("missing binary operator {expr}");
         };
 
         let op = if op.plus_token().is_some() {
@@ -89,32 +77,30 @@ impl FunctionLower<'_> {
         } else if op.slash_token().is_some() {
           hir::BinaryOp::Div
         } else {
-          emit!("unexpected binary operator", self.span(&expr));
-          return None;
+          panic!("unexpected binary operator {expr}");
         };
 
-        Some(hir::Expr::BinaryOp(lhs, op, rhs))
+        hir::Expr::BinaryOp(lhs, op, rhs)
       }
 
       cst::Expr::CallExpr(expr) => {
-        let lhs = self.expr_opt(expr.expr(), &expr)?;
+        let lhs = self.expr_opt(expr.expr());
 
         let Some(arg_list) = expr.arg_list() else {
-          emit!("missing argument list", self.span(&expr));
-          return None;
+          panic!("missing argument list {expr}");
         };
 
         let mut args = Vec::with_capacity(arg_list.exprs().size_hint().0);
         for arg in arg_list.exprs() {
-          args.push(self.expr(arg)?);
+          args.push(self.expr(arg));
         }
 
-        Some(hir::Expr::Call(lhs, args))
+        hir::Expr::Call(lhs, args)
       }
 
       _ => unimplemented!("lowering for {:?}", cst),
     };
 
-    expr.map(|expr| self.f.exprs.alloc(expr))
+    self.f.exprs.alloc(expr)
   }
 }
