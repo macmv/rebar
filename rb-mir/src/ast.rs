@@ -1,5 +1,4 @@
 use la_arena::Idx;
-use rb_hir::literal::Literal;
 use rb_typer::Type;
 
 pub type ExprId = Idx<Expr>;
@@ -10,4 +9,11 @@ pub enum Expr {
   Assign { variable: String, ty: Type, rhs: ExprId },
 
   While { cond: ExprId },
+}
+
+#[derive(Debug)]
+pub enum Literal {
+  Int(i64),
+  Bool(bool),
+  Unit,
 }

@@ -1,5 +1,5 @@
 [package]
-name = "rb-hir"
+name = "rb-mir-lower"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,4 +8,6 @@ edition = "2021"
 [lib]
 
 [dependencies]
-la-arena = "0.3.1"
+rb-hir.workspace = true
+rb-typer.workspace = true
+rb-mir.workspace = true

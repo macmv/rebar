@@ -8,7 +8,6 @@ edition = "2021"
 [lib]
 
 [dependencies]
-rb-hir.workspace = true
 rb-typer.workspace = true
 
 la-arena = "0.3.1"
