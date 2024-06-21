@@ -18,9 +18,10 @@ pub type VarId = Idx<TypeVar>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeVar {
-  pub constraints: Vec<Type>,
+  pub values: Vec<Type>,
+  pub uses:   Vec<Type>,
 }
 
 impl TypeVar {
-  pub fn new() -> Self { Self { constraints: Vec::new() } }
+  pub fn new() -> Self { TypeVar { values: vec![], uses: vec![] } }
 }

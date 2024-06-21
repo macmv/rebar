@@ -90,9 +90,9 @@ impl<'a> Typer<'a> {
   }
 }
 
-enum TypeError<'a> {
-  NotSubtype(&'a Type, &'a Type),
-  Union(Vec<TypeError<'a>>),
+enum TypeError {
+  NotSubtype(Type, Type),
+  Union(Vec<TypeError>),
 }
 
 impl Typer<'_> {
@@ -119,18 +119,26 @@ impl Typer<'_> {
     }
   }
 
-  fn constrain0<'a>(&mut self, v: &'a Type, u: &'a Type, span: Span) -> Result<(), TypeError<'a>> {
+  fn constrain0<'a>(&mut self, v: &'a Type, u: &'a Type, span: Span) -> Result<(), TypeError> {
     if v == u {
       return Ok(());
     }
 
     match (v, u) {
       (Type::Var(v), u) => {
-        self.variables[*v].constraints.push(u.clone());
+        let vvar = &mut self.variables[*v];
+        vvar.uses.push(u.clone());
+        for v0 in vvar.values.clone() {
+          self.constrain0(&v0, u, span)?;
+        }
         Ok(())
       }
       (v, Type::Var(u)) => {
-        self.variables[*u].constraints.push(v.clone());
+        let uvar = &mut self.variables[*u];
+        uvar.values.push(v.clone());
+        for u0 in uvar.uses.clone() {
+          self.constrain0(v, &u0, span)?;
+        }
         Ok(())
       }
 
@@ -150,7 +158,7 @@ impl Typer<'_> {
 
       (Type::Function(va, vr), Type::Function(ua, ur)) => {
         if va.len() != ua.len() {
-          return Err(TypeError::NotSubtype(v, u));
+          return Err(TypeError::NotSubtype(v.clone(), u.clone()));
         }
 
         for (v, u) in va.iter().zip(ua.iter()) {
@@ -166,7 +174,7 @@ impl Typer<'_> {
       //     self.constrain(v, u, span);
       //   }
       // }
-      (v, u) => Err(TypeError::NotSubtype(v, u)),
+      (v, u) => Err(TypeError::NotSubtype(v.clone(), u.clone())),
     }
   }
 }
