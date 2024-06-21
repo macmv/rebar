@@ -43,7 +43,7 @@ mod tests {
   #[test]
   fn foo() {
     eval(
-      r#"print_impl(2 * 3 + 4 +)
+      r#"print_impl(2 * 3 + 4 + 5)
          4
       "#,
     );
