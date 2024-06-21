@@ -76,25 +76,32 @@ impl<'a> Typer<'a> {
 
       hir::Expr::Name(_) => Type::Function(vec![Type::Int], Box::new(Type::Unit)),
 
-      hir::Expr::BinaryOp(lhs_expr, ref _op, rhs_expr) => {
+      hir::Expr::BinaryOp(lhs_expr, ref op, rhs_expr) => {
         let lhs = self.type_expr(lhs_expr);
         let rhs = self.type_expr(rhs_expr);
 
-        match _op {
+        let ret = Type::Var(self.fresh_var());
+
+        let call_type = Type::Function(vec![lhs, rhs], Box::new(ret.clone()));
+
+        match op {
           hir::BinaryOp::Mul => {
-            self.constrain(&lhs, &Type::Union(vec![Type::Int, Type::Bool]), self.span(lhs_expr));
-            self.constrain(&rhs, &Type::Union(vec![Type::Int, Type::Bool]), self.span(rhs_expr));
+            self.constrain(
+              &Type::Function(vec![Type::Int, Type::Int], Box::new(Type::Bool)),
+              &call_type,
+              self.span(expr),
+            );
           }
           _ => {
-            self.constrain(&lhs, &Type::Bool, self.span(lhs_expr));
-            self.constrain(&rhs, &Type::Bool, self.span(rhs_expr));
+            self.constrain(
+              &Type::Function(vec![Type::Bool, Type::Bool], Box::new(Type::Bool)),
+              &call_type,
+              self.span(expr),
+            );
           }
         }
 
-        self.constrain(&lhs, &Type::Union(vec![Type::Int, Type::Bool]), self.span(lhs_expr));
-        self.constrain(&rhs, &Type::Union(vec![Type::Int, Type::Bool]), self.span(rhs_expr));
-
-        lhs
+        ret
       }
 
       _ => Type::Unit,
@@ -207,7 +214,7 @@ impl Constrain<'_, '_> {
         }
 
         for (v, u) in va.iter().zip(ua.iter()) {
-          self.constrain(v, u, span);
+          self.constrain(u, v, span);
         }
         self.constrain(vr, ur, span);
       }
