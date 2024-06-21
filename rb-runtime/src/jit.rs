@@ -5,7 +5,7 @@ use core::fmt;
 use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, Linkage, Module};
-use rb_diagnostic::Sources;
+use rb_diagnostic::{emit, Sources};
 use rb_syntax::cst;
 use std::sync::Arc;
 
@@ -90,7 +90,11 @@ pub fn interpret(source: &str) -> JIT {
   let id = sources.add(source.into());
   let sources = Arc::new(sources);
 
-  let hir = rb_diagnostic::run_or_exit(sources, || {
+  rb_diagnostic::run_or_exit(sources, || {
+    let res = cst::SourceFile::parse(source);
+    for error in res.errors() {
+      emit!(error.message(), error.span());
+    }
     // TODO: Lower each file in a thread pool here.
     //
     // rb_hir::lower::lower_expr(&id);
@@ -286,7 +290,7 @@ mod tests {
   #[test]
   fn foo() {
     interp(
-      r#"print_impl(2 * 3 + 4)
+      r#"print_impl(2 * 3 + 4 +)
          4
       "#,
     );

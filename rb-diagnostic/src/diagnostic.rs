@@ -10,3 +10,9 @@ impl fmt::Display for Diagnostic {
     write!(f, "{} at {:?}", self.message, self.span)
   }
 }
+
+impl Diagnostic {
+  pub fn error(message: impl Into<String>, span: rb_syntax::TextRange) -> Self {
+    Diagnostic { message: message.into(), span }
+  }
+}

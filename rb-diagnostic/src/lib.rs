@@ -26,3 +26,10 @@ pub fn emit(diagnostic: Diagnostic) {
     eprintln!("error!");
   });
 }
+
+#[macro_export]
+macro_rules! emit {
+  ($message:expr, $span:expr) => {
+    $crate::emit($crate::Diagnostic::error($message, $span))
+  };
+}
