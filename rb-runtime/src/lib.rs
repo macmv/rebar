@@ -36,7 +36,18 @@ pub fn eval(src: &str) {
     }
   });
 
-  rb_jit::jit::interpret(src);
+  // TODO: If we get to this point, all checks have passed, and we can compile to
+  // cranelift IR. Again, join on the above pool, collect all the functions, and
+  // dispatch the MIR to a thread pool.
+
+  let mut jit = rb_jit::jit::JIT::new();
+  let mut function_ids = vec![];
+  for f in functions {
+    function_ids.push(jit.compile_function(&f));
+  }
+
+  jit.finalize();
+  jit.eval(function_ids[0]);
 }
 
 #[cfg(test)]

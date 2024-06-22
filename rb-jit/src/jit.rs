@@ -4,10 +4,8 @@ use codegen::ir;
 use core::fmt;
 use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::{DataDescription, Linkage, Module};
-use rb_diagnostic::{emit, Source, Sources, Span};
-use rb_syntax::cst;
-use std::sync::Arc;
+use cranelift_module::{DataDescription, FuncId, Linkage, Module};
+use rb_mir::ast as mir;
 
 pub struct JIT {
   builder_context:  FunctionBuilderContext,
@@ -18,6 +16,7 @@ pub struct JIT {
 
 struct BlockBuilder<'a> {
   builder: FunctionBuilder<'a>,
+  mir:     &'a mir::Function,
   module:  &'a mut JITModule,
 }
 
@@ -31,7 +30,7 @@ extern "C" fn print_impl(num: i64) {
 }
 
 impl JIT {
-  fn new() -> Self {
+  pub fn new() -> Self {
     let mut flag_builder = settings::builder();
     flag_builder.set("use_colocated_libcalls", "false").unwrap();
     flag_builder.set("is_pic", "false").unwrap();
@@ -52,7 +51,29 @@ impl JIT {
     }
   }
 
-  fn eval(&mut self) {
+  pub fn compile_function(&mut self, mir: &mir::Function) -> FuncId {
+    self.ctx.func.signature.returns.push(AbiParam::new(ir::types::I64));
+
+    let mut block = self.new_block(mir);
+
+    let return_variable = Variable::new(0);
+    block.builder.declare_var(return_variable, ir::types::I64);
+    let zero = block.builder.ins().iconst(ir::types::I64, 0);
+    block.builder.def_var(return_variable, zero);
+
+    for &stmt in &mir.items {
+      let res = block.compile_stmt(stmt);
+      block.builder.def_var(return_variable, res);
+    }
+
+    let return_value = block.builder.use_var(return_variable);
+
+    // Emit the return instruction.
+    block.builder.ins().return_(&[return_value]);
+
+    // Tell the builder we're done with this function.
+    block.builder.finalize();
+
     let id = self
       .module
       .declare_function(&"fooooooo", Linkage::Export, &self.ctx.func.signature)
@@ -60,7 +81,12 @@ impl JIT {
       .unwrap();
     self.module.define_function(id, &mut self.ctx).map_err(|e| e.to_string()).unwrap();
     self.module.clear_context(&mut self.ctx);
-    self.module.finalize_definitions().unwrap();
+    id
+  }
+
+  pub fn finalize(&mut self) { self.module.finalize_definitions().unwrap(); }
+
+  pub fn eval(&mut self, id: FuncId) {
     let code = self.module.get_finalized_function(id);
 
     unsafe {
@@ -84,88 +110,13 @@ impl FunctionImpl {
   }
 }
 
-pub fn interpret(source: &str) -> JIT {
-  let cst = cst::SourceFile::parse(source).tree();
-  let mut sources = Sources::new();
-  let id = sources.add(Source::new("inline.rbr".into(), source.into()));
-  let sources = Arc::new(sources);
-
-  rb_diagnostic::run_or_exit(sources, || {
-    let res = cst::SourceFile::parse(source);
-    for error in res.errors() {
-      emit!(error.message(), Span { file: id, range: error.span() });
-    }
-    // TODO: Lower each file in a thread pool here.
-    //
-    // rb_hir::lower::lower_expr(&id);
-  });
-  // let mir = rb_diagnostic::run_or_exit(sources, || {
-  //   let mut functions = vec![];
-  //   for function in hir.functions {
-  //     let typer = rb_typer::Typer::check(&function);
-  //     functions.push(rb_mir::lower::lower_expr(&typer, function));
-  //   }
-  //   functions
-  // });
-
-  let mut jit = JIT::new();
-
-  // This is a little cursed, but we'll just dereference the pointer twice. What
-  // could possibly go wrong?
-
-  let contents = (print_impl as *const u8 as u64).to_ne_bytes().to_vec();
-
-  jit.data_description.define(contents.into_boxed_slice());
-  let id = jit.module.declare_data("my_data", Linkage::Export, true, false).unwrap();
-
-  jit.module.define_data(id, &jit.data_description).unwrap();
-  jit.data_description.clear();
-  jit.module.finalize_definitions().unwrap();
-
-  // let mut sig = Signature::new(isa::CallConv::SystemV);
-  // sig.params.push(AbiParam::new(ir::types::I64));
-
-  // jit
-  //   .module
-  //   .declare_function("print_impl", Linkage::Import, &sig)
-  //   .map_err(|e| e.to_string())
-  //   .unwrap();
-  // jit.module.finalize_definitions().unwrap();
-
-  jit.ctx.func.signature.returns.push(AbiParam::new(ir::types::I64));
-
-  let mut block = jit.new_block(&cst);
-
-  let return_variable = Variable::new(0);
-  block.builder.declare_var(return_variable, ir::types::I64);
-  let zero = block.builder.ins().iconst(ir::types::I64, 0);
-  block.builder.def_var(return_variable, zero);
-
-  for stmt in cst.stmts() {
-    let res = block.compile_stmt(&stmt);
-    block.builder.def_var(return_variable, res);
-  }
-
-  let return_value = block.builder.use_var(return_variable);
-
-  // Emit the return instruction.
-  block.builder.ins().return_(&[return_value]);
-
-  // Tell the builder we're done with this function.
-  block.builder.finalize();
-
-  jit.eval();
-
-  jit
-}
-
 #[derive(Debug)]
 pub enum Error {
   MissingExpr,
 }
 
 impl JIT {
-  fn new_block<'a>(&'a mut self, _source: &cst::SourceFile) -> BlockBuilder<'a> {
+  fn new_block<'a>(&'a mut self, mir: &'a mir::Function) -> BlockBuilder<'a> {
     let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
     let entry_block = builder.create_block();
 
@@ -178,32 +129,26 @@ impl JIT {
     // TODO: Declare variables.
     // for stmt in source.stmts() {}
 
-    BlockBuilder { builder, module: &mut self.module }
+    BlockBuilder { builder, mir, module: &mut self.module }
   }
 }
 
 impl BlockBuilder<'_> {
-  fn compile_stmt(&mut self, stmt: &cst::Stmt) -> Value {
-    match stmt {
-      cst::Stmt::ExprStmt(expr) => self.compile_expr(&expr.expr().unwrap()),
-      _ => unimplemented!(),
+  fn compile_stmt(&mut self, stmt: mir::StmtId) -> Value {
+    match self.mir.stmts[stmt] {
+      mir::Stmt::Expr(expr) => self.compile_expr(expr),
     }
   }
 
-  fn compile_expr(&mut self, expr: &cst::Expr) -> Value {
-    match expr {
-      cst::Expr::Literal(lit) => {
-        if let Some(lit) = lit.integer_token() {
-          self.builder.ins().iconst(ir::types::I64, lit.text().parse::<i64>().unwrap())
-        } else {
-          unimplemented!()
-        }
-      }
-      cst::Expr::Name(name) => {
-        let ident = name.ident_token().unwrap();
-        let _name = ident.text();
+  fn compile_expr(&mut self, expr: mir::ExprId) -> Value {
+    match self.mir.exprs[expr] {
+      mir::Expr::Literal(ref lit) => match lit {
+        mir::Literal::Int(i) => self.builder.ins().iconst(ir::types::I64, *i),
+        _ => unimplemented!(),
+      },
 
-        // TODO
+      // TODO
+      mir::Expr::Name(_, _) => {
         // self
         //   .variables
         //   .iter()
@@ -214,22 +159,17 @@ impl BlockBuilder<'_> {
 
         todo!()
       }
-      cst::Expr::CallExpr(bin) => {
-        let lhs = bin.expr().unwrap();
-        let args = bin.arg_list().unwrap();
 
-        let name = match lhs {
-          cst::Expr::Name(name) => {
-            let ident = name.ident_token().unwrap();
-            ident.text().to_string()
-          }
+      mir::Expr::Call(lhs, ref args) => {
+        let name = match self.mir.exprs[lhs] {
+          mir::Expr::Name(ref name, _) => name,
           _ => todo!(),
         };
 
         let mut sig = self.module.make_signature();
 
         // Add a parameter for each argument.
-        for _arg in args.exprs() {
+        for _arg in args {
           sig.params.push(AbiParam::new(ir::types::I64));
         }
 
@@ -250,51 +190,29 @@ impl BlockBuilder<'_> {
         let local_callee = self.module.declare_func_in_func(callee, self.builder.func);
 
         let mut arg_values = Vec::new();
-        for arg in args.exprs() {
-          arg_values.push(self.compile_expr(&arg))
+        for &arg in args {
+          arg_values.push(self.compile_expr(arg))
         }
         let call = self.builder.ins().call(local_callee, &arg_values);
         self.builder.inst_results(call);
 
         self.builder.ins().iconst(ir::types::I64, 0)
       }
-      cst::Expr::BinaryExpr(bin) => {
-        let lhs = bin.lhs().unwrap();
-        let rhs = bin.rhs().unwrap();
-        let op = bin.binary_op().unwrap();
 
-        let lhs = self.compile_expr(&lhs);
-        let rhs = self.compile_expr(&rhs);
+      mir::Expr::Binary(lhs, ref op, rhs, ref result) => {
+        let lhs = self.compile_expr(lhs);
+        let rhs = self.compile_expr(rhs);
 
-        if op.plus_token().is_some() {
-          // TODO: Get static types in here! For now, assume everything is an int.
-
-          self.builder.ins().iadd(lhs, rhs)
-        } else if op.star_token().is_some() {
-          self.builder.ins().imul(lhs, rhs)
-        } else {
-          unimplemented!()
+        match (op, result) {
+          (mir::BinaryOp::Add, _) => self.builder.ins().iadd(lhs, rhs),
+          (mir::BinaryOp::Sub, _) => self.builder.ins().isub(lhs, rhs),
+          (mir::BinaryOp::Mul, _) => self.builder.ins().imul(lhs, rhs),
+          (mir::BinaryOp::Div, _) => self.builder.ins().udiv(lhs, rhs),
+          (mir::BinaryOp::Mod, _) => self.builder.ins().urem(lhs, rhs),
+          _ => unimplemented!(),
         }
       }
       _ => unimplemented!("expr: {expr:?}"),
     }
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  fn interp(source: &str) { interpret(&source); }
-
-  #[test]
-  fn foo() {
-    interp(
-      r#"print_impl(2 * 3 + 4 +)
-         4
-      "#,
-    );
-
-    panic!();
   }
 }
