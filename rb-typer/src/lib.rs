@@ -46,19 +46,26 @@ impl<'a> Typer<'a> {
     typer
   }
 
-  pub fn type_of_expr(&self, expr: ExprId) -> Type {
-    fn lower_type(ty: &VType) -> Type {
-      match ty {
-        VType::Literal(lit) => Type::Literal(lit.clone()),
-        VType::Function(args, ret) => {
-          Type::Function(args.iter().map(lower_type).collect(), Box::new(lower_type(ret)))
-        }
+  pub fn type_of_expr(&self, expr: ExprId) -> Type { self.lower_type(&self.exprs[&expr]) }
 
-        ref ty => panic!("invalid type: {ty:?}"),
+  fn lower_type(&self, ty: &VType) -> Type {
+    match ty {
+      VType::Literal(lit) => Type::Literal(lit.clone()),
+      VType::Function(args, ret) => Type::Function(
+        args.iter().map(|t| self.lower_type(t)).collect(),
+        Box::new(self.lower_type(ret)),
+      ),
+
+      // TODO: Render type variables correctly.
+      VType::Var(v) => {
+        let var = &self.variables[*v];
+
+        assert!(var.values.len() == 1, "variable {var:?} has multiple values");
+        self.lower_type(&var.values[0])
       }
-    }
 
-    lower_type(&self.exprs[&expr])
+      ref ty => panic!("invalid type: {ty:?}"),
+    }
   }
 
   fn span(&self, expr: ExprId) -> Span { self.span_map.exprs[expr.into_raw().into_u32() as usize] }
