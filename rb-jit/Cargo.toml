@@ -4,8 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-rb-syntax.workspace = true
-rb-diagnostic.workspace = true
 rb-mir.workspace = true
 
 cranelift = "0.108.1"

@@ -432,9 +432,7 @@ dependencies = [
  "cranelift-jit",
  "cranelift-module",
  "cranelift-native",
- "rb-diagnostic",
  "rb-mir",
- "rb-syntax",
 ]
 
 [[package]]
