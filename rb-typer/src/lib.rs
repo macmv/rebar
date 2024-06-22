@@ -96,28 +96,14 @@ impl<'a> Typer<'a> {
 
         let call_type = VType::Function(vec![lhs, rhs], Box::new(ret.clone()));
 
-        match op {
-          hir::BinaryOp::Mul => {
-            self.constrain(
-              &VType::Function(
-                vec![ty::Literal::Int.into(), ty::Literal::Int.into()],
-                Box::new(ty::Literal::Bool.into()),
-              ),
-              &call_type,
-              self.span(expr),
-            );
-          }
-          _ => {
-            self.constrain(
-              &VType::Function(
-                vec![ty::Literal::Bool.into(), ty::Literal::Bool.into()],
-                Box::new(ty::Literal::Bool.into()),
-              ),
-              &call_type,
-              self.span(expr),
-            );
-          }
-        }
+        self.constrain(
+          &VType::Function(
+            vec![ty::Literal::Int.into(), ty::Literal::Int.into()],
+            Box::new(ty::Literal::Int.into()),
+          ),
+          &call_type,
+          self.span(expr),
+        );
 
         ret
       }
