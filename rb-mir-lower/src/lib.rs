@@ -53,7 +53,7 @@ impl Lower<'_> {
           _ => todo!(),
         };
 
-        mir::Expr::BinaryOp(lhs, op, rhs, self.ty.type_of_expr(expr))
+        mir::Expr::Binary(lhs, op, rhs, self.ty.type_of_expr(expr))
       }
 
       hir::Expr::Call(lhs, ref args) => {

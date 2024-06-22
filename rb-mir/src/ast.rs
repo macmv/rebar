@@ -16,7 +16,7 @@ pub struct Function {
 pub enum Expr {
   Literal(Literal),
   Call(ExprId, Vec<ExprId>),
-  BinaryOp(ExprId, BinaryOp, ExprId, Type),
+  Binary(ExprId, BinaryOp, ExprId, Type),
   Name(String, Type),
 
   Assign { variable: String, ty: Type, rhs: ExprId },
