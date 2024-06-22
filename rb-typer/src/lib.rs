@@ -1,5 +1,7 @@
 mod ty;
 
+use std::collections::HashMap;
+
 use la_arena::Arena;
 use rb_diagnostic::{emit, Span};
 use rb_hir::{
@@ -15,8 +17,12 @@ use ty::{TypeVar, VarId};
 /// So, function bodies each get a typer, as they have explicit signatures.
 #[derive(Clone)]
 pub struct Typer<'a> {
+  // Inputs to the typer: an HIR tree, and a map of spans for diagnostics.
   function: &'a hir::Function,
   span_map: &'a SpanMap,
+
+  // Outputs of the typer: a map of expressions to their rendered types.
+  exprs: HashMap<ExprId, Type>,
 
   // Type variables.
   variables: Arena<TypeVar>,
@@ -24,7 +30,7 @@ pub struct Typer<'a> {
 
 impl<'a> Typer<'a> {
   fn new(function: &'a hir::Function, span_map: &'a SpanMap) -> Self {
-    Typer { function, span_map, variables: Arena::new() }
+    Typer { function, span_map, exprs: HashMap::new(), variables: Arena::new() }
   }
 
   /// Typecheck a function body.
@@ -52,7 +58,7 @@ impl<'a> Typer<'a> {
   }
 
   fn type_expr(&mut self, expr: ExprId) -> Type {
-    match self.function.exprs[expr] {
+    let ty = match self.function.exprs[expr] {
       hir::Expr::Literal(ref lit) => match lit {
         hir::Literal::Int(_) => Type::Int,
         hir::Literal::Bool(_) => Type::Bool,
@@ -107,7 +113,10 @@ impl<'a> Typer<'a> {
       }
 
       _ => Type::Unit,
-    }
+    };
+
+    self.exprs.insert(expr, ty.clone());
+    ty
   }
 }
 
