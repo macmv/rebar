@@ -8,8 +8,9 @@ use rb_hir::{
   ast::{self as hir, ExprId, StmtId},
   SpanMap,
 };
+use ty::{TypeVar, VType, VarId};
+
 pub use ty::Type;
-use ty::{TypeVar, VarId};
 
 /// A typechecker for a function body.
 ///
@@ -22,7 +23,7 @@ pub struct Typer<'a> {
   span_map: &'a SpanMap,
 
   // Outputs of the typer: a map of expressions to their rendered types.
-  exprs: HashMap<ExprId, Type>,
+  exprs: HashMap<ExprId, VType>,
 
   // Type variables.
   variables: Arena<TypeVar>,
@@ -57,21 +58,21 @@ impl<'a> Typer<'a> {
     self.variables.alloc(var)
   }
 
-  fn type_expr(&mut self, expr: ExprId) -> Type {
+  fn type_expr(&mut self, expr: ExprId) -> VType {
     let ty = match self.function.exprs[expr] {
       hir::Expr::Literal(ref lit) => match lit {
-        hir::Literal::Int(_) => Type::Literal(ty::Literal::Int),
-        hir::Literal::Bool(_) => Type::Literal(ty::Literal::Bool),
-        hir::Literal::Unit => Type::Literal(ty::Literal::Unit),
+        hir::Literal::Int(_) => VType::Literal(ty::Literal::Int),
+        hir::Literal::Bool(_) => VType::Literal(ty::Literal::Bool),
+        hir::Literal::Unit => VType::Literal(ty::Literal::Unit),
       },
 
       hir::Expr::Call(lhs_expr, ref args) => {
         let lhs = self.type_expr(lhs_expr);
 
         let ret =
-          Type::Var(self.fresh_var(self.span(expr), format!("return type of calling {:?}", lhs)));
+          VType::Var(self.fresh_var(self.span(expr), format!("return type of calling {:?}", lhs)));
 
-        let call_type = Type::Function(
+        let call_type = VType::Function(
           args.iter().map(|&arg| self.type_expr(arg)).collect(),
           Box::new(ret.clone()),
         );
@@ -82,7 +83,7 @@ impl<'a> Typer<'a> {
       }
 
       hir::Expr::Name(_) => {
-        Type::Function(vec![ty::Literal::Int.into()], Box::new(ty::Literal::Unit.into()))
+        VType::Function(vec![ty::Literal::Int.into()], Box::new(ty::Literal::Unit.into()))
       }
 
       hir::Expr::BinaryOp(lhs_expr, ref op, rhs_expr) => {
@@ -90,14 +91,14 @@ impl<'a> Typer<'a> {
         let rhs = self.type_expr(rhs_expr);
 
         let ret =
-          Type::Var(self.fresh_var(self.span(expr), format!("return type of binary op {op:?}")));
+          VType::Var(self.fresh_var(self.span(expr), format!("return type of binary op {op:?}")));
 
-        let call_type = Type::Function(vec![lhs, rhs], Box::new(ret.clone()));
+        let call_type = VType::Function(vec![lhs, rhs], Box::new(ret.clone()));
 
         match op {
           hir::BinaryOp::Mul => {
             self.constrain(
-              &Type::Function(
+              &VType::Function(
                 vec![ty::Literal::Int.into(), ty::Literal::Int.into()],
                 Box::new(ty::Literal::Bool.into()),
               ),
@@ -107,7 +108,7 @@ impl<'a> Typer<'a> {
           }
           _ => {
             self.constrain(
-              &Type::Function(
+              &VType::Function(
                 vec![ty::Literal::Bool.into(), ty::Literal::Bool.into()],
                 Box::new(ty::Literal::Bool.into()),
               ),
@@ -129,9 +130,9 @@ impl<'a> Typer<'a> {
 }
 
 enum TypeError {
-  NotSubtype(Type, Type),
+  NotSubtype(VType, VType),
   Union(Vec<TypeError>),
-  UnresolvedUnion(Type, Type, Vec<(TypeError, Vec<(String, Option<Span>)>)>),
+  UnresolvedUnion(VType, VType, Vec<(TypeError, Vec<(String, Option<Span>)>)>),
 }
 
 struct Constrain<'a: 'b, 'b> {
@@ -142,7 +143,7 @@ struct Constrain<'a: 'b, 'b> {
 }
 
 impl Typer<'_> {
-  fn constrain<'a>(&mut self, v: &Type, u: &Type, span: Span) {
+  fn constrain<'a>(&mut self, v: &VType, u: &VType, span: Span) {
     let mut constrain = Constrain { typer: self, errors: vec![], ctx: vec![] };
 
     fn render_err(e: &TypeError, ctx: &[(String, Option<Span>)]) -> String {
@@ -199,13 +200,13 @@ impl Constrain<'_, '_> {
 
   fn error(&mut self, error: TypeError) { self.errors.push((error, self.ctx.clone())); }
 
-  fn constrain(&mut self, v: &Type, u: &Type, span: Span) {
+  fn constrain(&mut self, v: &VType, u: &VType, span: Span) {
     if v == u {
       return;
     }
 
     match (v, u) {
-      (Type::Var(v), u) => {
+      (VType::Var(v), u) => {
         let desc = &self.typer.variables[*v].description;
         let sp = self.typer.variables[*v].span;
         self.ctx(format!("constraining {desc} to {u:?}"), Some(sp), |c| {
@@ -216,7 +217,7 @@ impl Constrain<'_, '_> {
           }
         });
       }
-      (v, Type::Var(u)) => {
+      (v, VType::Var(u)) => {
         let desc = &self.typer.variables[*u].description;
         let sp = self.typer.variables[*u].span;
         self.ctx(format!("constraining {v:?} to {desc}"), Some(sp), |c| {
@@ -228,7 +229,7 @@ impl Constrain<'_, '_> {
         });
       }
 
-      (Type::Union(vs), u) => {
+      (VType::Union(vs), u) => {
         self.ctx(format!("constraining {v:?} to {u:?}"), None, |c| {
           for v in vs {
             c.constrain(v, u, span);
@@ -239,7 +240,7 @@ impl Constrain<'_, '_> {
       // This is our solution to overloads: try all the paths in a `try_constrain` check, which is
       // similar to constrain, but doesn't actually mutate any type variables. `try_constrain` is
       // best-effort, and may fail to unify certain constraints.
-      (v, Type::Union(us)) => {
+      (v, VType::Union(us)) => {
         let mut results = vec![];
 
         for u in us {
@@ -258,7 +259,7 @@ impl Constrain<'_, '_> {
         }
       }
 
-      (Type::Function(va, vr), Type::Function(ua, ur)) => {
+      (VType::Function(va, vr), VType::Function(ua, ur)) => {
         if va.len() != ua.len() {
           self.error(TypeError::NotSubtype(v.clone(), u.clone()));
         }
@@ -275,7 +276,7 @@ impl Constrain<'_, '_> {
     }
   }
 
-  fn try_constrain(&self, v: &Type, u: &Type, span: Span) -> Result<(), TypeError> {
+  fn try_constrain(&self, v: &VType, u: &VType, span: Span) -> Result<(), TypeError> {
     if v == u {
       return Ok(());
     }
