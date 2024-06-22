@@ -25,14 +25,14 @@ pub fn eval(src: &str) {
 
   // TODO: This is where we join all the threads, collect all the functions up,
   // and then split out to a thread pool to typecheck and lower each function.
-  // let mut functions = vec![];
+  let mut functions = vec![];
 
   rb_diagnostic::run_or_exit(sources, || {
     let (hir, span_map) = hir;
 
     for function in hir.functions.values() {
-      let typer = rb_typer::Typer::check(&function, &span_map);
-      // functions.push(rb_mir_lower::lower_expr(&typer, function));
+      let typer = rb_typer::Typer::check(function, &span_map);
+      functions.push(rb_mir_lower::lower_function(&typer, function));
     }
   });
 

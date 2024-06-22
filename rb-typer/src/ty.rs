@@ -22,7 +22,7 @@ pub enum VType {
   Var(VarId),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Literal {
   Int,
   Bool,

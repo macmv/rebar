@@ -46,6 +46,21 @@ impl<'a> Typer<'a> {
     typer
   }
 
+  pub fn type_of_expr(&self, expr: ExprId) -> Type {
+    fn lower_type(ty: &VType) -> Type {
+      match ty {
+        VType::Literal(lit) => Type::Literal(lit.clone()),
+        VType::Function(args, ret) => {
+          Type::Function(args.iter().map(lower_type).collect(), Box::new(lower_type(ret)))
+        }
+
+        ref ty => panic!("invalid type: {ty:?}"),
+      }
+    }
+
+    lower_type(&self.exprs[&expr])
+  }
+
   fn span(&self, expr: ExprId) -> Span { self.span_map.exprs[expr.into_raw().into_u32() as usize] }
 
   fn type_stmt(&mut self, stmt: StmtId) {
