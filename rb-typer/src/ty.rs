@@ -3,9 +3,7 @@ use rb_diagnostic::Span;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
-  Int,
-  Bool,
-  Unit,
+  Literal(Literal),
 
   Function(Vec<Type>, Box<Type>),
 
@@ -13,6 +11,17 @@ pub enum Type {
 
   // TODO: Get this out of the public API.
   Var(VarId),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Literal {
+  Int,
+  Bool,
+  Unit,
+}
+
+impl From<Literal> for Type {
+  fn from(literal: Literal) -> Self { Type::Literal(literal) }
 }
 
 pub type VarId = Idx<TypeVar>;

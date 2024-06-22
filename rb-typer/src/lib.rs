@@ -60,9 +60,9 @@ impl<'a> Typer<'a> {
   fn type_expr(&mut self, expr: ExprId) -> Type {
     let ty = match self.function.exprs[expr] {
       hir::Expr::Literal(ref lit) => match lit {
-        hir::Literal::Int(_) => Type::Int,
-        hir::Literal::Bool(_) => Type::Bool,
-        hir::Literal::Unit => Type::Bool,
+        hir::Literal::Int(_) => Type::Literal(ty::Literal::Int),
+        hir::Literal::Bool(_) => Type::Literal(ty::Literal::Bool),
+        hir::Literal::Unit => Type::Literal(ty::Literal::Unit),
       },
 
       hir::Expr::Call(lhs_expr, ref args) => {
@@ -81,7 +81,9 @@ impl<'a> Typer<'a> {
         ret
       }
 
-      hir::Expr::Name(_) => Type::Function(vec![Type::Int], Box::new(Type::Unit)),
+      hir::Expr::Name(_) => {
+        Type::Function(vec![ty::Literal::Int.into()], Box::new(ty::Literal::Unit.into()))
+      }
 
       hir::Expr::BinaryOp(lhs_expr, ref op, rhs_expr) => {
         let lhs = self.type_expr(lhs_expr);
@@ -95,14 +97,20 @@ impl<'a> Typer<'a> {
         match op {
           hir::BinaryOp::Mul => {
             self.constrain(
-              &Type::Function(vec![Type::Int, Type::Int], Box::new(Type::Bool)),
+              &Type::Function(
+                vec![ty::Literal::Int.into(), ty::Literal::Int.into()],
+                Box::new(ty::Literal::Bool.into()),
+              ),
               &call_type,
               self.span(expr),
             );
           }
           _ => {
             self.constrain(
-              &Type::Function(vec![Type::Bool, Type::Bool], Box::new(Type::Bool)),
+              &Type::Function(
+                vec![ty::Literal::Bool.into(), ty::Literal::Bool.into()],
+                Box::new(ty::Literal::Bool.into()),
+              ),
               &call_type,
               self.span(expr),
             );
@@ -112,7 +120,7 @@ impl<'a> Typer<'a> {
         ret
       }
 
-      _ => Type::Unit,
+      _ => ty::Literal::Unit.into(),
     };
 
     self.exprs.insert(expr, ty.clone());
