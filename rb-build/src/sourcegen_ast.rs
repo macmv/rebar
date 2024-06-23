@@ -295,10 +295,11 @@ fn generate_nodes(grammar: &AstSrc) -> String {
       }
     });
 
+  // Note: might need to import `crate::ext::AstTokenChildren` again.
   let ast = quote! {
     #![allow(non_snake_case, non_camel_case_types)]
     use crate::{
-      support, ext::{AstChildren, AstTokenChildren, AstNode},
+      support, ext::{AstChildren, AstNode},
       node::{SyntaxNode, SyntaxToken},
     };
     use rb_parser::{
@@ -468,7 +469,6 @@ fn generate_syntax_kinds(ast: &AstSrc) -> String {
       [ident] => { $crate::SyntaxKind::IDENT };
       [shebang] => { $crate::SyntaxKind::SHEBANG };
     }
-    pub use T;
   };
 
   sourcegen::add_preamble("sourcegen_ast", sourcegen::reformat(ast.to_string()))

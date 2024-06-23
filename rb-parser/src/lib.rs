@@ -154,6 +154,7 @@ impl Parser<'_> {
     }
   }
 
+  #[allow(dead_code)]
   pub fn peek(&mut self) -> SyntaxKind {
     if let Some((p, _)) = self.peeked {
       p
@@ -175,7 +176,6 @@ impl Parser<'_> {
   }
   pub fn at(&mut self, t: SyntaxKind) -> bool { self.current() == t }
   pub fn current(&self) -> SyntaxKind { self.current }
-  pub fn slice(&self) -> &str { self.lexer.view(self.current_range.clone()) }
   #[track_caller]
   pub fn eat(&mut self, t: SyntaxKind) {
     assert_eq!(self.current(), t, "eat got unexpected result");

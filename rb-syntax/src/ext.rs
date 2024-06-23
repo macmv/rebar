@@ -36,6 +36,7 @@ pub trait AstNode {
 }
 
 /// Like `AstNode`, but wraps tokens rather than interior nodes.
+#[allow(dead_code)]
 pub trait AstToken {
   fn can_cast(token: SyntaxKind) -> bool
   where

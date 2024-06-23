@@ -1,5 +1,3 @@
-//! Dead simple JIT implementation. Should only be used for testing.
-
 use codegen::ir;
 use core::fmt;
 use cranelift::prelude::*;
@@ -9,10 +7,14 @@ use rb_mir::ast as mir;
 use rb_typer::{Literal, Type};
 
 pub struct JIT {
-  builder_context:  FunctionBuilderContext,
-  ctx:              codegen::Context,
+  builder_context: FunctionBuilderContext,
+  ctx:             codegen::Context,
+
+  module: JITModule,
+
+  // TODO: Use this for string literals at the very least.
+  #[allow(dead_code)]
   data_description: DataDescription,
-  module:           JITModule,
 }
 
 struct BlockBuilder<'a> {

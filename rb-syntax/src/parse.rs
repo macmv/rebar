@@ -1,6 +1,6 @@
 //! Some high level functions to wrap `scalarc_parser`.
 
-use crate::{node::Scala, SyntaxError};
+use crate::{node::Rebar, SyntaxError};
 use rb_parser::{Event, SyntaxKind};
 use rowan::{GreenNode, GreenNodeBuilder, Language, TextSize};
 
@@ -56,12 +56,12 @@ impl SyntaxTreeBuilder {
   }
 
   pub fn token(&mut self, kind: SyntaxKind, text: &str) {
-    let kind = Scala::kind_to_raw(kind);
+    let kind = Rebar::kind_to_raw(kind);
     self.builder.token(kind, text);
   }
 
   pub fn start_node(&mut self, kind: SyntaxKind) {
-    let kind = Scala::kind_to_raw(kind);
+    let kind = Rebar::kind_to_raw(kind);
     self.builder.start_node(kind);
   }
 

@@ -16,6 +16,9 @@ pub enum VType {
   Literal(Literal),
 
   Function(Vec<VType>, Box<VType>),
+
+  // TODO: Build unions sometimes.
+  #[allow(dead_code)]
   Union(Vec<VType>),
 
   // TODO: Get this out of the public API.

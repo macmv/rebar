@@ -5,9 +5,10 @@ mod node;
 mod parse;
 mod support;
 
+pub use node::*;
+
 pub use error::SyntaxError;
 pub use ext::AstNode;
-use node::SyntaxNode;
 use rb_parser::SyntaxKind;
 
 use std::{marker::PhantomData, sync::Arc};

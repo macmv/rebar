@@ -80,6 +80,8 @@ pub fn format(cst: &cst::SourceFile) -> String {
   out
 }
 
+// TODO: Hook up formatter options to the CLI.
+#[allow(dead_code)]
 pub fn format_opts(cst: &cst::SourceFile, mut fmt: Formatter) -> String {
   let mut out = String::new();
 

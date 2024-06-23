@@ -4,7 +4,6 @@ use rb_diagnostic::{emit, Source, Sources, Span};
 use rb_syntax::cst;
 
 pub fn eval(src: &str) {
-  let cst = cst::SourceFile::parse(src).tree();
   let mut sources = Sources::new();
   let id = sources.add(Source::new("inline.rbr".into(), src.into()));
   let sources = Arc::new(sources);
