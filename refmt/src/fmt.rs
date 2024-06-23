@@ -4,7 +4,13 @@
 
 use rb_syntax::{cst, AstNode};
 
-pub struct Formatter {}
+pub struct Formatter {
+  pub max_line_length: u32,
+}
+
+impl Default for Formatter {
+  fn default() -> Self { Self { max_line_length: 80 } }
+}
 
 impl Formatter {
   pub fn fmt_stmt(&mut self, stmt: &cst::Stmt) -> String {
@@ -41,7 +47,20 @@ impl Formatter {
           .collect::<Vec<_>>()
           .join(", ");
 
-        format!("{lhs}({args})",)
+        let out = format!("{lhs}({args})");
+
+        if dbg!(out.len()) > self.max_line_length as usize {
+          let args = call
+            .arg_list()
+            .unwrap()
+            .exprs()
+            .map(|arg| format!("  {}", self.fmt_expr(&arg)))
+            .collect::<Vec<_>>()
+            .join(",\n");
+          format!("{lhs}(\n{args}\n)")
+        } else {
+          out
+        }
       }
 
       _ => todo!("expr {expr:?}"),
@@ -51,7 +70,18 @@ impl Formatter {
 
 pub fn format(cst: &cst::SourceFile) -> String {
   let mut out = String::new();
-  let mut fmt = Formatter {};
+  let mut fmt = Formatter::default();
+
+  for stmt in cst.stmts() {
+    out += &fmt.fmt_stmt(&stmt);
+    out += "\n";
+  }
+
+  out
+}
+
+pub fn format_opts(cst: &cst::SourceFile, mut fmt: Formatter) -> String {
+  let mut out = String::new();
 
   for stmt in cst.stmts() {
     out += &fmt.fmt_stmt(&stmt);
@@ -73,7 +103,7 @@ mod tests {
       panic!("{}", error.message());
     }
 
-    expected.assert_eq(&format(&cst.tree()));
+    expected.assert_eq(&format_opts(&cst.tree(), Formatter { max_line_length: 30 }));
   }
 
   #[test]
@@ -83,6 +113,20 @@ mod tests {
       "#,
       expect![@r#"
         print_impl(2 * 3 + 4 + 5)
+      "#],
+    );
+  }
+
+  #[test]
+  fn splits_call_multline() {
+    check(
+      r#"print_impl(very_long_arg_1, very_long_arg_2)
+      "#,
+      expect![@r#"
+        print_impl(
+          very_long_arg_1,
+          very_long_arg_2
+        )
       "#],
     );
   }
