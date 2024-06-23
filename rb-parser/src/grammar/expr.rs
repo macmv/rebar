@@ -48,7 +48,7 @@ fn expr_bp(p: &mut Parser, min_bp: u8, cond: bool) {
       lhs = m.complete(p, BINARY_EXPR);
     } else {
       match p.current() {
-        T![nl] | T![,] | T![')'] | T!['}'] => return,
+        T![nl] | T![,] | T![')'] | T!['}'] | EOF => return,
         T!['{'] if cond => return,
         _ => {
           p.error(format!("expected operator, got {:?}", p.current()));
@@ -182,7 +182,6 @@ mod tests {
       expect![@r#"
         LITERAL
           INTEGER_KW '1'
-        error: expected operator, got EOF
       "#],
     );
   }
