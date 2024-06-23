@@ -7,15 +7,15 @@ print("hello world!")
 2 + 3
 
 struct Person {
-  name: string
-  age: integer
+  name: str
+  age: int
 
-  constructor() {
+  constructor(self) {
     self.name = "John"
     self.age = 30
   }
 
-  def say_hello() {
+  def say_hello(self) {
     print("Hello, my name is #{self.name}")
   }
 }
