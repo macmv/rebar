@@ -2,7 +2,7 @@
 //!
 //! TODO: Move to another crate.
 
-use rb_syntax::cst;
+use rb_syntax::{cst, AstNode};
 
 pub struct Formatter {}
 
@@ -16,6 +16,9 @@ impl Formatter {
 
   pub fn fmt_expr(&mut self, expr: &cst::Expr) -> String {
     match expr {
+      cst::Expr::Literal(l) => l.syntax().text().to_string(),
+      cst::Expr::Name(name) => name.syntax().text().to_string(),
+
       cst::Expr::BinaryExpr(expr) => {
         let lhs = self.fmt_expr(&expr.lhs().unwrap());
         let op = expr.binary_op().unwrap();
@@ -26,6 +29,19 @@ impl Formatter {
         // TODO: If `out` is longer than a line, split this into multiple lines.
 
         out
+      }
+
+      cst::Expr::CallExpr(call) => {
+        let lhs = self.fmt_expr(&call.expr().unwrap());
+        let args = call
+          .arg_list()
+          .unwrap()
+          .exprs()
+          .map(|arg| self.fmt_expr(&arg))
+          .collect::<Vec<_>>()
+          .join(", ");
+
+        format!("{lhs}({args})",)
       }
 
       _ => todo!("expr {expr:?}"),
@@ -66,7 +82,8 @@ mod tests {
       r#"print_impl  (  2   *   3+4+5)
       "#,
       expect![@r#"
-print_impl(2 * 3 + 4 + 5)"#],
+        print_impl(2 * 3 + 4 + 5)
+      "#],
     );
   }
 }
