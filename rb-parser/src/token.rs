@@ -198,6 +198,9 @@ impl<'a> Lexer<'a> {
           "if" => T![if],
           "else" => T![else],
           "def" => T![def],
+          "true" => T![true],
+          "false" => T![false],
+          "nil" => T![nil],
           _ => r,
         })
       }

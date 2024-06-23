@@ -178,10 +178,42 @@ mod tests {
   #[test]
   fn literals() {
     check_expr(
-      r#"1"#,
+      "1",
       expect![@r#"
         LITERAL
           INTEGER_KW '1'
+      "#],
+    );
+
+    check_expr(
+      "2.234",
+      expect![@r#"
+        LITERAL
+          FLOAT_KW '2.234'
+      "#],
+    );
+
+    check_expr(
+      "true",
+      expect![@r#"
+        LITERAL
+          TRUE_KW 'true'
+      "#],
+    );
+
+    check_expr(
+      "false",
+      expect![@r#"
+        LITERAL
+          FALSE_KW 'false'
+      "#],
+    );
+
+    check_expr(
+      "nil",
+      expect![@r#"
+        LITERAL
+          NIL_KW 'nil'
       "#],
     );
   }
