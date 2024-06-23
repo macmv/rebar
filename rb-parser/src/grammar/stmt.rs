@@ -19,13 +19,17 @@ pub fn stmt(p: &mut Parser) {
 
   match p.current() {
     // test ok
-    // def foo(bar: int, baz: float) -> string
+    // def foo(bar: int, baz: float) -> string {
+    //   bar + baz
+    // }
     T![def] => {
       let m = p.start();
       p.eat(T![def]);
       p.expect(T![ident]);
 
       params(p);
+
+      block(p);
 
       m.complete(p, DEF);
     }
