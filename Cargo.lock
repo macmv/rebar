@@ -433,6 +433,7 @@ dependencies = [
  "cranelift-module",
  "cranelift-native",
  "rb-mir",
+ "rb-typer",
 ]
 
 [[package]]

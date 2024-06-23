@@ -11,7 +11,7 @@ use ty::{TypeVar, VType, VarId};
 mod constrain;
 mod ty;
 
-pub use ty::Type;
+pub use ty::{Literal, Type};
 
 /// A typechecker for a function body.
 ///

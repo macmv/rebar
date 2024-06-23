@@ -6,6 +6,7 @@ use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, FuncId, Linkage, Module};
 use rb_mir::ast as mir;
+use rb_typer::{Literal, Type};
 
 pub struct JIT {
   builder_context:  FunctionBuilderContext,
@@ -147,40 +148,30 @@ impl BlockBuilder<'_> {
         _ => unimplemented!(),
       },
 
-      // TODO
-      mir::Expr::Name(_, _) => {
-        // self
-        //   .variables
-        //   .iter()
-        //   .find(|(n, _)| n == &name)
-        //   .map(|(_, v)| v.clone())
-        //   .unwrap_or_else(|| Value::Function(Arc::new(FunctionImpl { name:
-        // name.to_string() })))
-
-        todo!()
-      }
-
-      mir::Expr::Call(lhs, ref args) => {
-        let name = match self.mir.exprs[lhs] {
-          mir::Expr::Name(ref name, _) => name,
-          _ => todo!(),
-        };
-
+      mir::Expr::Name(ref name, ref ty) => {
         let mut sig = self.module.make_signature();
 
-        // Add a parameter for each argument.
-        for _arg in args {
-          sig.params.push(AbiParam::new(ir::types::I64));
+        match ty {
+          Type::Function(args, ret) => {
+            // Add a parameter for each argument.
+            for arg in args {
+              let ir_type = match arg {
+                Type::Literal(Literal::Int) => ir::types::I64,
+                _ => panic!("invalid type: {arg:?}"),
+              };
+
+              sig.params.push(AbiParam::new(ir_type));
+            }
+
+            match **ret {
+              Type::Literal(Literal::Int) => sig.returns.push(AbiParam::new(ir::types::I64)),
+              Type::Literal(Literal::Unit) => {}
+              _ => panic!("invalid type: {ret:?}"),
+            }
+          }
+
+          _ => panic!("invalid type: {ty:?}"),
         }
-
-        // For simplicity for now, just make all calls return a single I64.
-        // sig.returns.push(AbiParam::new(self.int));
-
-        // TODO: Streamline the API here?
-        // let callee = self
-        //   .module
-        //   .declare_function(&name, Linkage::Import, &sig)
-        //   .expect("problem declaring function");
 
         let callee = self
           .module
@@ -188,7 +179,18 @@ impl BlockBuilder<'_> {
           .expect("problem declaring function");
 
         let local_callee = self.module.declare_func_in_func(callee, self.builder.func);
-        let callee_value = self.builder.ins().func_addr(ir::types::I64, local_callee);
+        self.builder.ins().func_addr(ir::types::I64, local_callee)
+      }
+
+      mir::Expr::Call(lhs, ref args) => {
+        let mut sig = self.module.make_signature();
+
+        // Add a parameter for each argument.
+        for _arg in args {
+          sig.params.push(AbiParam::new(ir::types::I64));
+        }
+
+        let lhs = self.compile_expr(lhs);
 
         let mut arg_values = Vec::new();
         for &arg in args {
@@ -196,7 +198,7 @@ impl BlockBuilder<'_> {
         }
 
         let sig_ref = self.builder.import_signature(sig);
-        let call = self.builder.ins().call_indirect(sig_ref, callee_value, &arg_values);
+        let call = self.builder.ins().call_indirect(sig_ref, lhs, &arg_values);
         self.builder.inst_results(call);
 
         self.builder.ins().iconst(ir::types::I64, 0)
