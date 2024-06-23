@@ -1,6 +1,6 @@
 use line_index::LineCol;
 use rb_syntax::TextRange;
-use std::fmt::Write;
+use std::fmt::{Display, Write};
 
 use crate::{sources::SourceId, Sources};
 
@@ -77,13 +77,33 @@ impl Diagnostic {
 
       let mut out = String::new();
 
-      writeln!(out, "error: {}", self.message).unwrap();
-      writeln!(out, "{}--> {}:{}:{}", margin_str, source.name, line_num, col_num).unwrap();
-      writeln!(out, "{} |", margin_str).unwrap();
-      writeln!(out, "{} | {}", line_num, line_str).unwrap();
-      writeln!(out, "{} | {}", margin_str, underline_str).unwrap();
+      writeln!(out, "{}: {}", red(bold("error")), bold(&self.message)).unwrap();
+      writeln!(out, "{}{} {}:{}:{}", margin_str, blue("-->"), source.name, line_num, col_num)
+        .unwrap();
+      writeln!(out, "{} {}", margin_str, blue("|")).unwrap();
+      writeln!(out, "{} {} {}", blue(bold(line_num)), blue("|"), line_str).unwrap();
+      writeln!(out, "{} {} {}", margin_str, blue("|"), underline_str).unwrap();
 
       out
     }
   }
 }
+
+const RESET: &str = "\x1b[0m";
+const BOLD: &str = "\x1b[1m";
+const RED: &str = "\x1b[31m";
+const BLUE: &str = "\x1b[34m";
+
+struct Color<D: Display>(D, &'static str);
+impl<D: Display> Display for Color<D> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}", self.1)?;
+    write!(f, "{}", self.0)?;
+    write!(f, "{}", RESET)?;
+    Ok(())
+  }
+}
+
+fn red(s: impl Display) -> impl Display { Color(s, RED) }
+fn bold(s: impl Display) -> impl Display { Color(s, BOLD) }
+fn blue(s: impl Display) -> impl Display { Color(s, BLUE) }
