@@ -17,6 +17,8 @@ members = [
   "rb-mir-lower",
   "rb-jit",
   "rb-runtime",
+
+  "refmt",
 ]
 
 [workspace.dependencies]
