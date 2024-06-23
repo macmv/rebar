@@ -171,9 +171,15 @@ impl BlockBuilder<'_> {
 
         let sig_ref = self.builder.import_signature(sig);
         let call = self.builder.ins().call_indirect(sig_ref, lhs, &arg_values);
-        self.builder.inst_results(call);
 
-        self.builder.ins().iconst(ir::types::I64, 0)
+        match *sig_ty {
+          Type::Function(_, ref ret) => match **ret {
+            // TODO: Don't return a value for everything.
+            Type::Literal(Literal::Unit) => self.builder.ins().iconst(ir::types::I64, 0),
+            _ => self.builder.inst_results(call)[0],
+          },
+          _ => unreachable!(),
+        }
       }
 
       mir::Expr::Binary(lhs, ref op, rhs, ref result) => {
