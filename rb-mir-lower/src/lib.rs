@@ -57,10 +57,11 @@ impl Lower<'_> {
       }
 
       hir::Expr::Call(lhs, ref args) => {
+        let lhs_ty = self.ty.type_of_expr(lhs);
         let lhs = self.lower_expr(lhs);
         let args = args.iter().map(|&arg| self.lower_expr(arg)).collect();
 
-        mir::Expr::Call(lhs, args)
+        mir::Expr::Call(lhs, lhs_ty, args)
       }
 
       ref v => unimplemented!("lowering expression {v:?}"),

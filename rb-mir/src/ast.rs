@@ -15,7 +15,7 @@ pub struct Function {
 #[derive(Debug)]
 pub enum Expr {
   Literal(Literal),
-  Call(ExprId, Vec<ExprId>),
+  Call(ExprId, Type, Vec<ExprId>),
   Binary(ExprId, BinaryOp, ExprId, Type),
   Name(String, Type),
 

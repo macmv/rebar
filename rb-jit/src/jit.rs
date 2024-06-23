@@ -149,29 +149,7 @@ impl BlockBuilder<'_> {
       },
 
       mir::Expr::Name(ref name, ref ty) => {
-        let mut sig = self.module.make_signature();
-
-        match ty {
-          Type::Function(args, ret) => {
-            // Add a parameter for each argument.
-            for arg in args {
-              let ir_type = match arg {
-                Type::Literal(Literal::Int) => ir::types::I64,
-                _ => panic!("invalid type: {arg:?}"),
-              };
-
-              sig.params.push(AbiParam::new(ir_type));
-            }
-
-            match **ret {
-              Type::Literal(Literal::Int) => sig.returns.push(AbiParam::new(ir::types::I64)),
-              Type::Literal(Literal::Unit) => {}
-              _ => panic!("invalid type: {ret:?}"),
-            }
-          }
-
-          _ => panic!("invalid type: {ty:?}"),
-        }
+        let sig = self.compile_signature(ty);
 
         let callee = self
           .module
@@ -182,15 +160,9 @@ impl BlockBuilder<'_> {
         self.builder.ins().func_addr(ir::types::I64, local_callee)
       }
 
-      mir::Expr::Call(lhs, ref args) => {
-        let mut sig = self.module.make_signature();
-
-        // Add a parameter for each argument.
-        for _arg in args {
-          sig.params.push(AbiParam::new(ir::types::I64));
-        }
-
+      mir::Expr::Call(lhs, ref sig_ty, ref args) => {
         let lhs = self.compile_expr(lhs);
+        let sig = self.compile_signature(sig_ty);
 
         let mut arg_values = Vec::new();
         for &arg in args {
@@ -219,5 +191,33 @@ impl BlockBuilder<'_> {
       }
       _ => unimplemented!("expr: {expr:?}"),
     }
+  }
+
+  fn compile_signature(&self, ty: &Type) -> Signature {
+    let mut sig = self.module.make_signature();
+
+    match ty {
+      Type::Function(args, ret) => {
+        // Add a parameter for each argument.
+        for arg in args {
+          let ir_type = match arg {
+            Type::Literal(Literal::Int) => ir::types::I64,
+            _ => panic!("invalid type: {arg:?}"),
+          };
+
+          sig.params.push(AbiParam::new(ir_type));
+        }
+
+        match **ret {
+          Type::Literal(Literal::Int) => sig.returns.push(AbiParam::new(ir::types::I64)),
+          Type::Literal(Literal::Unit) => {}
+          _ => panic!("invalid type: {ret:?}"),
+        }
+      }
+
+      _ => panic!("invalid type: {ty:?}"),
+    }
+
+    sig
   }
 }
