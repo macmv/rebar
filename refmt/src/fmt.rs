@@ -109,7 +109,8 @@ mod tests {
   #[test]
   fn it_works() {
     check(
-      r#"print_impl  (  2   *   3+4+5)
+      r#"
+        print_impl  (  2   *   3+4+5)
       "#,
       expect![@r#"
         print_impl(2 * 3 + 4 + 5)
@@ -120,7 +121,8 @@ mod tests {
   #[test]
   fn splits_call_multline() {
     check(
-      r#"print_impl(very_long_arg_1, very_long_arg_2)
+      r#"
+        print_impl(very_long_arg_1, very_long_arg_2)
       "#,
       expect![@r#"
         print_impl(
