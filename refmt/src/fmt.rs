@@ -49,7 +49,7 @@ impl Formatter {
 
         let out = format!("{lhs}({args})");
 
-        if dbg!(out.len()) > self.max_line_length as usize {
+        if out.len() > self.max_line_length as usize {
           let args = call
             .arg_list()
             .unwrap()
