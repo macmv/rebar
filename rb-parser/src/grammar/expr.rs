@@ -64,7 +64,7 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
     // test ok
     // 2
     // 2.345
-    T![integer] | T![float] => {
+    T![integer] | T![float] | T![true] | T![false] | T![nil] => {
       p.bump();
       Some(m.complete(p, LITERAL))
     }
@@ -169,4 +169,21 @@ fn arg_list(p: &mut Parser) {
 
   p.expect(T![')']);
   m.complete(p, ARG_LIST);
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::tests::check_expr;
+
+  #[test]
+  fn literals() {
+    check_expr(
+      r#"1"#,
+      expect![@r#"
+        LITERAL
+          INTEGER_KW '1'
+        error: expected operator, got EOF
+      "#],
+    );
+  }
 }

@@ -20,7 +20,7 @@ Name = 'ident'
 
 BinaryOp = '+' | '-' | '*' | '/' | '==' | '!=' | '<' | '<=' | '>' | '>='
 
-Literal = 'integer' | 'float'
+Literal = 'integer' | 'float' | 'true' | 'false' | 'nil'
 
 Expr =
   Literal |
