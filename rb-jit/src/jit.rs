@@ -188,12 +188,15 @@ impl BlockBuilder<'_> {
           .expect("problem declaring function");
 
         let local_callee = self.module.declare_func_in_func(callee, self.builder.func);
+        let callee_value = self.builder.ins().func_addr(ir::types::I64, local_callee);
 
         let mut arg_values = Vec::new();
         for &arg in args {
           arg_values.push(self.compile_expr(arg))
         }
-        let call = self.builder.ins().call(local_callee, &arg_values);
+
+        let sig_ref = self.builder.import_signature(sig);
+        let call = self.builder.ins().call_indirect(sig_ref, callee_value, &arg_values);
         self.builder.inst_results(call);
 
         self.builder.ins().iconst(ir::types::I64, 0)
