@@ -628,6 +628,7 @@ dependencies = [
  "clap",
  "rb-diagnostic",
  "rb-syntax",
+ "rb-test",
 ]
 
 [[package]]

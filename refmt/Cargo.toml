@@ -8,3 +8,6 @@ rb-syntax.workspace = true
 rb-diagnostic.workspace = true
 
 clap = { version = "4.5.7", features = ["derive"] }
+
+[dev-dependencies]
+rb-test.workspace = true

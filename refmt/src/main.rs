@@ -4,6 +4,8 @@ use std::{io::Read, path::PathBuf, sync::Arc};
 
 use clap::Parser;
 
+mod fmt;
+
 #[derive(Parser)]
 struct Args {
   #[clap(short, long)]
@@ -55,5 +57,6 @@ fn main() {
     }
   });
 
-  println!("Hello, world!");
+  let out = fmt::format(&cst.tree());
+  println!("{out}");
 }
