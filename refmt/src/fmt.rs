@@ -119,7 +119,19 @@ mod tests {
   }
 
   #[test]
-  fn splits_call_multline() {
+  fn call_singleline() {
+    check(
+      r#"
+        print_impl(2+3,   4*5)
+      "#,
+      expect![@r#"
+        print_impl(2 + 3, 4 * 5)
+      "#],
+    );
+  }
+
+  #[test]
+  fn call_multline() {
     check(
       r#"
         print_impl(very_long_arg_1, very_long_arg_2)
