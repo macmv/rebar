@@ -88,9 +88,8 @@ impl Iterator for AstTokenChildren {
     loop {
       let it = self.inner.next()?;
       if it.kind() == self.kind {
-        match it.into_token() {
-          Some(t) => return Some(t),
-          _ => {}
+        if let Some(t) = it.into_token() {
+          return Some(t);
         }
       }
     }

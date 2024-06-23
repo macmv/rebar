@@ -100,7 +100,7 @@ mod tests {
   use super::*;
 
   fn check(input: &str, expected: Expect) {
-    let cst = cst::SourceFile::parse(&input);
+    let cst = cst::SourceFile::parse(input);
     for error in cst.errors() {
       panic!("{}", error.message());
     }

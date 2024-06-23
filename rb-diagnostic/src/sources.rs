@@ -21,6 +21,10 @@ impl Source {
   }
 }
 
+impl Default for Sources {
+  fn default() -> Self { Self::new() }
+}
+
 impl Sources {
   pub fn new() -> Self { Self { sources: Arena::new() } }
 

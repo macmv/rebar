@@ -12,7 +12,7 @@ pub enum LexError {
   InvalidChar,
 
   #[error("end of file reached")]
-  EOF,
+  Eof,
 }
 
 struct Tokenizer<'a> {
@@ -40,7 +40,7 @@ impl<'a> Tokenizer<'a> {
 
   pub fn eat(&mut self) -> Result<SyntaxKind> {
     let Some(c) = self.source[self.index..].chars().next() else {
-      return Err(LexError::EOF);
+      return Err(LexError::Eof);
     };
     self.index += c.len_utf8();
     let t = match c {
@@ -91,18 +91,16 @@ impl<'a> Lexer<'a> {
   }
 
   pub fn eat_whitespace(&mut self) -> Result<Option<SyntaxKind>> {
-    loop {
-      match self.tok.peek()? {
-        Some(T![ws]) => {
-          self.tok.eat().unwrap();
-          return Ok(Some(T![ws]));
-        }
-        Some(_) | None => break,
+    match self.tok.peek()? {
+      Some(T![ws]) => {
+        self.tok.eat().unwrap();
+        Ok(Some(T![ws]))
       }
+      Some(_) | None => Ok(None),
     }
-    Ok(None)
   }
 
+  #[allow(clippy::should_implement_trait)] // I'm not going to implement Iterator for this.
   pub fn next(&mut self) -> Result<SyntaxKind> {
     let start = self.tok.pos();
     match self.next0() {
@@ -120,7 +118,7 @@ impl<'a> Lexer<'a> {
         Err(LexError::InvalidChar)
       }
 
-      Err(LexError::EOF) => Err(LexError::EOF),
+      Err(LexError::Eof) => Err(LexError::Eof),
     }
   }
 
@@ -139,7 +137,7 @@ impl<'a> Lexer<'a> {
 
         loop {
           match self.tok.eat() {
-            Err(LexError::EOF) => break,
+            Err(LexError::Eof) => break,
             Ok(T![nl]) => break,
             Ok(_) => {}
             Err(e) => return Err(e),
@@ -168,7 +166,7 @@ impl<'a> Lexer<'a> {
             }
 
             Ok(_) => {}
-            Err(LexError::EOF) => break,
+            Err(LexError::Eof) => break,
             Err(e) => return Err(e),
           }
 
@@ -263,12 +261,12 @@ mod tests {
     let mut lexer = Lexer::new("abc");
     assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "abc");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
 
     let mut lexer = Lexer::new("abc_foo");
     assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "abc_foo");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
 
     let mut lexer = Lexer::new("abc_++");
     assert_eq!(lexer.next(), Ok(T![ident]));
@@ -277,7 +275,7 @@ mod tests {
     assert_eq!(lexer.slice(), "+");
     assert_eq!(lexer.next(), Ok(T![+]));
     assert_eq!(lexer.slice(), "+");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
 
     let mut lexer = Lexer::new("abc++");
     assert_eq!(lexer.next(), Ok(T![ident]));
@@ -286,14 +284,14 @@ mod tests {
     assert_eq!(lexer.slice(), "+");
     assert_eq!(lexer.next(), Ok(T![+]));
     assert_eq!(lexer.slice(), "+");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
 
     let mut lexer = Lexer::new("abc_def_+");
     assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "abc_def_");
     assert_eq!(lexer.next(), Ok(T![+]));
     assert_eq!(lexer.slice(), "+");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
 
     let mut lexer = Lexer::new("abc_+_def");
     assert_eq!(lexer.next(), Ok(T![ident]));
@@ -302,7 +300,7 @@ mod tests {
     assert_eq!(lexer.slice(), "+");
     assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "_def");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
   }
 
   #[test]
@@ -312,7 +310,7 @@ mod tests {
     assert_eq!(lexer.slice(), "123");
     assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "foo");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
   }
 
   #[test]
@@ -320,7 +318,7 @@ mod tests {
     let mut lexer = Lexer::new("2.345");
     assert_eq!(lexer.next(), Ok(T![float]));
     assert_eq!(lexer.slice(), "2.345");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
   }
 
   #[test]
@@ -330,7 +328,7 @@ mod tests {
     assert_eq!(lexer.slice(), "\"");
     assert_eq!(lexer.next(), Ok(T!['"']));
     assert_eq!(lexer.slice(), "\"");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
 
     let mut lexer = Lexer::new(r#" "hi" "#);
     assert_eq!(lexer.next(), Ok(T![ws]));
@@ -343,7 +341,7 @@ mod tests {
     assert_eq!(lexer.slice(), "\"");
     assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
 
     let mut lexer = Lexer::new(
       r#" "hello
@@ -368,7 +366,7 @@ mod tests {
     assert_eq!(lexer.slice(), "\n");
     assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), "      ");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
 
     // Escapes.
     let mut lexer = Lexer::new("\"foo: \\\"\"");
@@ -386,7 +384,7 @@ mod tests {
     assert_eq!(lexer.slice(), "\"");
     assert_eq!(lexer.next(), Ok(T!['"']));
     assert_eq!(lexer.slice(), "\"");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
 
     let mut lexer = Lexer::new("\"\\\"\"");
     assert_eq!(lexer.next(), Ok(T!['"']));
@@ -397,7 +395,7 @@ mod tests {
     assert_eq!(lexer.slice(), "\"");
     assert_eq!(lexer.next(), Ok(T!['"']));
     assert_eq!(lexer.slice(), "\"");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
   }
 
   #[test]
@@ -415,7 +413,7 @@ mod tests {
     assert_eq!(lexer.slice(), "\"");
     assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
   }
 
   #[test]
@@ -442,7 +440,7 @@ mod tests {
     assert_eq!(lexer.slice(), " ");
     assert_eq!(lexer.next(), Ok(T![integer]));
     assert_eq!(lexer.slice(), "3");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
   }
 
   #[test]
@@ -454,7 +452,7 @@ mod tests {
     assert_eq!(lexer.slice(), " ");
     assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), "/* hi */");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
 
     // nested block comments
     let mut lexer = Lexer::new("3 /* hi /* foo */ */");
@@ -464,7 +462,7 @@ mod tests {
     assert_eq!(lexer.slice(), " ");
     assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), "/* hi /* foo */ */");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
 
     // block comments over multiple lines
     let mut lexer = Lexer::new("3 /* hi \n */ 4");
@@ -478,7 +476,7 @@ mod tests {
     assert_eq!(lexer.slice(), " ");
     assert_eq!(lexer.next(), Ok(T![integer]));
     assert_eq!(lexer.slice(), "4");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
   }
 
   #[test]
@@ -486,7 +484,7 @@ mod tests {
     let mut lexer = Lexer::new("⊥");
     assert_eq!(lexer.next(), Ok(T![char]));
     assert_eq!(lexer.slice(), "⊥");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
   }
 
   #[test]
@@ -546,13 +544,13 @@ mod tests {
     assert_eq!(lexer.slice(), "      ");
     assert_eq!(lexer.next(), Ok(T!['}']));
     assert_eq!(lexer.slice(), "}");
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
   }
 
   #[test]
   fn parses_thin_arrow() {
     let mut lexer = Lexer::new("->");
     assert_eq!(lexer.next(), Ok(T![->]));
-    assert_eq!(lexer.next(), Err(LexError::EOF));
+    assert_eq!(lexer.next(), Err(LexError::Eof));
   }
 }

@@ -16,7 +16,7 @@ struct Constrain<'a: 'b, 'b> {
 }
 
 impl Typer<'_> {
-  pub(crate) fn constrain<'a>(&mut self, v: &VType, u: &VType, span: Span) {
+  pub(crate) fn constrain(&mut self, v: &VType, u: &VType, span: Span) {
     let mut constrain = Constrain { typer: self, errors: vec![], ctx: vec![] };
 
     fn render_err(e: &TypeError, ctx: &[(String, Option<Span>)]) -> String {

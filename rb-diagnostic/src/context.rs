@@ -8,7 +8,7 @@ pub struct Context {
 }
 
 thread_local! {
-  static CONTEXT: RefCell<Option<Context>> = RefCell::new(None);
+  static CONTEXT: RefCell<Option<Context>> = const { RefCell::new(None) };
 }
 
 impl Context {

@@ -1,3 +1,4 @@
+#![allow(clippy::test_attr_in_doctest)]
 //! Minimalistic snapshot testing for Rust. This is a fork of
 //! https://github.com/rust-analyzer/expect-test.
 //!

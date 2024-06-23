@@ -211,7 +211,7 @@ impl Parser<'_> {
           self.pending_whitespace += self.lexer.slice().len();
         }
         Ok(t) => break t,
-        Err(LexError::EOF) => {
+        Err(LexError::Eof) => {
           break SyntaxKind::EOF;
         }
         Err(e) => {

@@ -33,6 +33,7 @@ extern "C" fn print_impl(num: i64) {
 }
 
 impl JIT {
+  #[allow(clippy::new_without_default)]
   pub fn new() -> Self {
     let mut flag_builder = settings::builder();
     flag_builder.set("use_colocated_libcalls", "false").unwrap();
@@ -79,7 +80,7 @@ impl JIT {
 
     let id = self
       .module
-      .declare_function(&"fooooooo", Linkage::Export, &self.ctx.func.signature)
+      .declare_function("fooooooo", Linkage::Export, &self.ctx.func.signature)
       .map_err(|e| e.to_string())
       .unwrap();
     self.module.define_function(id, &mut self.ctx).map_err(|e| e.to_string()).unwrap();
@@ -155,7 +156,7 @@ impl BlockBuilder<'_> {
 
         let callee = self
           .module
-          .declare_function(&name, Linkage::Import, &sig)
+          .declare_function(name, Linkage::Import, &sig)
           .expect("problem declaring function");
 
         let local_callee = self.module.declare_func_in_func(callee, self.builder.func);
