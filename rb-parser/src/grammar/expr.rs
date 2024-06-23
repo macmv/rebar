@@ -173,7 +173,55 @@ fn arg_list(p: &mut Parser) {
 
 #[cfg(test)]
 mod tests {
-  use crate::tests::check_expr;
+  use crate::tests::{check, check_expr};
+
+  #[test]
+  fn it_works() {
+    check(
+      r#"
+        print("hello world!")
+        print(2 + 3)
+      "#,
+      expect![@r#"
+        SOURCE_FILE
+          NL_KW '\n'
+          WHITESPACE '        '
+          EXPR_STMT
+            CALL_EXPR
+              NAME
+                IDENT 'print'
+              ARG_LIST
+                OPEN_PAREN '('
+                STRING
+                  DOUBLE_QUOTE '"'
+                  IDENT 'hello'
+                  WHITESPACE ' '
+                  IDENT 'world'
+                  CHAR_KW '!'
+                  DOUBLE_QUOTE '"'
+                CLOSE_PAREN ')'
+          NL_KW '\n'
+          WHITESPACE '        '
+          EXPR_STMT
+            CALL_EXPR
+              NAME
+                IDENT 'print'
+              ARG_LIST
+                OPEN_PAREN '('
+                BINARY_EXPR
+                  LITERAL
+                    INTEGER_KW '2'
+                  WHITESPACE ' '
+                  BINARY_OP
+                    PLUS '+'
+                  WHITESPACE ' '
+                  LITERAL
+                    INTEGER_KW '3'
+                CLOSE_PAREN ')'
+          NL_KW '\n'
+      "#],
+    );
+  }
 
   #[test]
   fn literals() {

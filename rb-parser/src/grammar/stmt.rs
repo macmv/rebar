@@ -13,6 +13,10 @@ pub fn block(p: &mut Parser) {
 }
 
 pub fn stmt(p: &mut Parser) {
+  while p.at(T![nl]) {
+    p.eat(T![nl]);
+  }
+
   match p.current() {
     // test ok
     // def foo(bar: int, baz: float) -> string
