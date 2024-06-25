@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use la_arena::Arena;
-use rb_diagnostic::Span;
+use rb_diagnostic::{emit, Span};
 use rb_hir::{
   ast::{self as hir, ExprId, StmtId},
   SpanMap,
@@ -11,7 +11,7 @@ use ty::{TypeVar, VType, VarId};
 mod constrain;
 mod ty;
 
-pub use ty::{Literal, Type};
+pub use ty::{Environment, Literal, Type};
 
 /// A typechecker for a function body.
 ///
@@ -19,7 +19,8 @@ pub use ty::{Literal, Type};
 /// So, function bodies each get a typer, as they have explicit signatures.
 #[derive(Clone)]
 pub struct Typer<'a> {
-  // Inputs to the typer: an HIR tree, and a map of spans for diagnostics.
+  // Inputs to the typer: the environment, an HIR tree, and a map of spans for diagnostics.
+  env:      &'a Environment,
   function: &'a hir::Function,
   span_map: &'a SpanMap,
 
@@ -31,13 +32,13 @@ pub struct Typer<'a> {
 }
 
 impl<'a> Typer<'a> {
-  fn new(function: &'a hir::Function, span_map: &'a SpanMap) -> Self {
-    Typer { function, span_map, exprs: HashMap::new(), variables: Arena::new() }
+  fn new(env: &'a Environment, function: &'a hir::Function, span_map: &'a SpanMap) -> Self {
+    Typer { env, function, span_map, exprs: HashMap::new(), variables: Arena::new() }
   }
 
   /// Typecheck a function body.
-  pub fn check(function: &'a hir::Function, span_map: &'a SpanMap) -> Self {
-    let mut typer = Typer::new(function, span_map);
+  pub fn check(env: &'a Environment, function: &'a hir::Function, span_map: &'a SpanMap) -> Self {
+    let mut typer = Typer::new(env, function, span_map);
 
     for &item in function.items.iter() {
       typer.type_stmt(item);
@@ -105,9 +106,14 @@ impl<'a> Typer<'a> {
         ret
       }
 
-      hir::Expr::Name(_) => {
-        VType::Function(vec![ty::Literal::Int.into()], Box::new(ty::Literal::Unit.into()))
-      }
+      hir::Expr::Name(ref name) => match self.env.names.get(name) {
+        Some(ty) => VType::from(ty.clone()),
+        None => {
+          emit!(format!("undeclared name {name:?}"), self.span(expr));
+
+          VType::Var(self.fresh_var(self.span(expr), format!("")))
+        }
+      },
 
       hir::Expr::BinaryOp(lhs_expr, ref op, rhs_expr) => {
         let lhs = self.type_expr(lhs_expr);

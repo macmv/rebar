@@ -760,6 +760,7 @@ dependencies = [
  "rb-diagnostic",
  "rb-hir",
  "rb-hir-lower",
+ "rb-runtime",
  "rb-syntax",
  "rb-typer",
  "serde_json",

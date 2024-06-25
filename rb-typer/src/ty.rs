@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use la_arena::Idx;
 use rb_diagnostic::Span;
 
@@ -8,6 +10,11 @@ pub enum Type {
 
   Function(Vec<Type>, Box<Type>),
   Union(Vec<Type>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Environment {
+  pub names: HashMap<String, Type>,
 }
 
 /// A type with variables in it. Internal to the typer.
@@ -23,6 +30,18 @@ pub enum VType {
 
   // TODO: Get this out of the public API.
   Var(VarId),
+}
+
+impl From<Type> for VType {
+  fn from(ty: Type) -> Self {
+    match ty {
+      Type::Literal(lit) => VType::Literal(lit),
+      Type::Function(args, ret) => {
+        VType::Function(args.into_iter().map(Into::into).collect(), Box::new((*ret).into()))
+      }
+      Type::Union(types) => VType::Union(types.into_iter().map(Into::into).collect()),
+    }
+  }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

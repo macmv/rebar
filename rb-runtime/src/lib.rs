@@ -1,9 +1,15 @@
 use std::sync::Arc;
 
+mod stdlib;
+
+pub use stdlib::*;
+
 use rb_diagnostic::{emit, Source, Sources, Span};
 use rb_syntax::cst;
 
 pub fn eval(src: &str) {
+  let env = Environment::std();
+
   let mut sources = Sources::new();
   let id = sources.add(Source::new("inline.rbr".into(), src.into()));
   let sources = Arc::new(sources);
@@ -26,11 +32,12 @@ pub fn eval(src: &str) {
   // and then split out to a thread pool to typecheck and lower each function.
   let mut functions = vec![];
 
+  let static_env = env.static_env();
   rb_diagnostic::run_or_exit(sources, || {
     let (hir, span_map) = hir;
 
     for function in hir.functions.values() {
-      let typer = rb_typer::Typer::check(function, &span_map);
+      let typer = rb_typer::Typer::check(&static_env, function, &span_map);
       functions.push(rb_mir_lower::lower_function(&typer, function));
     }
   });
@@ -57,7 +64,7 @@ mod tests {
   fn foo() {
     eval(
       r#"
-        print_impl(2 * 3 + 4 + 5)
+        println(2 * 3 + 4 + 5)
         4
       "#,
     );
