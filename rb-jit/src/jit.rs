@@ -1,4 +1,4 @@
-use codegen::ir::{self};
+use codegen::ir::{self, FuncRef};
 use core::fmt;
 use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
@@ -19,9 +19,13 @@ pub struct JIT {
 }
 
 struct BlockBuilder<'a> {
-  builder: FunctionBuilder<'a>,
-  mir:     &'a mir::Function,
-  module:  &'a mut JITModule,
+  builder:       FunctionBuilder<'a>,
+  mir:           &'a mir::Function,
+  call_func_ref: FuncRef,
+
+  // I think I'll need this? Not entirely sure.
+  #[allow(dead_code)]
+  module: &'a JITModule,
 }
 
 pub struct FunctionImpl {
@@ -166,7 +170,16 @@ impl JIT {
     // TODO: Declare variables.
     // for stmt in source.stmts() {}
 
-    BlockBuilder { builder, mir, module: &mut self.module }
+    let mut call_sig = self.module.make_signature();
+    call_sig.params.push(AbiParam::new(ir::types::I64));
+    call_sig.params.push(AbiParam::new(ir::types::I64));
+    call_sig.returns.push(AbiParam::new(ir::types::I64));
+
+    let callee = self.module.declare_function("__call", Linkage::Import, &call_sig).unwrap();
+
+    let call_func_ref = self.module.declare_func_in_func(callee, builder.func);
+
+    BlockBuilder { builder, mir, module: &mut self.module, call_func_ref }
   }
 }
 
@@ -196,7 +209,6 @@ impl BlockBuilder<'_> {
 
       mir::Expr::Call(lhs, ref sig_ty, ref args) => {
         let lhs = self.compile_expr(lhs);
-        let sig = self.compile_signature(sig_ty);
 
         // Store 2 values:
         // - The length of the arguments.
@@ -219,13 +231,7 @@ impl BlockBuilder<'_> {
 
         let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, slot, 0);
 
-        let callee = self
-          .module
-          .declare_function("__call", Linkage::Import, &sig)
-          .expect("problem declaring function");
-
-        let func_ref = self.module.declare_func_in_func(callee, self.builder.func);
-        let call = self.builder.ins().call(func_ref, &[lhs, arg_ptr]);
+        let call = self.builder.ins().call(self.call_func_ref, &[lhs, arg_ptr]);
 
         match *sig_ty {
           Type::Function(_, ref ret) => match **ret {
@@ -252,34 +258,5 @@ impl BlockBuilder<'_> {
       }
       _ => unimplemented!("expr: {expr:?}"),
     }
-  }
-
-  fn compile_signature(&self, ty: &Type) -> Signature {
-    let mut sig = self.module.make_signature();
-    sig.params.push(AbiParam::new(ir::types::I64));
-
-    match ty {
-      Type::Function(args, ret) => {
-        // Add a parameter for each argument.
-        for arg in args {
-          let ir_type = match arg {
-            Type::Literal(Literal::Int) => ir::types::I64,
-            _ => panic!("invalid type: {arg:?}"),
-          };
-
-          sig.params.push(AbiParam::new(ir_type));
-        }
-
-        match **ret {
-          Type::Literal(Literal::Int) => sig.returns.push(AbiParam::new(ir::types::I64)),
-          Type::Literal(Literal::Unit) => {}
-          _ => panic!("invalid type: {ret:?}"),
-        }
-      }
-
-      _ => panic!("invalid type: {ty:?}"),
-    }
-
-    sig
   }
 }
