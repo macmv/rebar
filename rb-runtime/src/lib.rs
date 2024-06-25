@@ -42,14 +42,42 @@ pub fn eval(src: &str) {
     }
   });
 
-  // TODO: If we get to this point, all checks have passed, and we can compile to
-  // cranelift IR. Again, join on the above pool, collect all the functions, and
-  // dispatch the MIR to a thread pool.
+  // If we get to this point, all checks have passed, and we can compile to
+  // cranelift IR. Collect all the functions, split them into chunks, and compile
+  // them on a thread pool.
 
   let mut jit = rb_jit::jit::JIT::new(env.dyn_call_ptr());
+
+  let mut results = vec![vec![]; 32];
+
+  let chunk_size = (functions.len() / 32).max(1);
+  // Double check that `zip` doesn't skip anything.
+  assert!(functions.chunks(chunk_size).len() <= results.len());
+
+  std::thread::scope(|scope| {
+    for (chunk, out) in functions.chunks_mut(chunk_size).zip(results.iter_mut()) {
+      let mut thread_ctx = jit.new_thread();
+
+      scope.spawn(move || {
+        for f in chunk {
+          thread_ctx.translate_function(f);
+          let res = thread_ctx.compile();
+          out.push((
+            res.code_buffer().to_vec().into_boxed_slice(),
+            res.buffer.alignment as u64,
+            res.buffer.relocs().to_vec().into_boxed_slice(),
+            thread_ctx.func().clone(),
+          ));
+
+          thread_ctx.clear();
+        }
+      });
+    }
+  });
+
   let mut function_ids = vec![];
-  for f in functions {
-    function_ids.push(jit.compile_function(&f));
+  for (code, alignment, relocs, func) in results.iter().flatten() {
+    function_ids.push(jit.define_function(code, *alignment, func, relocs).unwrap());
   }
 
   jit.finalize();

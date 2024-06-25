@@ -1,31 +1,40 @@
-use codegen::ir::{self, FuncRef};
+use codegen::{
+  control::ControlPlane,
+  ir::{self, FuncRef},
+  CompiledCode, FinalizedMachReloc,
+};
 use core::fmt;
 use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::{DataDescription, FuncId, Linkage, Module};
+use cranelift_module::{DataDescription, FuncId, FunctionDeclaration, Linkage, Module};
+use isa::TargetIsa;
 use rb_mir::ast as mir;
 use rb_typer::{Literal, Type};
 use std::marker::PhantomPinned;
 
 pub struct JIT {
-  builder_context: FunctionBuilderContext,
-  ctx:             codegen::Context,
-
   module: JITModule,
 
   // TODO: Use this for string literals at the very least.
   #[allow(dead_code)]
   data_description: DataDescription,
+
+  call_func: FuncId,
 }
 
-struct BlockBuilder<'a> {
+pub struct ThreadCtx<'a> {
+  builder_context: FunctionBuilderContext,
+  ctx:             codegen::Context,
+
+  isa:            &'a dyn TargetIsa,
+  call_func:      FuncId,
+  call_func_decl: &'a FunctionDeclaration,
+}
+
+pub struct BlockBuilder<'a> {
   builder:       FunctionBuilder<'a>,
   mir:           &'a mir::Function,
   call_func_ref: FuncRef,
-
-  // I think I'll need this? Not entirely sure.
-  #[allow(dead_code)]
-  module: &'a JITModule,
 }
 
 pub struct FunctionImpl {
@@ -83,46 +92,28 @@ impl JIT {
 
     builder.symbol("__call", dyn_call_ptr as *const _);
 
-    let module = JITModule::new(builder);
-    JIT {
-      builder_context: FunctionBuilderContext::new(),
-      ctx: module.make_context(),
-      data_description: DataDescription::new(),
-      module,
-    }
+    let mut module = JITModule::new(builder);
+
+    let mut call_sig = module.make_signature();
+    call_sig.params.push(AbiParam::new(ir::types::I64));
+    call_sig.params.push(AbiParam::new(ir::types::I64));
+    call_sig.returns.push(AbiParam::new(ir::types::I64));
+
+    let call_func = module.declare_function("__call", Linkage::Import, &call_sig).unwrap();
+
+    JIT { data_description: DataDescription::new(), module, call_func }
   }
 
-  pub fn compile_function(&mut self, mir: &mir::Function) -> FuncId {
-    self.ctx.func.signature.returns.push(AbiParam::new(ir::types::I64));
+  pub fn new_thread(&self) -> ThreadCtx {
+    let ctx = self.module.make_context();
 
-    let mut block = self.new_block(mir);
-
-    let return_variable = Variable::new(0);
-    block.builder.declare_var(return_variable, ir::types::I64);
-    let zero = block.builder.ins().iconst(ir::types::I64, 0);
-    block.builder.def_var(return_variable, zero);
-
-    for &stmt in &mir.items {
-      let res = block.compile_stmt(stmt);
-      block.builder.def_var(return_variable, res);
+    ThreadCtx {
+      builder_context: FunctionBuilderContext::new(),
+      ctx,
+      isa: self.module.isa(),
+      call_func: self.call_func,
+      call_func_decl: self.module.declarations().get_function_decl(self.call_func),
     }
-
-    let return_value = block.builder.use_var(return_variable);
-
-    // Emit the return instruction.
-    block.builder.ins().return_(&[return_value]);
-
-    // Tell the builder we're done with this function.
-    block.builder.finalize();
-
-    let id = self
-      .module
-      .declare_function("fooooooo", Linkage::Export, &self.ctx.func.signature)
-      .map_err(|e| e.to_string())
-      .unwrap();
-    self.module.define_function(id, &mut self.ctx).map_err(|e| e.to_string()).unwrap();
-    self.module.clear_context(&mut self.ctx);
-    id
   }
 
   pub fn finalize(&mut self) { self.module.finalize_definitions().unwrap(); }
@@ -134,6 +125,96 @@ impl JIT {
       let code: fn() -> i64 = std::mem::transmute(code);
       println!("Result: {}", code());
     }
+  }
+}
+
+impl ThreadCtx<'_> {
+  pub fn new_function<'a>(&'a mut self, mir: &'a mir::Function) -> BlockBuilder<'a> {
+    let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
+    let entry_block = builder.create_block();
+
+    builder.append_block_params_for_function_params(entry_block);
+    builder.switch_to_block(entry_block);
+
+    // Tells the compiler there will be no predecessors (???).
+    builder.seal_block(entry_block);
+
+    // TODO: Declare variables.
+    // for stmt in source.stmts() {}
+
+    let signature = builder.func.import_signature(self.call_func_decl.signature.clone());
+    let user_name_ref = builder.func.declare_imported_user_function(ir::UserExternalName {
+      namespace: 0,
+      index:     self.call_func.as_u32(),
+    });
+    let colocated = self.call_func_decl.linkage.is_final();
+    let call_func_ref = builder.func.import_function(ir::ExtFuncData {
+      name: ir::ExternalName::user(user_name_ref),
+      signature,
+      colocated,
+    });
+
+    BlockBuilder { builder, mir, call_func_ref }
+  }
+
+  pub fn translate_function(&mut self, mir: &mir::Function) { self.new_function(mir).translate(); }
+}
+
+impl BlockBuilder<'_> {
+  fn translate(mut self) {
+    self.builder.func.signature.returns.push(AbiParam::new(ir::types::I64));
+
+    let return_variable = Variable::new(0);
+    self.builder.declare_var(return_variable, ir::types::I64);
+    let zero = self.builder.ins().iconst(ir::types::I64, 0);
+    self.builder.def_var(return_variable, zero);
+
+    for &stmt in &self.mir.items {
+      let res = self.compile_stmt(stmt);
+      self.builder.def_var(return_variable, res);
+    }
+
+    let return_value = self.builder.use_var(return_variable);
+
+    // Emit the return instruction.
+    self.builder.ins().return_(&[return_value]);
+
+    // Tell the builder we're done with this function.
+    self.builder.finalize();
+  }
+}
+
+impl ThreadCtx<'_> {
+  pub fn compile(&mut self) -> &CompiledCode {
+    self.ctx.compile(self.isa, &mut ControlPlane::default()).unwrap()
+  }
+
+  pub fn func(&self) -> &ir::Function { &self.ctx.func }
+
+  pub fn finalize(mut self, jit: &mut JIT) -> FuncId {
+    let id =
+      jit.module.declare_function("fooooooo", Linkage::Export, &self.ctx.func.signature).unwrap();
+    jit.module.define_function(id, &mut self.ctx).unwrap();
+    id
+  }
+
+  pub fn clear(&mut self) { self.ctx.clear(); }
+}
+
+impl JIT {
+  pub fn define_function(
+    &mut self,
+    code: &[u8],
+    alignment: u64,
+    func: &ir::Function,
+    relocs: &[FinalizedMachReloc],
+  ) -> Result<FuncId, String> {
+    let id = self.module.declare_function("fooooooo", Linkage::Export, &func.signature).unwrap();
+    self
+      .module
+      .define_function_bytes(id, func, alignment, code, relocs)
+      .map_err(|e| e.to_string())?;
+    Ok(id)
   }
 }
 
@@ -154,33 +235,6 @@ impl FunctionImpl {
 #[derive(Debug)]
 pub enum Error {
   MissingExpr,
-}
-
-impl JIT {
-  fn new_block<'a>(&'a mut self, mir: &'a mir::Function) -> BlockBuilder<'a> {
-    let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
-    let entry_block = builder.create_block();
-
-    builder.append_block_params_for_function_params(entry_block);
-    builder.switch_to_block(entry_block);
-
-    // Tells the compiler there will be no predecessors (???).
-    builder.seal_block(entry_block);
-
-    // TODO: Declare variables.
-    // for stmt in source.stmts() {}
-
-    let mut call_sig = self.module.make_signature();
-    call_sig.params.push(AbiParam::new(ir::types::I64));
-    call_sig.params.push(AbiParam::new(ir::types::I64));
-    call_sig.returns.push(AbiParam::new(ir::types::I64));
-
-    let callee = self.module.declare_function("__call", Linkage::Import, &call_sig).unwrap();
-
-    let call_func_ref = self.module.declare_func_in_func(callee, builder.func);
-
-    BlockBuilder { builder, mir, module: &mut self.module, call_func_ref }
-  }
 }
 
 impl BlockBuilder<'_> {
