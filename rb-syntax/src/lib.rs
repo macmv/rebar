@@ -15,11 +15,11 @@ use std::{marker::PhantomData, sync::Arc};
 
 use rowan::GreenNode;
 
-pub use rowan::TextRange;
-
 pub mod cst {
   pub use crate::generated::*;
 }
+
+pub use rowan::{TextRange, TextSize, WalkEvent};
 
 /// `Parse` is the result of the parsing: a syntax tree and a collection of
 /// errors.

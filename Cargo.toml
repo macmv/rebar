@@ -16,6 +16,7 @@ members = [
 
   "test",
   "refmt",
+  "relsp",
 ]
 
 [workspace.dependencies]
