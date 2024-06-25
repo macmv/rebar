@@ -1,10 +1,11 @@
-use codegen::ir;
+use codegen::ir::{self};
 use core::fmt;
 use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, FuncId, Linkage, Module};
 use rb_mir::ast as mir;
 use rb_typer::{Literal, Type};
+use std::marker::PhantomPinned;
 
 pub struct JIT {
   builder_context: FunctionBuilderContext,
@@ -27,14 +28,46 @@ pub struct FunctionImpl {
   name: String,
 }
 
-#[no_mangle]
-extern "C" fn print_impl(num: i64) {
-  println!("yoooooo we printin: {:?}", num);
+/// This struct is horribly dangerous to use.
+///
+/// It should only be constructed from within the rebar runtime. The layout
+/// should look something like this:
+/// [
+///   len: 8 bytes
+///   arg0: 8 bytes
+///   arg1: 8 bytes
+///   ...etc
+/// ]
+///
+/// The compiled rebar instructions will construct a slice with the correct
+/// arguments all lined up in memory. Then, that pointer will be passed to rust,
+/// where it will be cast to a reference, and then functions like `arg` may be
+/// called on it.
+///
+/// So, TLDR, don't move this thing around. I would wrap it in a `Pin`, but
+/// `Pin` is annoying to use, so all the functions are just unsafe instead.
+#[repr(C)]
+pub struct RebarSlice {
+  len:      u64,
+  _phantom: PhantomPinned,
+}
+
+impl RebarSlice {
+  pub unsafe fn len(&self) -> usize { self.len as usize }
+
+  pub unsafe fn arg(&self, idx: usize) -> i64 {
+    assert!(idx < self.len as usize);
+    unsafe {
+      let ptr = self as *const _;
+      let arg_ptr = (ptr as *const i64).offset(1);
+      *arg_ptr.offset(idx as isize)
+    }
+  }
 }
 
 impl JIT {
   #[allow(clippy::new_without_default)]
-  pub fn new() -> Self {
+  pub fn new(dyn_call_ptr: fn(i64, *const RebarSlice) -> i64) -> Self {
     let mut flag_builder = settings::builder();
     flag_builder.set("use_colocated_libcalls", "false").unwrap();
     flag_builder.set("is_pic", "false").unwrap();
@@ -44,7 +77,7 @@ impl JIT {
     let isa = isa_builder.finish(settings::Flags::new(flag_builder)).unwrap();
     let mut builder = JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
 
-    builder.symbol("print_impl", print_impl as *const u8);
+    builder.symbol("__call", dyn_call_ptr as *const _);
 
     let module = JITModule::new(builder);
     JIT {
@@ -151,29 +184,48 @@ impl BlockBuilder<'_> {
         _ => unimplemented!(),
       },
 
-      mir::Expr::Name(ref name, ref ty) => {
-        let sig = self.compile_signature(ty);
+      mir::Expr::Name(ref name, ref _ty) => {
+        let id = match name.as_str() {
+          "assert_eq" => 0,
+          "println" => 1,
+          _ => panic!("unknown name {name}"),
+        };
 
-        let callee = self
-          .module
-          .declare_function(name, Linkage::Import, &sig)
-          .expect("problem declaring function");
-
-        let local_callee = self.module.declare_func_in_func(callee, self.builder.func);
-        self.builder.ins().func_addr(ir::types::I64, local_callee)
+        self.builder.ins().iconst(ir::types::I64, id)
       }
 
       mir::Expr::Call(lhs, ref sig_ty, ref args) => {
         let lhs = self.compile_expr(lhs);
         let sig = self.compile_signature(sig_ty);
 
-        let mut arg_values = Vec::new();
-        for &arg in args {
-          arg_values.push(self.compile_expr(arg))
+        // Store 2 values:
+        // - The length of the arguments.
+        // - The first argument.
+        let slot = self.builder.create_sized_stack_slot(StackSlotData {
+          kind: StackSlotKind::ExplicitSlot,
+          // Each argument is 8 bytes wide.
+          size: (args.len() as u32 + 1) * 8,
+        });
+
+        let arg_len = self.builder.ins().iconst(ir::types::I64, args.len() as i64);
+        self.builder.ins().stack_store(arg_len, slot, 0);
+
+        for (i, &arg) in args.iter().enumerate() {
+          let arg = self.compile_expr(arg);
+
+          // Each argument is 8 bytes wide.
+          self.builder.ins().stack_store(arg, slot, (i as i32 + 1) * 8);
         }
 
-        let sig_ref = self.builder.import_signature(sig);
-        let call = self.builder.ins().call_indirect(sig_ref, lhs, &arg_values);
+        let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, slot, 0);
+
+        let callee = self
+          .module
+          .declare_function("__call", Linkage::Import, &sig)
+          .expect("problem declaring function");
+
+        let func_ref = self.module.declare_func_in_func(callee, self.builder.func);
+        let call = self.builder.ins().call(func_ref, &[lhs, arg_ptr]);
 
         match *sig_ty {
           Type::Function(_, ref ret) => match **ret {
@@ -204,6 +256,7 @@ impl BlockBuilder<'_> {
 
   fn compile_signature(&self, ty: &Type) -> Signature {
     let mut sig = self.module.make_signature();
+    sig.params.push(AbiParam::new(ir::types::I64));
 
     match ty {
       Type::Function(args, ret) => {

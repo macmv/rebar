@@ -46,7 +46,7 @@ pub fn eval(src: &str) {
   // cranelift IR. Again, join on the above pool, collect all the functions, and
   // dispatch the MIR to a thread pool.
 
-  let mut jit = rb_jit::jit::JIT::new();
+  let mut jit = rb_jit::jit::JIT::new(env.dyn_call_ptr());
   let mut function_ids = vec![];
   for f in functions {
     function_ids.push(jit.compile_function(&f));

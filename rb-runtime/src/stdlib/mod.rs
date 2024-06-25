@@ -1,12 +1,14 @@
-use ::std::collections::HashMap;
+use ::std::{cell::RefCell, collections::HashMap};
 
 mod core;
 mod std;
 
+use rb_jit::jit::RebarSlice;
 use rb_typer::{Literal, Type};
 
 pub struct Environment {
   pub names: HashMap<String, Function>,
+  ids:       Vec<String>,
 }
 
 pub struct Function {
@@ -17,7 +19,46 @@ pub struct Function {
 }
 
 impl Environment {
-  fn empty() -> Self { Environment { names: HashMap::new() } }
+  fn empty() -> Self { Environment { names: HashMap::new(), ids: vec![] } }
+
+  pub(crate) fn dyn_call_ptr(self) -> fn(i64, *const RebarSlice) -> i64 {
+    // This works pretty well, but it would be nice to support multithreading, and
+    // multiple environments on one thread. Probably something for later though.
+    thread_local! {
+      static ENV: RefCell<Option<Environment>> = RefCell::new(None);
+    }
+
+    ENV.with(|env| {
+      *env.borrow_mut() = Some(self);
+    });
+
+    |func, arg| {
+      ENV.with(|env| {
+        let env = env.borrow();
+        let env = env.as_ref().unwrap();
+
+        let f = &env.names[&env.ids[func as usize]].imp;
+
+        let args = unsafe {
+          let arg_value = &*arg;
+
+          let mut args = vec![];
+          for _ in 0..arg_value.len() {
+            // TODO: We're going to need some more shenanigans here to convert other types.
+            args.push(Value::Int(arg_value.arg(0)));
+          }
+          args
+        };
+
+        // TODO: And we need opposite shenanigans here to convert the return value.
+        match f(args) {
+          Value::Int(v) => v,
+          Value::Bool(_) => 0,
+          Value::Unit => 0,
+        }
+      })
+    }
+  }
 
   pub fn static_env(&self) -> rb_typer::Environment {
     rb_typer::Environment {
@@ -30,7 +71,7 @@ impl Environment {
   }
 }
 
-trait DynFunction {
+pub trait DynFunction {
   fn into_function(self) -> Function;
 }
 
@@ -42,7 +83,9 @@ enum Value {
 
 impl Environment {
   pub fn add_fn(&mut self, name: impl Into<String>, function: impl DynFunction) {
-    self.names.insert(name.into(), function.into_function());
+    let name = name.into();
+    self.names.insert(name.clone(), function.into_function());
+    self.ids.push(name);
   }
 }
 
