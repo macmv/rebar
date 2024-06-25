@@ -7,6 +7,8 @@ pub use stdlib::*;
 use rb_diagnostic::{emit, Source, Sources, Span};
 use rb_syntax::cst;
 
+const NUM_CPUS: usize = 32;
+
 pub fn eval(src: &str) {
   let env = Environment::std();
 
@@ -48,9 +50,9 @@ pub fn eval(src: &str) {
 
   let mut jit = rb_jit::jit::JIT::new(env.dyn_call_ptr());
 
-  let mut results = vec![vec![]; 32];
+  let mut results = vec![vec![]; NUM_CPUS];
 
-  let chunk_size = (functions.len() / 32).max(1);
+  let chunk_size = (functions.len() / NUM_CPUS).max(1);
   // Double check that `zip` doesn't skip anything.
   assert!(functions.chunks(chunk_size).len() <= results.len());
 
