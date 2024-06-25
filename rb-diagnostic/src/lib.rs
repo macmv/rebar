@@ -19,10 +19,26 @@ pub fn run_or_exit<T>(sources: Arc<Sources>, f: impl FnOnce() -> T) -> T {
   res
 }
 
+pub fn run<T>(sources: Arc<Sources>, f: impl FnOnce() -> T) -> Result<T, Vec<Diagnostic>> {
+  Context::init(sources);
+  Context::run(|ctx| {
+    ctx.collect_errors();
+  });
+
+  let res = f();
+  let errors = Context::run(|ctx| ctx.take_errors());
+  Context::cleanup();
+
+  if errors.is_empty() {
+    Ok(res)
+  } else {
+    Err(errors)
+  }
+}
+
 pub fn emit(diagnostic: Diagnostic) {
   Context::run(|ctx| {
-    ctx.error();
-    eprintln!("{}", diagnostic.render(ctx.sources()));
+    ctx.error(diagnostic);
   });
 }
 
