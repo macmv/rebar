@@ -7,6 +7,9 @@ fn main() {
     if path.extension().unwrap() == "rbr" {
       let name = path.file_stem().unwrap().to_str().unwrap();
       println!("Running test: {}", name);
+
+      let source = std::fs::read_to_string(&path).unwrap();
+      rb_runtime::eval(&source);
     }
   }
 }
