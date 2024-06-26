@@ -25,8 +25,6 @@ impl Formatter {
       curr = ws;
     }
 
-    println!("first whitespace: {:#?}", curr);
-
     // Iterate forward and format said whitespace.
     let mut out = String::new();
     loop {
