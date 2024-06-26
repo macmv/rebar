@@ -58,5 +58,5 @@ fn main() {
   });
 
   let out = fmt::format(&cst.tree());
-  println!("{out}");
+  print!("{out}");
 }
