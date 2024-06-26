@@ -161,8 +161,6 @@ impl FunctionRet for () {
   fn into_value(self) -> Value { Value::Unit }
 }
 
-fn foo(a: i64, b: i64) -> i64 { a + b }
-
 #[cfg(test)]
 mod tests {
   use super::*;
