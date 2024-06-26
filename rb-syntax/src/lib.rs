@@ -9,7 +9,7 @@ pub use node::*;
 
 pub use error::SyntaxError;
 pub use ext::AstNode;
-use rb_parser::SyntaxKind;
+pub use rb_parser::{SyntaxKind, T};
 
 use std::{marker::PhantomData, sync::Arc};
 
@@ -19,7 +19,7 @@ pub mod cst {
   pub use crate::generated::*;
 }
 
-pub use rowan::{TextRange, TextSize, WalkEvent};
+pub use rowan::{NodeOrToken, TextRange, TextSize, WalkEvent};
 
 /// `Parse` is the result of the parsing: a syntax tree and a collection of
 /// errors.

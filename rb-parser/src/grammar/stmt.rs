@@ -13,6 +13,12 @@ pub fn block(p: &mut Parser) {
 }
 
 pub fn stmt(p: &mut Parser) {
+  // FIXME: This is a dumb hack to work around the lexer not consuming whitespace
+  // correctly.
+  while p.at(T![ws]) {
+    p.eat(T![ws]);
+  }
+
   while p.at(T![nl]) {
     p.eat(T![nl]);
   }

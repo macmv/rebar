@@ -2,7 +2,7 @@
 //!
 //! TODO: Move to another crate.
 
-use rb_syntax::{cst, AstNode};
+use rb_syntax::{cst, AstNode, NodeOrToken, SyntaxKind, SyntaxNode, T};
 
 pub struct Formatter {
   pub max_line_length: u32,
@@ -12,12 +12,53 @@ impl Default for Formatter {
   fn default() -> Self { Self { max_line_length: 80 } }
 }
 
+fn is_whitespace(kind: SyntaxKind) -> bool { matches!(kind, T![ws] | T![nl]) }
+
 impl Formatter {
+  fn fmt_leading_whitespace(&self, node: &SyntaxNode) -> String {
+    // Iterate backwards until we find the first non-whitespace node.
+    let mut curr = NodeOrToken::from(node.clone());
+    while let Some(ws) = curr.prev_sibling_or_token() {
+      if !is_whitespace(ws.kind()) {
+        break;
+      }
+      curr = ws;
+    }
+
+    println!("first whitespace: {:#?}", curr);
+
+    // Iterate forward and format said whitespace.
+    let mut out = String::new();
+    loop {
+      let s = match curr {
+        NodeOrToken::Node(ref n) => n.text().to_string(),
+        NodeOrToken::Token(ref n) => n.text().to_string(),
+      };
+
+      out += &s;
+
+      if let Some(node) = curr.next_sibling_or_token() {
+        curr = node;
+        if !is_whitespace(curr.kind()) {
+          break;
+        }
+      } else {
+        break;
+      }
+    }
+
+    out.lines().map(|line| line.trim()).collect::<Vec<_>>().join("\n")
+  }
+
   pub fn fmt_stmt(&mut self, stmt: &cst::Stmt) -> String {
-    match stmt {
+    let prefix = self.fmt_leading_whitespace(stmt.syntax());
+
+    let s = match stmt {
       cst::Stmt::ExprStmt(expr) => self.fmt_expr(&expr.expr().unwrap()),
       _ => todo!("stmt {stmt:?}"),
-    }
+    };
+
+    format!("{prefix}{s}")
   }
 
   pub fn fmt_expr(&mut self, expr: &cst::Expr) -> String {
@@ -100,6 +141,8 @@ mod tests {
   use super::*;
 
   fn check(input: &str, expected: Expect) {
+    let input = input.strip_prefix('\n').unwrap();
+
     let cst = cst::SourceFile::parse(input);
     for error in cst.errors() {
       panic!("{}", error.message());
@@ -143,6 +186,20 @@ mod tests {
           very_long_arg_1,
           very_long_arg_2
         )
+      "#],
+    );
+  }
+
+  #[test]
+  fn keep_line_comment() {
+    check(
+      r#"
+        // hello
+        print(1, 2)
+      "#,
+      expect![@r#"
+        // hello
+        print(1, 2)
       "#],
     );
   }
