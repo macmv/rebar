@@ -232,6 +232,20 @@ mod tests {
         )
       "#],
     );
+    check(
+      r#"
+        print_impl(
+          very_long_arg_1,
+          very_long_arg_2
+        )
+      "#,
+      expect![@r#"
+        print_impl(
+          very_long_arg_1,
+          very_long_arg_2
+        )
+      "#],
+    );
   }
 
   #[test]

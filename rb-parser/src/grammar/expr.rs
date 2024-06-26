@@ -156,9 +156,37 @@ fn arg_list(p: &mut Parser) {
   p.eat(T!['(']);
 
   while !p.at(EOF) && !p.at(T![')']) {
+    // test ok
+    // foo(
+    //   2)
+    while p.at(T![nl]) {
+      p.eat(T![nl]);
+    }
+
     expr(p);
+
+    // test ok
+    // foo(
+    //   2
+    //   ,
+    //   3
+    // )
+    while p.at(T![nl]) {
+      p.eat(T![nl]);
+    }
+
     if p.at(T![,]) {
-      p.bump();
+      p.eat(T![,]);
+
+      // test ok
+      // foo(2
+      // )
+      // foo(
+      //   2
+      // )
+      while p.at(T![nl]) {
+        p.eat(T![nl]);
+      }
       if p.at(T![')']) {
         break;
       }
