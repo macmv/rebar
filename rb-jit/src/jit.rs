@@ -3,7 +3,6 @@ use codegen::{
   ir::{self, FuncRef},
   CompiledCode, FinalizedMachReloc,
 };
-use core::fmt;
 use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, FuncId, FunctionDeclaration, Linkage, Module};
@@ -35,10 +34,6 @@ pub struct BlockBuilder<'a> {
   builder:       FunctionBuilder<'a>,
   mir:           &'a mir::Function,
   call_func_ref: FuncRef,
-}
-
-pub struct FunctionImpl {
-  name: String,
 }
 
 /// This struct is horribly dangerous to use.
@@ -215,20 +210,6 @@ impl JIT {
       .define_function_bytes(id, func, alignment, code, relocs)
       .map_err(|e| e.to_string())?;
     Ok(id)
-  }
-}
-
-impl fmt::Debug for FunctionImpl {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "FunctionImpl({})", self.name)
-  }
-}
-
-impl FunctionImpl {
-  pub fn call(&self, args: Vec<Value>) -> Value {
-    println!("calling {} with args {:?}", self.name, args);
-
-    todo!()
   }
 }
 
