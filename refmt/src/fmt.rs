@@ -47,7 +47,22 @@ impl Formatter {
       }
     }
 
-    out.lines().map(|line| line.trim()).collect::<Vec<_>>().join("\n")
+    let mut res: Vec<&str> = vec![];
+
+    const EMPTY_LINE_THRESHOLD: usize = 3;
+
+    for line in out.lines() {
+      let line = line.trim();
+      if res.len() >= EMPTY_LINE_THRESHOLD
+        && (1..EMPTY_LINE_THRESHOLD).all(|i| res[res.len() - i].is_empty())
+        && line.is_empty()
+      {
+        continue;
+      }
+      res.push(line);
+    }
+
+    res.join("\n")
   }
 
   pub fn fmt_stmt(&mut self, stmt: &cst::Stmt) -> String {
@@ -115,8 +130,8 @@ pub fn format(cst: &cst::SourceFile) -> String {
 
   for stmt in cst.stmts() {
     out += &fmt.fmt_stmt(&stmt);
-    out += "\n";
   }
+  out += "\n";
 
   out
 }
@@ -128,8 +143,8 @@ pub fn format_opts(cst: &cst::SourceFile, mut fmt: Formatter) -> String {
 
   for stmt in cst.stmts() {
     out += &fmt.fmt_stmt(&stmt);
-    out += "\n";
   }
+  out += "\n";
 
   out
 }
@@ -200,6 +215,118 @@ mod tests {
       expect![@r#"
         // hello
         print(1, 2)
+      "#],
+    );
+  }
+
+  #[test]
+  fn keep_empty_line() {
+    check(
+      r#"
+        print(1)
+        print(2)
+      "#,
+      expect![@r#"
+        print(1)
+        print(2)
+      "#],
+    );
+
+    check(
+      r#"
+        print(1)
+
+        print(2)
+      "#,
+      expect![@r#"
+        print(1)
+
+        print(2)
+      "#],
+    );
+
+    check(
+      r#"
+        print(1)
+
+
+        print(2)
+      "#,
+      expect![@r#"
+        print(1)
+
+        print(2)
+      "#],
+    );
+
+    check(
+      r#"
+        print(1)
+
+
+
+        print(2)
+      "#,
+      expect![@r#"
+        print(1)
+
+        print(2)
+      "#],
+    );
+  }
+
+  #[test]
+  fn keep_empty_lines_comments() {
+    check(
+      r#"
+        // hello
+        print(2)
+      "#,
+      expect![@r#"
+        // hello
+        print(2)
+      "#],
+    );
+
+    check(
+      r#"
+        // hello
+
+        print(2)
+      "#,
+      expect![@r#"
+        // hello
+
+        print(2)
+      "#],
+    );
+
+    check(
+      r#"
+        // hello
+
+
+        print(2)
+      "#,
+      expect![@r#"
+        // hello
+
+        print(2)
+      "#],
+    );
+
+    check(
+      r#"
+        // hello
+
+
+
+        print(2)
+      "#,
+      expect![@r#"
+        // hello
+
+        print(2)
       "#],
     );
   }
