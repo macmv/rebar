@@ -71,7 +71,7 @@ impl Environment {
   }
 }
 
-pub trait DynFunction {
+pub trait DynFunction<T> {
   fn into_function(self) -> Function;
 }
 
@@ -82,7 +82,7 @@ enum Value {
 }
 
 impl Environment {
-  pub fn add_fn(&mut self, name: impl Into<String>, function: impl DynFunction) {
+  pub fn add_fn<T>(&mut self, name: impl Into<String>, function: impl DynFunction<T>) {
     let name = name.into();
     self.names.insert(name.clone(), function.into_function());
     self.ids.push(name);
@@ -102,7 +102,11 @@ trait FunctionRet {
 // Write a macro to generate the following From for Function impls:
 macro_rules! impl_from_function {
   ($($arg:ident),*) => {
-    impl<R: FunctionRet + 'static, $($arg: FunctionArg + 'static),*> DynFunction for fn($($arg),*) -> R {
+    impl<F, R, $($arg: FunctionArg + 'static),*> DynFunction<($($arg,)*)> for F
+    where
+      F: (Fn($($arg),*) -> R) + 'static,
+      R: FunctionRet + 'static,
+    {
       fn into_function(self) -> Function {
         Function {
           args: vec![$($arg::static_type()),*],
