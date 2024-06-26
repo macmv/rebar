@@ -18,12 +18,19 @@ impl Formatter {
   fn fmt_leading_whitespace(&self, node: &SyntaxNode) -> String {
     // Iterate backwards until we find the first non-whitespace node.
     let mut curr = NodeOrToken::from(node.clone());
+    let mut found_ws = false;
     while let Some(ws) = curr.prev_sibling_or_token() {
       if !is_whitespace(ws.kind()) {
         break;
       }
       curr = ws;
+      found_ws = true;
     }
+    if !found_ws {
+      return "".into();
+    }
+
+    let is_start = curr.prev_sibling_or_token().is_none();
 
     // Iterate forward and format said whitespace.
     let mut out = String::new();
@@ -45,22 +52,46 @@ impl Formatter {
       }
     }
 
+    let out = out.trim_end_matches(' ');
+    let out = out.strip_suffix('\n').unwrap_or(out);
+
+    // `res` is the resulting lines between the previous statement and `node`.
     let mut res: Vec<&str> = vec![];
 
-    const EMPTY_LINE_THRESHOLD: usize = 3;
+    const EMPTY_LINE_THRESHOLD: usize = 2;
 
-    for line in out.lines() {
+    let mut empty_lines = 0;
+
+    let end: &[&str] = if out.ends_with('\n') { &[""] } else { &[] };
+
+    for line in out.lines().chain(end.into_iter().copied()) {
       let line = line.trim();
-      if res.len() >= EMPTY_LINE_THRESHOLD
-        && (1..EMPTY_LINE_THRESHOLD).all(|i| res[res.len() - i].is_empty())
-        && line.is_empty()
-      {
+
+      if line.is_empty() {
+        empty_lines += 1;
+      } else {
+        empty_lines = 0;
+      }
+
+      if empty_lines >= EMPTY_LINE_THRESHOLD {
         continue;
       }
+
       res.push(line);
     }
 
-    res.join("\n")
+    let mut out = String::new();
+
+    // Add the newline from the previous statement.
+    if !is_start {
+      out += "\n";
+    }
+
+    for line in res {
+      out += line;
+      out += "\n";
+    }
+    out
   }
 
   pub fn fmt_stmt(&mut self, stmt: &cst::Stmt) -> String {
@@ -325,6 +356,45 @@ mod tests {
         // hello
 
         print(2)
+      "#],
+    );
+  }
+
+  #[test]
+  fn no_leading_whitespace() {
+    check(
+      &r#"
+        // hi
+        print(1)
+      "#
+      .lines()
+      .map(|line| line.trim())
+      .collect::<Vec<_>>()
+      .join("\n"),
+      expect![@r#"
+        // hi
+        print(1)
+      "#],
+    );
+
+    check(
+      &r#"
+        assert_eq(2 + 3, 5)
+
+        // precedence should work
+        assert_eq(2 * 3 + 4, 10)
+        assert_eq(4 + 2 * 3, 10)
+      "#
+      .lines()
+      .map(|line| line.trim())
+      .collect::<Vec<_>>()
+      .join("\n"),
+      expect![@r#"
+        assert_eq(2 + 3, 5)
+
+        // precedence should work
+        assert_eq(2 * 3 + 4, 10)
+        assert_eq(4 + 2 * 3, 10)
       "#],
     );
   }
