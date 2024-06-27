@@ -157,7 +157,28 @@ impl<'a> Typer<'a> {
         ret
       }
 
-      _ => ty::Literal::Unit.into(),
+      hir::Expr::If { cond, then, els } => {
+        let cond_ty = self.type_expr(cond);
+
+        self.constrain(&cond_ty, &VType::Literal(ty::Literal::Bool), self.span(cond));
+
+        let then_ty = self.type_expr(then);
+        if let Some(els) = els {
+          let els_ty = self.type_expr(els);
+
+          let res = self.fresh_var(self.span(expr), format!("if statment foo"));
+          let res = VType::Var(res);
+
+          self.constrain(&then_ty, &res, self.span(then));
+          self.constrain(&els_ty, &res, self.span(then));
+
+          res
+        } else {
+          then_ty
+        }
+      }
+
+      ref v => unimplemented!("type_expr {v:?}"),
     };
 
     self.exprs.insert(expr, ty.clone());
