@@ -43,9 +43,9 @@ impl Environment {
           let arg_value = &*arg;
 
           let mut args = vec![];
-          for _ in 0..arg_value.len() {
+          for i in 0..arg_value.len() {
             // TODO: We're going to need some more shenanigans here to convert other types.
-            args.push(Value::Int(arg_value.arg(0)));
+            args.push(Value::Int(arg_value.arg(i)));
           }
           args
         };
