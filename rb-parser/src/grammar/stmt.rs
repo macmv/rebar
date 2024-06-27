@@ -30,6 +30,25 @@ pub fn stmt(p: &mut Parser) {
 
   match p.current() {
     // test ok
+    // let foo = 2 + 3
+    // let bar: int = 4
+    T![let] => {
+      let m = p.start();
+      p.eat(T![let]);
+      p.expect(T![ident]);
+
+      if p.at(T![:]) {
+        p.eat(T![:]);
+        super::types::ty(p);
+      }
+
+      p.expect(T![=]);
+      super::expr::expr(p);
+
+      m.complete(p, LET);
+    }
+
+    // test ok
     // def foo(bar: int, baz: float) -> string {
     //   bar + baz
     // }

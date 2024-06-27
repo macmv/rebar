@@ -48,8 +48,9 @@ CallExpr = Expr '(' ArgList ')'
 ArgList = Expr (',' Expr)*
 
 ExprStmt = Expr
-Stmt = Def | Struct | Assign | ExprStmt
+Stmt = Let | Assign | Def | Struct | ExprStmt
 
+Let = 'let' Name (':' Type)? '=' Expr
 Assign = Expr '=' Expr
 
 Def = 'def' Name ArgsDef Block
