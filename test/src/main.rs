@@ -5,16 +5,23 @@ fn main() {
 
   println!("running tests...");
 
-  for path in files {
-    if path.extension().unwrap() == "rbr" {
-      print!("{}...", path.display());
+  const NUM_CPUS: usize = 32;
+  let chunk_size = (files.len() / NUM_CPUS).max(1);
 
-      let source = std::fs::read_to_string(&path).unwrap();
-      rb_runtime::eval(&source);
+  std::thread::scope(|scope| {
+    for chunk in files.chunks(chunk_size) {
+      scope.spawn(move || {
+        for path in chunk {
+          if path.extension().unwrap() == "rbr" {
+            let source = std::fs::read_to_string(&path).unwrap();
+            rb_runtime::eval(&source);
 
-      println!(" \x1b[32mok\x1b[0m");
+            println!("{}... \x1b[32mok\x1b[0m", path.display());
+          }
+        }
+      });
     }
-  }
+  });
 }
 
 fn gather_files(dir: &Path) -> Vec<PathBuf> {
