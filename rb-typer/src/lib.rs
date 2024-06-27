@@ -160,7 +160,8 @@ impl<'a> Typer<'a> {
       hir::Expr::If { cond, then, els } => {
         let cond_ty = self.type_expr(cond);
 
-        self.constrain(&cond_ty, &VType::Literal(ty::Literal::Bool), self.span(cond));
+        // FIXME: Should be `Bool`
+        self.constrain(&cond_ty, &VType::Literal(ty::Literal::Int), self.span(cond));
 
         let then_ty = self.type_expr(then);
         if let Some(els) = els {
