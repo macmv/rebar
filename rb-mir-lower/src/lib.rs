@@ -60,6 +60,18 @@ impl Lower<'_> {
         None => mir::Expr::Native(v.clone(), self.ty.type_of_expr(expr)),
       },
 
+      hir::Expr::Block(ref block) => {
+        let mut stmts = vec![];
+
+        // FIXME: Make a new scope here so that local variables are local to blocks.
+        for stmt in block.iter() {
+          let stmt = self.lower_stmt(*stmt);
+          stmts.push(stmt);
+        }
+
+        mir::Expr::Block(stmts)
+      }
+
       hir::Expr::BinaryOp(lhs, ref op, rhs) => {
         let lhs = self.lower_expr(lhs);
         let rhs = self.lower_expr(rhs);
@@ -81,6 +93,14 @@ impl Lower<'_> {
         let args = args.iter().map(|&arg| self.lower_expr(arg)).collect();
 
         mir::Expr::Call(lhs, lhs_ty, args)
+      }
+
+      hir::Expr::If { cond, then, els } => {
+        let cond = self.lower_expr(cond);
+        let then = self.lower_expr(then);
+        let els = els.map(|e| self.lower_expr(e));
+
+        mir::Expr::If { cond, then, els }
       }
 
       ref v => unimplemented!("lowering expression {v:?}"),

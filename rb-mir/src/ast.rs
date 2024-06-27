@@ -29,6 +29,9 @@ pub enum Expr {
   Local(VarId),
   Native(String, Type),
 
+  Block(Vec<StmtId>),
+
+  If { cond: ExprId, then: ExprId, els: Option<ExprId> },
   Assign { variable: String, ty: Type, rhs: ExprId },
 
   While { cond: ExprId },
