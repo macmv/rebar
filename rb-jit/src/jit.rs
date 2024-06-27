@@ -315,7 +315,69 @@ impl BlockBuilder<'_> {
           _ => unimplemented!(),
         }
       }
-      _ => unimplemented!("expr: {expr:?}"),
+
+      mir::Expr::If { cond, then, els: None } => {
+        let cond = self.compile_expr(cond);
+
+        let then_block = self.builder.create_block();
+        let merge_block = self.builder.create_block();
+
+        // Test the if condition and conditionally branch.
+        self.builder.ins().brif(cond, then_block, &[], merge_block, &[]);
+
+        self.builder.switch_to_block(then_block);
+        self.builder.seal_block(then_block);
+        self.compile_expr(then);
+
+        self.builder.ins().jump(merge_block, &[]);
+
+        // Use `merge_block` for the rest of the function.
+        self.builder.switch_to_block(merge_block);
+        self.builder.seal_block(merge_block);
+
+        self.builder.ins().iconst(ir::types::I64, 0)
+      }
+
+      mir::Expr::If { cond, then, els: Some(els) } => {
+        let cond = self.compile_expr(cond);
+
+        let then_block = self.builder.create_block();
+        let else_block = self.builder.create_block();
+        let merge_block = self.builder.create_block();
+
+        self.builder.append_block_param(merge_block, ir::types::I64);
+
+        // Test the if condition and conditionally branch.
+        self.builder.ins().brif(cond, then_block, &[], else_block, &[]);
+
+        self.builder.switch_to_block(then_block);
+        self.builder.seal_block(then_block);
+        let then_return = self.compile_expr(then);
+
+        // Jump to the merge block, passing it the block return value.
+        self.builder.ins().jump(merge_block, &[then_return]);
+
+        self.builder.switch_to_block(else_block);
+        self.builder.seal_block(else_block);
+        let else_return = self.compile_expr(els);
+
+        // Jump to the merge block, passing it the block return value.
+        self.builder.ins().jump(merge_block, &[else_return]);
+
+        // Switch to the merge block for subsequent statements.
+        self.builder.switch_to_block(merge_block);
+
+        // We've now seen all the predecessors of the merge block.
+        self.builder.seal_block(merge_block);
+
+        // Read the value of the if-else by reading the merge block
+        // parameter.
+        let phi = self.builder.block_params(merge_block)[0];
+
+        phi
+      }
+
+      ref v => unimplemented!("expr: {v:?}"),
     }
   }
 }
