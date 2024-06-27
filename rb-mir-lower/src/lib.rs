@@ -39,7 +39,7 @@ impl Lower<'_> {
       //
       // HIR should have fully qualified names, and the typer should get the type of this name.
       // We should probably convert it to something more useful than a string though.
-      hir::Expr::Name(ref v) => mir::Expr::Name(v.clone(), self.ty.type_of_expr(expr)),
+      hir::Expr::Name(ref v) => mir::Expr::Native(v.clone(), self.ty.type_of_expr(expr)),
 
       hir::Expr::BinaryOp(lhs, ref op, rhs) => {
         let lhs = self.lower_expr(lhs);

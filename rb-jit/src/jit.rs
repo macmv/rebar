@@ -232,7 +232,7 @@ impl BlockBuilder<'_> {
         _ => unimplemented!(),
       },
 
-      mir::Expr::Name(ref name, ref _ty) => {
+      mir::Expr::Native(ref name, ref _ty) => {
         let id = match name.as_str() {
           "assert_eq" => 0,
           "println" => 1,

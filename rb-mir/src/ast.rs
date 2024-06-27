@@ -17,7 +17,8 @@ pub enum Expr {
   Literal(Literal),
   Call(ExprId, Type, Vec<ExprId>),
   Binary(ExprId, BinaryOp, ExprId, Type),
-  Name(String, Type),
+
+  Native(String, Type),
 
   Assign { variable: String, ty: Type, rhs: ExprId },
 
