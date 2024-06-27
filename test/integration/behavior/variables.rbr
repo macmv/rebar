@@ -1,0 +1,8 @@
+let foo = 3
+
+assert_eq(foo, 3)
+assert_eq(foo + 1, 4)
+
+let bar = 5
+
+assert_eq(bar, foo + 2)
