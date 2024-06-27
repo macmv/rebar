@@ -36,7 +36,7 @@ impl FunctionLower<'_> {
       }
 
       cst::Stmt::Let(ref let_stmt) => {
-        let name = let_stmt.name().unwrap().ident_token().unwrap().to_string();
+        let name = let_stmt.ident_token().unwrap().to_string();
         let expr = self.expr_opt(let_stmt.expr());
 
         hir::Stmt::Let(name, expr)

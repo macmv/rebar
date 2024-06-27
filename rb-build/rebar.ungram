@@ -50,7 +50,7 @@ ArgList = Expr (',' Expr)*
 ExprStmt = Expr
 Stmt = Let | Assign | Def | Struct | ExprStmt
 
-Let = 'let' Name (':' Type)? '=' Expr
+Let = 'let' 'ident' (':' Type)? '=' Expr
 Assign = Expr '=' Expr
 
 Def = 'def' Name ArgsDef Block
