@@ -23,6 +23,11 @@ pub fn stmt(p: &mut Parser) {
     p.eat(T![nl]);
   }
 
+  // Trailing newlines can cause this to happen.
+  if p.at(EOF) {
+    return;
+  }
+
   match p.current() {
     // test ok
     // def foo(bar: int, baz: float) -> string {
