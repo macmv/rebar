@@ -10,7 +10,15 @@ pub struct Function {
   pub stmts: Arena<Stmt>,
 
   pub items: Vec<StmtId>,
+
+  /// Local variables in this function.
+  pub vars: Vec<Type>,
 }
+
+/// A local variable ID. Variable ids reset at the start of each function
+/// definition. This mostly just makes the JIT easier to write.
+#[derive(Debug, Clone, Copy)]
+pub struct VarId(pub u32);
 
 #[derive(Debug)]
 pub enum Expr {
@@ -18,6 +26,7 @@ pub enum Expr {
   Call(ExprId, Type, Vec<ExprId>),
   Binary(ExprId, BinaryOp, ExprId, Type),
 
+  Local(VarId),
   Native(String, Type),
 
   Assign { variable: String, ty: Type, rhs: ExprId },
@@ -28,6 +37,7 @@ pub enum Expr {
 #[derive(Debug)]
 pub enum Stmt {
   Expr(ExprId),
+  Let(VarId, Type, ExprId),
 }
 
 #[derive(Debug)]
