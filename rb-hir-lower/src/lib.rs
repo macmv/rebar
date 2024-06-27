@@ -71,6 +71,14 @@ impl FunctionLower<'_> {
         hir::Expr::Name(name)
       }
 
+      cst::Expr::Block(ref block) => {
+        let mut stmts = vec![];
+        for stmt in block.stmts() {
+          stmts.push(self.stmt(stmt));
+        }
+        hir::Expr::Block(stmts)
+      }
+
       cst::Expr::BinaryExpr(ref expr) => {
         let lhs = self.expr_opt(expr.lhs());
         let rhs = self.expr_opt(expr.rhs());
@@ -108,6 +116,12 @@ impl FunctionLower<'_> {
 
         hir::Expr::Call(lhs, args)
       }
+
+      cst::Expr::IfExpr(ref expr) => hir::Expr::If {
+        cond: self.expr_opt(expr.cond()),
+        then: self.expr_opt(expr.then()),
+        els:  expr.els().map(|e| self.expr(e)),
+      },
 
       _ => unimplemented!("lowering for {:?}", cst),
     };

@@ -24,9 +24,13 @@ pub struct Function {
 #[derive(Debug)]
 pub enum Expr {
   Literal(Literal),
-  Call(ExprId, Vec<ExprId>),
   Name(String),
+
+  Call(ExprId, Vec<ExprId>),
   BinaryOp(ExprId, BinaryOp, ExprId),
+
+  Block(Vec<StmtId>),
+  If { cond: ExprId, then: ExprId, els: Option<ExprId> },
 
   Assign { lhs: ExprId, rhs: ExprId },
 }
