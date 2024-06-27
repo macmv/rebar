@@ -136,6 +136,21 @@ impl<'a> Typer<'a> {
         },
       },
 
+      hir::Expr::Block(ref block) => {
+        // FIXME: Make a new scope here for the block.
+        for &stmt in block {
+          self.type_stmt(stmt);
+        }
+
+        match block.last() {
+          Some(stmt) => match self.function.stmts[*stmt] {
+            hir::Stmt::Expr(expr) => self.type_expr(expr),
+            hir::Stmt::Let(_, _) => VType::Literal(ty::Literal::Unit),
+          },
+          None => VType::Literal(ty::Literal::Unit),
+        }
+      }
+
       hir::Expr::BinaryOp(lhs_expr, ref op, rhs_expr) => {
         let lhs = self.type_expr(lhs_expr);
         let rhs = self.type_expr(rhs_expr);
