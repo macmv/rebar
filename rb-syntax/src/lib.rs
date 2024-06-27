@@ -19,7 +19,7 @@ pub mod cst {
   pub use crate::generated::*;
 }
 
-pub use rowan::{NodeOrToken, TextRange, TextSize, WalkEvent};
+pub use rowan::{TextRange, TextSize, WalkEvent};
 
 /// `Parse` is the result of the parsing: a syntax tree and a collection of
 /// errors.
