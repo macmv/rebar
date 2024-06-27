@@ -9,7 +9,7 @@ use cranelift_module::{DataDescription, FuncId, FunctionDeclaration, Linkage, Mo
 use isa::TargetIsa;
 use rb_mir::ast as mir;
 use rb_typer::{Literal, Type};
-use std::marker::PhantomPinned;
+use std::{collections::HashMap, marker::PhantomPinned};
 
 pub struct JIT {
   module: JITModule,
@@ -34,6 +34,13 @@ pub struct BlockBuilder<'a> {
   builder:       FunctionBuilder<'a>,
   mir:           &'a mir::Function,
   call_func_ref: FuncRef,
+
+  // Note that `VarId` and `Variable` are entirely distinct.
+  //
+  // `VarId` is an opaque identifier for a local variable in the AST, whereas `Variable` is a
+  // cranelift IR variable. There will usually be more cranelift variables than local variables.
+  locals:        HashMap<mir::VarId, Variable>,
+  next_variable: usize,
 }
 
 /// This struct is horribly dangerous to use.
@@ -149,7 +156,7 @@ impl ThreadCtx<'_> {
       colocated,
     });
 
-    BlockBuilder { builder, mir, call_func_ref }
+    BlockBuilder { builder, mir, call_func_ref, locals: HashMap::new(), next_variable: 0 }
   }
 
   pub fn translate_function(&mut self, mir: &mir::Function) { self.new_function(mir).translate(); }
@@ -159,8 +166,7 @@ impl BlockBuilder<'_> {
   fn translate(mut self) {
     self.builder.func.signature.returns.push(AbiParam::new(ir::types::I64));
 
-    let return_variable = Variable::new(0);
-    self.builder.declare_var(return_variable, ir::types::I64);
+    let return_variable = self.new_variable();
     let zero = self.builder.ins().iconst(ir::types::I64, 0);
     self.builder.def_var(return_variable, zero);
 
@@ -219,9 +225,25 @@ pub enum Error {
 }
 
 impl BlockBuilder<'_> {
+  fn new_variable(&mut self) -> Variable {
+    let var = Variable::new(self.next_variable);
+    self.builder.declare_var(var, ir::types::I64);
+    self.next_variable += 1;
+    var
+  }
+
   fn compile_stmt(&mut self, stmt: mir::StmtId) -> Value {
     match self.mir.stmts[stmt] {
       mir::Stmt::Expr(expr) => self.compile_expr(expr),
+      mir::Stmt::Let(id, _, expr) => {
+        let value = self.compile_expr(expr);
+        let variable = self.new_variable();
+        self.builder.def_var(variable, value);
+        self.locals.insert(id, variable);
+
+        // THis doesn't return a value. TODO: Make `stmt` not return a value.
+        self.builder.ins().iconst(ir::types::I64, 0)
+      }
     }
   }
 
@@ -231,6 +253,8 @@ impl BlockBuilder<'_> {
         mir::Literal::Int(i) => self.builder.ins().iconst(ir::types::I64, *i),
         _ => unimplemented!(),
       },
+
+      mir::Expr::Local(id) => self.builder.use_var(self.locals[&id]),
 
       mir::Expr::Native(ref name, ref _ty) => {
         let id = match name.as_str() {

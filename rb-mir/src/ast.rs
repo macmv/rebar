@@ -17,7 +17,7 @@ pub struct Function {
 
 /// A local variable ID. Variable ids reset at the start of each function
 /// definition. This mostly just makes the JIT easier to write.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VarId(pub u32);
 
 #[derive(Debug)]
