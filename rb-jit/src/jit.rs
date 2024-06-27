@@ -266,6 +266,15 @@ impl BlockBuilder<'_> {
         self.builder.ins().iconst(ir::types::I64, id)
       }
 
+      mir::Expr::Block(ref stmts) => {
+        // FIXME: Make a new scope so that locals don't leak.
+        let mut return_value = self.builder.ins().iconst(ir::types::I64, 0);
+        for &stmt in stmts {
+          return_value = self.compile_stmt(stmt);
+        }
+        return_value
+      }
+
       mir::Expr::Call(lhs, ref sig_ty, ref args) => {
         let lhs = self.compile_expr(lhs);
 
