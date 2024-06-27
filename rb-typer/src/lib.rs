@@ -29,11 +29,23 @@ pub struct Typer<'a> {
 
   // Type variables.
   variables: Arena<TypeVar>,
+
+  // Variables in the current block.
+  //
+  // TODO: This is probably wrong on a few levels, need a wrapper struct for typing each block.
+  locals: HashMap<String, VType>,
 }
 
 impl<'a> Typer<'a> {
   fn new(env: &'a Environment, function: &'a hir::Function, span_map: &'a SpanMap) -> Self {
-    Typer { env, function, span_map, exprs: HashMap::new(), variables: Arena::new() }
+    Typer {
+      env,
+      function,
+      span_map,
+      exprs: HashMap::new(),
+      variables: Arena::new(),
+      locals: HashMap::new(),
+    }
   }
 
   /// Typecheck a function body.
@@ -73,8 +85,14 @@ impl<'a> Typer<'a> {
 
   fn type_stmt(&mut self, stmt: StmtId) {
     match self.function.stmts[stmt] {
-      hir::Stmt::Expr(expr) => self.type_expr(expr),
-    };
+      hir::Stmt::Expr(expr) => {
+        self.type_expr(expr);
+      }
+      hir::Stmt::Let(ref name, expr) => {
+        let res = self.type_expr(expr);
+        self.locals.insert(name.clone(), res);
+      }
+    }
   }
 
   fn fresh_var(&mut self, span: Span, description: String) -> VarId {
@@ -106,13 +124,16 @@ impl<'a> Typer<'a> {
         ret
       }
 
-      hir::Expr::Name(ref name) => match self.env.names.get(name) {
-        Some(ty) => VType::from(ty.clone()),
-        None => {
-          emit!(format!("undeclared name {name:?}"), self.span(expr));
+      hir::Expr::Name(ref name) => match self.locals.get(name) {
+        Some(ty) => ty.clone(),
+        None => match self.env.names.get(name) {
+          Some(ty) => VType::from(ty.clone()),
+          None => {
+            emit!(format!("undeclared name {name:?}"), self.span(expr));
 
-          VType::Var(self.fresh_var(self.span(expr), format!("")))
-        }
+            VType::Var(self.fresh_var(self.span(expr), format!("")))
+          }
+        },
       },
 
       hir::Expr::BinaryOp(lhs_expr, ref op, rhs_expr) => {
