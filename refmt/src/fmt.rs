@@ -73,13 +73,26 @@ impl Formatter {
     // `res` is the resulting lines between the previous statement and `node`.
     let mut res: Vec<&str> = vec![];
 
-    const EMPTY_LINE_THRESHOLD: usize = 3;
+    const EMPTY_LINE_THRESHOLD: usize = 2;
 
     let mut empty_lines = 0;
 
     // Note that .lines() trims the last line (but only sometimes), and .split('\n')
     // does not.
-    for line in out.split('\n').skip(1) {
+    //
+    // We want to skip the first and last lines, so we use `iter.next()` in this
+    // somewhat odd way.
+    let mut iter = out.split('\n');
+    iter.next(); // Skip the first line.
+    let mut curr = iter.next();
+
+    while let Some(line) = curr {
+      curr = iter.next();
+      if curr.is_none() {
+        // Skip the last line.
+        break;
+      };
+
       let line = line.trim();
 
       if line.is_empty() {
@@ -88,15 +101,10 @@ impl Formatter {
         empty_lines = 0;
       }
 
-      if empty_lines >= EMPTY_LINE_THRESHOLD {
-        continue;
+      if empty_lines < EMPTY_LINE_THRESHOLD {
+        res.push(line);
       }
-
-      res.push(line);
     }
-
-    // Don't keep the last line.
-    res.pop();
 
     let mut out = String::new();
 
@@ -376,6 +384,25 @@ mod tests {
         print(2)
       "#,
       expect![@r#"
+        // hello
+
+        print(2)
+      "#],
+    );
+
+    check(
+      r#"
+        print(1)
+
+
+        // hello
+
+
+        print(2)
+      "#,
+      expect![@r#"
+        print(1)
+
         // hello
 
         print(2)
