@@ -3,13 +3,16 @@ use std::path::{Path, PathBuf};
 fn main() {
   let files = gather_files(Path::new("test/integration"));
 
+  println!("running tests...");
+
   for path in files {
     if path.extension().unwrap() == "rbr" {
-      let name = path.file_stem().unwrap().to_str().unwrap();
-      println!("Running test: {}", name);
+      print!("{}...", path.display());
 
       let source = std::fs::read_to_string(&path).unwrap();
       rb_runtime::eval(&source);
+
+      println!(" \x1b[32mok\x1b[0m");
     }
   }
 }

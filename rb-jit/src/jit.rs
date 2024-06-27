@@ -117,8 +117,8 @@ impl JIT {
     let code = self.module.get_finalized_function(id);
 
     unsafe {
-      let code: fn() -> i64 = std::mem::transmute(code);
-      println!("Result: {}", code());
+      let code: fn() = std::mem::transmute(code);
+      code();
     }
   }
 }
