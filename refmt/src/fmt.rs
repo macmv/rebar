@@ -168,20 +168,9 @@ impl Formatter {
   }
 }
 
-pub fn format(cst: &cst::SourceFile) -> String {
-  let mut out = String::new();
-  let mut fmt = Formatter::default();
-
-  out += &fmt.fmt_leading_whitespace(cst.syntax());
-  for stmt in cst.stmts() {
-    out += &fmt.fmt_stmt(&stmt);
-  }
-
-  out
-}
+pub fn format(cst: &cst::SourceFile) -> String { format_opts(cst, Formatter::default()) }
 
 // TODO: Hook up formatter options to the CLI.
-#[allow(dead_code)]
 pub fn format_opts(cst: &cst::SourceFile, mut fmt: Formatter) -> String {
   let mut out = String::new();
 
@@ -189,6 +178,11 @@ pub fn format_opts(cst: &cst::SourceFile, mut fmt: Formatter) -> String {
   for stmt in cst.stmts() {
     out += &fmt.fmt_stmt(&stmt);
   }
+
+  while out.ends_with('\n') {
+    out.pop();
+  }
+  out.push('\n');
 
   out
 }
@@ -418,6 +412,49 @@ mod tests {
       .map(|line| line.trim())
       .collect::<Vec<_>>()
       .join("\n"),
+      expect![@r#"
+        assert_eq(2 + 3, 5)
+
+        // precedence should work
+        assert_eq(2 * 3 + 4, 10)
+        assert_eq(4 + 2 * 3, 10)
+      "#],
+    );
+  }
+
+  #[test]
+  fn handle_trailing_newlines() {
+    check(
+      &r#"
+        assert_eq(2 + 3, 5)
+
+        // precedence should work
+        assert_eq(2 * 3 + 4, 10)
+        assert_eq(4 + 2 * 3, 10)
+
+      "#
+      .lines()
+      .map(|line| line.trim())
+      .collect::<Vec<_>>()
+      .join("\n"),
+      expect![@r#"
+        assert_eq(2 + 3, 5)
+
+        // precedence should work
+        assert_eq(2 * 3 + 4, 10)
+        assert_eq(4 + 2 * 3, 10)
+      "#],
+    );
+
+    check(
+      &r#"
+        assert_eq(2 + 3, 5)
+
+        // precedence should work
+        assert_eq(2 * 3 + 4, 10)
+        assert_eq(4 + 2 * 3, 10)
+
+      "#,
       expect![@r#"
         assert_eq(2 + 3, 5)
 
