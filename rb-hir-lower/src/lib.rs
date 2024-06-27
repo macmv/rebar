@@ -35,6 +35,13 @@ impl FunctionLower<'_> {
         hir::Stmt::Expr(expr)
       }
 
+      cst::Stmt::Let(ref let_stmt) => {
+        let name = let_stmt.name().unwrap().ident_token().unwrap().to_string();
+        let expr = self.expr_opt(let_stmt.expr());
+
+        hir::Stmt::Let(name, expr)
+      }
+
       _ => unimplemented!("lowering for {:?}", cst),
     };
 

@@ -34,6 +34,9 @@ pub enum Expr {
 #[derive(Debug)]
 pub enum Stmt {
   Expr(ExprId),
+
+  // TODO: Add type literals for explicit types.
+  Let(String, ExprId),
 }
 
 #[derive(Debug)]
