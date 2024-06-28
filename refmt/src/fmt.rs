@@ -158,6 +158,25 @@ impl FormatterContext<'_> {
         self.out += " = ";
         self.fmt_expr(&let_stmt.expr().unwrap());
       }
+      cst::Stmt::Def(def_stmt) => {
+        self.out += "def ";
+        self.out += &def_stmt.ident_token().unwrap().to_string();
+        self.out += "(";
+        let mut first = true;
+        for param in def_stmt.params().unwrap().params() {
+          if !first {
+            self.out += ", ";
+          }
+          first = false;
+          self.out += &param.ident_token().unwrap().to_string();
+          self.out += ": ";
+
+          // TODO: Format types.
+          self.out += &param.ty().unwrap().syntax().text().to_string();
+        }
+        self.out += ") ";
+        self.fmt_expr(&cst::Expr::Block(def_stmt.block().unwrap()));
+      }
       _ => todo!("stmt {stmt:?}"),
     };
 
@@ -656,6 +675,22 @@ mod tests {
       expect![@r#"
         1 + 2 + 3 + 4 + 5 + 6 + 7 + 8
           + 9 + 10
+      "#],
+    );
+  }
+
+  #[test]
+  fn def_stmt() {
+    check(
+      &r#"
+        def  foo  (  x : int ,  y : str )  {
+          x  +  y
+        }
+      "#,
+      expect![@r#"
+        def foo(x: int, y: str) {
+          x + y
+        }
       "#],
     );
   }
