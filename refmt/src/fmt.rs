@@ -120,6 +120,12 @@ impl Formatter {
   pub fn fmt_stmt(&mut self, stmt: &cst::Stmt) -> String {
     let s = match stmt {
       cst::Stmt::ExprStmt(expr) => self.fmt_expr(&expr.expr().unwrap()),
+      cst::Stmt::Let(let_stmt) => {
+        let name = let_stmt.ident_token().unwrap().text().to_string();
+        let expr = self.fmt_expr(&let_stmt.expr().unwrap());
+
+        format!("let {name} = {expr}",)
+      }
       _ => todo!("stmt {stmt:?}"),
     };
 
@@ -488,6 +494,18 @@ mod tests {
         // precedence should work
         assert_eq(2 * 3 + 4, 10)
         assert_eq(4 + 2 * 3, 10)
+      "#],
+    );
+  }
+
+  #[test]
+  fn let_stmt() {
+    check(
+      &r#"
+        let   foo   =   3
+      "#,
+      expect![@r#"
+        let foo = 3
       "#],
     );
   }
