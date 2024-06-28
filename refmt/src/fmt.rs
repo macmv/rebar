@@ -21,9 +21,6 @@ fn is_whitespace(kind: SyntaxKind) -> bool { matches!(kind, T![ws] | T![nl]) }
 struct FormatterContext<'a> {
   formatter: &'a Formatter,
 
-  // The offset into the line that this context started at.
-  offset: u32,
-
   // The current indent level. Multiply this by `formatter.indent` to get the actual indent.
   indent: u32,
 
@@ -32,7 +29,7 @@ struct FormatterContext<'a> {
 
 impl Formatter {
   fn ctx(&self) -> FormatterContext {
-    FormatterContext { formatter: self, offset: 0, indent: 0, out: String::new() }
+    FormatterContext { formatter: self, indent: 0, out: String::new() }
   }
 
   fn fmt_leading_whitespace(&self, node: &SyntaxNode) -> String {
@@ -196,6 +193,10 @@ impl FormatterContext<'_> {
       cst::Expr::CallExpr(call) => {
         self.fmt_expr(&call.expr().unwrap());
 
+        // Attempt 1:
+        // ```
+        // print(1, 2, 3)
+        // ```
         let retry = self.clone();
         self.out += "(";
         let mut first = true;
@@ -209,20 +210,25 @@ impl FormatterContext<'_> {
         self.out += ")";
 
         if self.over_line_limit() {
+          // Attempt 2:
+          // ```
+          // print(
+          //   1,
+          //   2,
+          //   3,
+          // )
+          // ```
           self.reset(retry);
-          self.out += "(\n";
+          self.out += "(";
           self.indent += 1;
-          let mut first = true;
           for arg in call.arg_list().unwrap().exprs() {
-            if !first {
-              self.out += ",\n";
-            }
-            first = false;
-            self.out += "  ";
+            self.write_line();
             self.fmt_expr(&arg);
+            self.out += ",";
           }
           self.indent -= 1;
-          self.out += "\n)";
+          self.write_line();
+          self.out += ")";
         }
       }
 
@@ -241,17 +247,22 @@ impl FormatterContext<'_> {
     }
   }
 
+  fn write_line(&mut self) {
+    self.out.push('\n');
+    for _ in 0..self.indent * self.formatter.indent {
+      self.out.push(' ');
+    }
+  }
+
   fn reset(&mut self, retry: FormatterContext) {
     self.out = retry.out;
-    self.offset = retry.offset;
     self.indent = retry.indent;
   }
 
   fn over_line_limit(&self) -> bool {
     let current_line_len = self.out.chars().rev().take_while(|&c| c != '\n').count() as u32;
-    let total_line_len = current_line_len + self.offset;
 
-    total_line_len > self.formatter.max_line_length
+    current_line_len > self.formatter.max_line_length
   }
 }
 
@@ -327,7 +338,7 @@ mod tests {
       expect![@r#"
         print_impl(
           very_long_arg_1,
-          very_long_arg_2
+          very_long_arg_2,
         )
       "#],
     );
@@ -335,13 +346,13 @@ mod tests {
       r#"
         print_impl(
           very_long_arg_1,
-          very_long_arg_2
+          very_long_arg_2,
         )
       "#,
       expect![@r#"
         print_impl(
           very_long_arg_1,
-          very_long_arg_2
+          very_long_arg_2,
         )
       "#],
     );
