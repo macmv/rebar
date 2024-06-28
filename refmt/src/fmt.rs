@@ -181,13 +181,33 @@ impl FormatterContext<'_> {
       }
 
       cst::Expr::BinaryExpr(expr) => {
-        // TODO: If `out` is longer than a line, split this into multiple lines, and
-        // retry the right hand side.
         self.fmt_expr(&expr.lhs().unwrap());
+
+        let retry = self.clone();
+
+        // Attempt 1:
+        // ```
+        // 1 + 2
+        // ```
         self.out += " ";
         self.out += &expr.binary_op().unwrap().syntax().text().to_string();
         self.out += " ";
         self.fmt_expr(&expr.rhs().unwrap());
+
+        if self.over_line_limit() {
+          // Attempt 2:
+          // ```
+          // 1
+          //   + 2
+          // ```
+          self.reset(retry);
+          self.indent += 1;
+          self.write_line();
+          self.out += &expr.binary_op().unwrap().syntax().text().to_string();
+          self.out += " ";
+          self.fmt_expr(&expr.rhs().unwrap());
+          self.indent -= 1;
+        }
       }
 
       cst::Expr::CallExpr(call) => {
@@ -613,6 +633,29 @@ mod tests {
         } else {
           println(4 + 5)
         }
+      "#],
+    );
+  }
+
+  #[test]
+  fn long_binary_op() {
+    check(
+      &r#"
+        fooooooooooooooooooooooooooooooooooo + baaaaaaaaaaaaaaaaaar
+      "#,
+      expect![@r#"
+        fooooooooooooooooooooooooooooooooooo
+          + baaaaaaaaaaaaaaaaaar
+      "#],
+    );
+
+    check(
+      &r#"
+        1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10
+      "#,
+      expect![@r#"
+        1 + 2 + 3 + 4 + 5 + 6 + 7 + 8
+          + 9 + 10
       "#],
     );
   }
