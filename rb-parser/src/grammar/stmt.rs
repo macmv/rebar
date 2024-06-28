@@ -93,19 +93,24 @@ pub fn stmt(p: &mut Parser) {
 }
 
 fn params(p: &mut Parser) {
+  let m = p.start();
+
   p.expect(T!['(']);
 
   while !p.at(EOF) && !p.at(T![')']) {
+    let m = p.start();
     p.expect(T![ident]);
     p.expect(T![:]);
     super::types::ty(p);
 
     if p.at(T![,]) {
-      p.bump();
+      p.eat(T![,]);
+      m.complete(p, PARAM);
       if p.at(T![')']) {
         break;
       }
     } else {
+      m.complete(p, PARAM);
       break;
     }
   }
@@ -116,4 +121,6 @@ fn params(p: &mut Parser) {
     p.eat(T![->]);
     super::types::ty(p);
   }
+
+  m.complete(p, PARAMS);
 }
