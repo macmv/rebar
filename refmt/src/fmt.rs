@@ -139,6 +139,17 @@ impl Formatter {
       cst::Expr::Literal(l) => l.syntax().text().to_string(),
       cst::Expr::Name(name) => name.syntax().text().to_string(),
 
+      cst::Expr::Block(expr) => {
+        let mut out = String::new();
+        out += "{\n";
+        for stmt in expr.stmts() {
+          out += "  ";
+          out += &self.fmt_stmt(&stmt);
+        }
+        out += "}";
+        out
+      }
+
       cst::Expr::BinaryExpr(expr) => {
         let lhs = self.fmt_expr(&expr.lhs().unwrap());
         let op = expr.binary_op().unwrap();
@@ -175,6 +186,20 @@ impl Formatter {
         } else {
           out
         }
+      }
+
+      cst::Expr::IfExpr(expr) => {
+        let cond = self.fmt_expr(&expr.cond().unwrap());
+        let then = self.fmt_expr(&expr.then().unwrap());
+        let els = expr.els().map(|e| self.fmt_expr(&e));
+
+        let mut out = format!("if {cond} {then}");
+        if let Some(els) = els {
+          out += " else ";
+          out += &els;
+        }
+
+        out
       }
 
       _ => todo!("expr {expr:?}"),
@@ -506,6 +531,26 @@ mod tests {
       "#,
       expect![@r#"
         let foo = 3
+      "#],
+    );
+  }
+
+  #[test]
+  fn if_stmt() {
+    check(
+      &r#"
+        if  0  {
+          println(2  +  3)
+        }  else  {
+          println(4  +  5)
+        }
+      "#,
+      expect![@r#"
+        if 0 {
+          println(2 + 3)
+        } else {
+          println(4 + 5)
+        }
       "#],
     );
   }
