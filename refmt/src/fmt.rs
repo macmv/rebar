@@ -6,17 +6,51 @@ use rb_syntax::{cst, AstNode, NodeOrToken, SyntaxKind, SyntaxNode, T};
 
 pub struct Formatter {
   pub max_line_length: u32,
+
+  /// Indent width in spaces.
+  pub indent: u32,
 }
 
 impl Default for Formatter {
-  fn default() -> Self { Self { max_line_length: 80 } }
+  fn default() -> Self { Self { max_line_length: 80, indent: 2 } }
 }
 
 fn is_whitespace(kind: SyntaxKind) -> bool { matches!(kind, T![ws] | T![nl]) }
 
+#[derive(Clone)]
+struct FormatterContext<'a> {
+  formatter: &'a Formatter,
+
+  // The offset into the line that this context started at.
+  offset: u32,
+
+  // The current indent level. Multiply this by `formatter.indent` to get the actual indent.
+  indent: u32,
+
+  out: String,
+}
+
 impl Formatter {
+  fn ctx(&self) -> FormatterContext {
+    FormatterContext { formatter: self, offset: 0, indent: 0, out: String::new() }
+  }
+
   fn fmt_leading_whitespace(&self, node: &SyntaxNode) -> String {
-    let mut out = String::new();
+    let mut ctx = self.ctx();
+    ctx.fmt_leading_whitespace(node);
+    ctx.out
+  }
+
+  fn fmt_stmt(&self, node: &cst::Stmt) -> String {
+    let mut ctx = self.ctx();
+    ctx.fmt_stmt(node);
+    ctx.out
+  }
+}
+
+impl FormatterContext<'_> {
+  fn fmt_leading_whitespace(&mut self, node: &SyntaxNode) {
+    let mut whitespace = String::new();
     let mut found_ws = false;
     for child in node.children_with_tokens() {
       if !is_whitespace(child.kind()) {
@@ -29,19 +63,20 @@ impl Formatter {
         NodeOrToken::Token(ref n) => n.text().to_string(),
       };
 
-      out += &s;
+      whitespace += &s;
     }
 
     if !found_ws {
-      return "".into();
+      return;
     }
 
     // Act line there's a newline before the file.
-    self.fmt_whitespace(format!("\n{out}")).trim_start().to_string()
+    whitespace.insert(0, '\n');
+    self.out += &self.fmt_whitespace(whitespace).trim_start().to_string();
   }
 
-  fn fmt_trailing_whitespace(&self, node: &SyntaxNode) -> String {
-    let mut out = String::new();
+  fn fmt_trailing_whitespace(&mut self, node: &SyntaxNode) {
+    let mut whitespace = String::new();
     let mut curr = NodeOrToken::from(node.clone());
     let mut found_ws = false;
     while let Some(ws) = curr.next_sibling_or_token() {
@@ -55,15 +90,15 @@ impl Formatter {
         NodeOrToken::Token(ref n) => n.text().to_string(),
       };
 
-      out += &s;
+      whitespace += &s;
       curr = ws;
     }
 
     if !found_ws {
-      return "".into();
+      return;
     }
 
-    self.fmt_whitespace(out)
+    self.out += &self.fmt_whitespace(whitespace);
   }
 
   fn fmt_whitespace(&self, whitespace: String) -> String {
@@ -117,100 +152,113 @@ impl Formatter {
     out
   }
 
-  pub fn fmt_stmt(&mut self, stmt: &cst::Stmt) -> String {
-    let s = match stmt {
+  pub fn fmt_stmt(&mut self, stmt: &cst::Stmt) {
+    match stmt {
       cst::Stmt::ExprStmt(expr) => self.fmt_expr(&expr.expr().unwrap()),
       cst::Stmt::Let(let_stmt) => {
-        let name = let_stmt.ident_token().unwrap().text().to_string();
-        let expr = self.fmt_expr(&let_stmt.expr().unwrap());
-
-        format!("let {name} = {expr}",)
+        self.out += "let ";
+        self.out += let_stmt.ident_token().unwrap().text();
+        self.out += " = ";
+        self.fmt_expr(&let_stmt.expr().unwrap());
       }
       _ => todo!("stmt {stmt:?}"),
     };
 
-    let suffix = self.fmt_trailing_whitespace(stmt.syntax());
-
-    format!("{s}{suffix}")
+    self.fmt_trailing_whitespace(stmt.syntax());
   }
 
-  pub fn fmt_expr(&mut self, expr: &cst::Expr) -> String {
+  pub fn fmt_expr(&mut self, expr: &cst::Expr) {
     match expr {
-      cst::Expr::Literal(l) => l.syntax().text().to_string(),
-      cst::Expr::Name(name) => name.syntax().text().to_string(),
+      cst::Expr::Literal(l) => self.out += &l.syntax().text().to_string(),
+      cst::Expr::Name(name) => self.out += &name.syntax().text().to_string(),
 
       cst::Expr::Block(expr) => {
-        let mut out = String::new();
-        out += "{\n";
+        self.out += "{\n";
+        self.indent += 1;
         for stmt in expr.stmts() {
-          out += "  ";
-          out += &self.fmt_stmt(&stmt);
+          self.out += "  ";
+          self.fmt_stmt(&stmt);
         }
-        out += "}";
-        out
+        self.indent -= 1;
+        self.out += "}";
       }
 
       cst::Expr::BinaryExpr(expr) => {
-        let lhs = self.fmt_expr(&expr.lhs().unwrap());
-        let op = expr.binary_op().unwrap();
-        let rhs = self.fmt_expr(&expr.rhs().unwrap());
-
-        let out = format!("{lhs} {op} {rhs}",);
-
-        // TODO: If `out` is longer than a line, split this into multiple lines.
-
-        out
+        // TODO: If `out` is longer than a line, split this into multiple lines, and
+        // retry the right hand side.
+        self.fmt_expr(&expr.lhs().unwrap());
+        self.out += " ";
+        self.out += &expr.binary_op().unwrap().syntax().text().to_string();
+        self.out += " ";
+        self.fmt_expr(&expr.rhs().unwrap());
       }
 
       cst::Expr::CallExpr(call) => {
-        let lhs = self.fmt_expr(&call.expr().unwrap());
-        let args = call
-          .arg_list()
-          .unwrap()
-          .exprs()
-          .map(|arg| self.fmt_expr(&arg))
-          .collect::<Vec<_>>()
-          .join(", ");
+        self.fmt_expr(&call.expr().unwrap());
 
-        let out = format!("{lhs}({args})");
+        let retry = self.clone();
+        self.out += "(";
+        let mut first = true;
+        for arg in call.arg_list().unwrap().exprs() {
+          if !first {
+            self.out += ", ";
+          }
+          first = false;
+          self.fmt_expr(&arg);
+        }
+        self.out += ")";
 
-        if out.len() > self.max_line_length as usize {
-          let args = call
-            .arg_list()
-            .unwrap()
-            .exprs()
-            .map(|arg| format!("  {}", self.fmt_expr(&arg)))
-            .collect::<Vec<_>>()
-            .join(",\n");
-          format!("{lhs}(\n{args}\n)")
-        } else {
-          out
+        if self.over_line_limit() {
+          self.reset(retry);
+          self.out += "(\n";
+          self.indent += 1;
+          let mut first = true;
+          for arg in call.arg_list().unwrap().exprs() {
+            if !first {
+              self.out += ",\n";
+            }
+            first = false;
+            self.out += "  ";
+            self.fmt_expr(&arg);
+          }
+          self.indent -= 1;
+          self.out += "\n)";
         }
       }
 
       cst::Expr::IfExpr(expr) => {
-        let cond = self.fmt_expr(&expr.cond().unwrap());
-        let then = self.fmt_expr(&expr.then().unwrap());
-        let els = expr.els().map(|e| self.fmt_expr(&e));
-
-        let mut out = format!("if {cond} {then}");
-        if let Some(els) = els {
-          out += " else ";
-          out += &els;
+        self.out += "if ";
+        self.fmt_expr(&expr.cond().unwrap());
+        self.out += " ";
+        self.fmt_expr(&expr.then().unwrap());
+        if let Some(els) = expr.els() {
+          self.out += " else ";
+          self.fmt_expr(&els);
         }
-
-        out
       }
 
       _ => todo!("expr {expr:?}"),
     }
+  }
+
+  fn reset(&mut self, retry: FormatterContext) {
+    self.out = retry.out;
+    self.offset = retry.offset;
+    self.indent = retry.indent;
+  }
+
+  fn over_line_limit(&self) -> bool {
+    let current_line_len = self.out.chars().rev().take_while(|&c| c != '\n').count() as u32;
+    let total_line_len = current_line_len + self.offset;
+
+    total_line_len > self.formatter.max_line_length
   }
 }
 
 pub fn format(cst: &cst::SourceFile) -> String { format_opts(cst, Formatter::default()) }
 
 // TODO: Hook up formatter options to the CLI.
-pub fn format_opts(cst: &cst::SourceFile, mut fmt: Formatter) -> String {
+pub fn format_opts(cst: &cst::SourceFile, fmt: Formatter) -> String {
   let mut out = String::new();
 
   out += &fmt.fmt_leading_whitespace(cst.syntax());
@@ -240,7 +288,10 @@ mod tests {
       panic!("{}", error.message());
     }
 
-    expected.assert_eq(&format_opts(&cst.tree(), Formatter { max_line_length: 30 }));
+    expected.assert_eq(&format_opts(
+      &cst.tree(),
+      Formatter { max_line_length: 30, ..Default::default() },
+    ));
   }
 
   #[test]
