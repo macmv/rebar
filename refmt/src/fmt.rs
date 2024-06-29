@@ -85,10 +85,11 @@ impl FormatterContext<'_> {
 
       (T!['('] | T![')'] | IDENT, _) => (None, None),
 
-      (T!['}'], _) => (Newline, Space),
+      (T!['}'], _) => (Newline, None),
       (T!['{'], _) => (Space, Newline),
 
       (T![let] | T![if] | T![def], _) => (None, Space),
+      (T![else], _) => (Space, None),
       (_, LET) => (Space, Space),
 
       (_, BINARY_OP) => {
@@ -207,12 +208,7 @@ impl FormatterContext<'_> {
 
           match right {
             Spacing::None => {}
-            Spacing::Space => {
-              // Don't insert trailing whitespace.
-              if t.next_token().is_some_and(|t| t.kind() != T![nl]) {
-                self.out += " ";
-              }
-            }
+            Spacing::Space => self.out += " ",
             Spacing::Newline => {
               // Don't insert too many blank lines.
               if !self.out.ends_with("\n\n") {
@@ -299,6 +295,18 @@ mod tests {
     check(
       r#"
         print_impl(2,3,)
+      "#,
+      expect![@r#"
+        print_impl(2, 3)
+      "#],
+    );
+
+    check(
+      r#"
+        print_impl(
+          2,
+          3,
+        )
       "#,
       expect![@r#"
         print_impl(2, 3)
