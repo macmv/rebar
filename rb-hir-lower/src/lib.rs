@@ -83,21 +83,7 @@ impl FunctionLower<'_> {
         let lhs = self.expr_opt(expr.lhs());
         let rhs = self.expr_opt(expr.rhs());
 
-        let Some(op) = expr.binary_op() else {
-          panic!("missing binary operator {expr}");
-        };
-
-        let op = if op.plus_token().is_some() {
-          hir::BinaryOp::Add
-        } else if op.minus_token().is_some() {
-          hir::BinaryOp::Sub
-        } else if op.star_token().is_some() {
-          hir::BinaryOp::Mul
-        } else if op.slash_token().is_some() {
-          hir::BinaryOp::Div
-        } else {
-          panic!("unexpected binary operator {expr}");
-        };
+        let op = binary_op_from_cst(&expr.binary_op().unwrap());
 
         hir::Expr::BinaryOp(lhs, op, rhs)
       }
@@ -129,4 +115,35 @@ impl FunctionLower<'_> {
     self.span_map.exprs.push(Span { file: self.source, range: cst.syntax().text_range() });
     self.f.exprs.alloc(expr)
   }
+}
+
+fn binary_op_from_cst(cst: &cst::BinaryOp) -> hir::BinaryOp {
+  macro_rules! ops {
+    { $($cst:ident => $hir:ident)* } => {
+      $(
+        if cst.$cst().is_some() {
+          return hir::BinaryOp::$hir;
+        }
+      )*
+    };
+  }
+
+  ops! {
+    plus_token => Add
+    minus_token => Sub
+    star_token => Mul
+    slash_token => Div
+    percent_token => Mod
+    eq_eq_token => Eq
+    not_eq_token => Neq
+    less_token => Lt
+    less_eq_token => Lte
+    greater_token => Gt
+    greater_eq_token => Gte
+    and_token => And
+    or_token => Or
+    bit_and_token => BitAnd
+    bit_or_token => BitAnd
+  }
+  panic!("unexpected binary operator {cst}");
 }

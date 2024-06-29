@@ -57,6 +57,8 @@ pub enum BinaryOp {
   Mul,
   Div,
   Mod,
+  BitAnd,
+  BitOr,
   And,
   Or,
   Eq,
