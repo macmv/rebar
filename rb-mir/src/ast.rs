@@ -24,6 +24,8 @@ pub struct VarId(pub u32);
 pub enum Expr {
   Literal(Literal),
   Call(ExprId, Type, Vec<ExprId>),
+
+  Unary(ExprId, UnaryOp, Type),
   Binary(ExprId, BinaryOp, ExprId, Type),
 
   Local(VarId),
@@ -48,6 +50,12 @@ pub enum Literal {
   Int(i64),
   Bool(bool),
   Unit,
+}
+
+#[derive(Debug)]
+pub enum UnaryOp {
+  Neg,
+  Not,
 }
 
 #[derive(Debug)]

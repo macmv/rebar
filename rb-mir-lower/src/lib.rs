@@ -72,6 +72,19 @@ impl Lower<'_> {
         mir::Expr::Block(stmts)
       }
 
+      hir::Expr::Paren(inner) => return self.lower_expr(inner),
+
+      hir::Expr::UnaryOp(inner, ref op) => {
+        let inner = self.lower_expr(inner);
+
+        let op = match op {
+          hir::UnaryOp::Not => mir::UnaryOp::Not,
+          hir::UnaryOp::Neg => mir::UnaryOp::Neg,
+        };
+
+        mir::Expr::Unary(inner, op, self.ty.type_of_expr(expr))
+      }
+
       hir::Expr::BinaryOp(lhs, ref op, rhs) => {
         let lhs = self.lower_expr(lhs);
         let rhs = self.lower_expr(rhs);
