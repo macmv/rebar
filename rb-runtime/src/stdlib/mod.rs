@@ -4,6 +4,7 @@ mod core;
 mod std;
 
 use rb_jit::jit::RebarSlice;
+use rb_mir::ast as mir;
 use rb_typer::{Literal, Type};
 
 pub struct Environment {
@@ -70,6 +71,17 @@ impl Environment {
         .names
         .iter()
         .map(|(k, v)| (k.clone(), Type::Function(v.args.clone(), Box::new(v.ret.clone()))))
+        .collect(),
+    }
+  }
+
+  pub fn mir_env(&self) -> rb_mir_lower::Env {
+    rb_mir_lower::Env {
+      functions: self
+        .ids
+        .iter()
+        .enumerate()
+        .map(|(k, v)| (v.clone(), mir::NativeFunctionId(k as u64)))
         .collect(),
     }
   }

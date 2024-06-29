@@ -35,12 +35,13 @@ pub fn eval(src: &str) {
   let mut functions = vec![];
 
   let static_env = env.static_env();
+  let mir_env = env.mir_env();
   rb_diagnostic::run_or_exit(sources, || {
     let (hir, span_map) = hir;
 
     for function in hir.functions.values() {
       let typer = rb_typer::Typer::check(&static_env, function, &span_map);
-      functions.push(rb_mir_lower::lower_function(&typer, function));
+      functions.push(rb_mir_lower::lower_function(&mir_env, &typer, function));
     }
   });
 

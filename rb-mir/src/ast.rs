@@ -20,6 +20,10 @@ pub struct Function {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VarId(pub u32);
 
+/// A native function ID. These are static from the perspective of the JIT.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NativeFunctionId(pub u64);
+
 #[derive(Debug)]
 pub enum Expr {
   Literal(Literal),
@@ -29,7 +33,7 @@ pub enum Expr {
   Binary(ExprId, BinaryOp, ExprId, Type),
 
   Local(VarId),
-  Native(String, Type),
+  Native(NativeFunctionId, Type),
 
   Block(Vec<StmtId>),
 

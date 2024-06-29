@@ -6,10 +6,14 @@ use rb_hir::ast as hir;
 use rb_mir::ast as mir;
 use rb_typer::{Type, Typer};
 
-pub fn lower_function(ty: &Typer, hir: &hir::Function) -> mir::Function {
+pub struct Env {
+  pub functions: HashMap<String, mir::NativeFunctionId>,
+}
+
+pub fn lower_function(env: &Env, ty: &Typer, hir: &hir::Function) -> mir::Function {
   let mut mir = mir::Function::default();
 
-  let mut lower = Lower { ty, hir, mir: &mut mir, locals: HashMap::new() };
+  let mut lower = Lower { env, ty, hir, mir: &mut mir, locals: HashMap::new() };
   for stmt in hir.items.iter() {
     let id = lower.lower_stmt(*stmt);
     lower.mir.items.push(id);
@@ -19,6 +23,7 @@ pub fn lower_function(ty: &Typer, hir: &hir::Function) -> mir::Function {
 }
 
 struct Lower<'a> {
+  env: &'a Env,
   ty:  &'a Typer<'a>,
   hir: &'a hir::Function,
   mir: &'a mut mir::Function,
@@ -57,7 +62,10 @@ impl Lower<'_> {
       // We should probably convert it to something more useful than a string though.
       hir::Expr::Name(ref v) => match self.locals.get(v) {
         Some(local) => mir::Expr::Local(*local),
-        None => mir::Expr::Native(v.clone(), self.ty.type_of_expr(expr)),
+        None => {
+          let id = self.env.functions[v];
+          mir::Expr::Native(id, self.ty.type_of_expr(expr))
+        }
       },
 
       hir::Expr::Block(ref block) => {

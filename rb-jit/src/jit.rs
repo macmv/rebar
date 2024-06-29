@@ -256,16 +256,7 @@ impl BlockBuilder<'_> {
 
       mir::Expr::Local(id) => self.builder.use_var(self.locals[&id]),
 
-      mir::Expr::Native(ref name, ref _ty) => {
-        let id = match name.as_str() {
-          "assert_eq" => 0,
-          "assert" => 1,
-          "println" => 2,
-          _ => panic!("unknown name {name}"),
-        };
-
-        self.builder.ins().iconst(ir::types::I64, id)
-      }
+      mir::Expr::Native(ref id, _) => self.builder.ins().iconst(ir::types::I64, id.0 as i64),
 
       mir::Expr::Block(ref stmts) => {
         // FIXME: Make a new scope so that locals don't leak.
