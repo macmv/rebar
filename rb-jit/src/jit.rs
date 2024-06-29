@@ -18,22 +18,38 @@ pub struct JIT {
   #[allow(dead_code)]
   data_description: DataDescription,
 
-  call_func: FuncId,
+  funcs: NativeFuncs<FuncId>,
 }
 
 pub struct ThreadCtx<'a> {
   builder_context: FunctionBuilderContext,
   ctx:             codegen::Context,
 
-  isa:            &'a dyn TargetIsa,
-  call_func:      FuncId,
-  call_func_decl: &'a FunctionDeclaration,
+  isa: &'a dyn TargetIsa,
+
+  funcs: NativeFuncs<NativeFuncDecl<'a>>,
+}
+
+#[derive(Clone, Copy)]
+struct NativeFuncDecl<'a> {
+  id:   FuncId,
+  decl: &'a FunctionDeclaration,
+}
+
+struct NativeFuncs<T> {
+  call: T,
+}
+
+impl<T: Copy> NativeFuncs<T> {
+  fn map<U>(&self, mut f: impl FnMut(T) -> U) -> NativeFuncs<U> {
+    NativeFuncs { call: f(self.call) }
+  }
 }
 
 pub struct FuncBuilder<'a> {
-  builder:       FunctionBuilder<'a>,
-  mir:           &'a mir::Function,
-  call_func_ref: FuncRef,
+  builder: FunctionBuilder<'a>,
+  mir:     &'a mir::Function,
+  funcs:   NativeFuncs<FuncRef>,
 
   // Note that `VarId` and `Variable` are entirely distinct.
   //
@@ -111,7 +127,7 @@ impl JIT {
 
     let call_func = module.declare_function("__call", Linkage::Import, &call_sig).unwrap();
 
-    JIT { data_description: DataDescription::new(), module, call_func }
+    JIT { data_description: DataDescription::new(), module, funcs: NativeFuncs { call: call_func } }
   }
 
   pub fn new_thread(&self) -> ThreadCtx {
@@ -121,9 +137,15 @@ impl JIT {
       builder_context: FunctionBuilderContext::new(),
       ctx,
       isa: self.module.isa(),
-      call_func: self.call_func,
-      call_func_decl: self.module.declarations().get_function_decl(self.call_func),
+
+      funcs: self.funcs(),
     }
+  }
+
+  fn funcs(&self) -> NativeFuncs<NativeFuncDecl> {
+    self
+      .funcs
+      .map(|id| NativeFuncDecl { id, decl: self.module.declarations().get_function_decl(id) })
   }
 
   pub fn finalize(&mut self) { self.module.finalize_definitions().unwrap(); }
@@ -152,19 +174,21 @@ impl ThreadCtx<'_> {
     // TODO: Declare variables.
     // for stmt in source.stmts() {}
 
-    let signature = builder.func.import_signature(self.call_func_decl.signature.clone());
-    let user_name_ref = builder.func.declare_imported_user_function(ir::UserExternalName {
-      namespace: 0,
-      index:     self.call_func.as_u32(),
-    });
-    let colocated = self.call_func_decl.linkage.is_final();
-    let call_func_ref = builder.func.import_function(ir::ExtFuncData {
-      name: ir::ExternalName::user(user_name_ref),
-      signature,
-      colocated,
+    let funcs = self.funcs.map(|func| {
+      let signature = builder.func.import_signature(func.decl.signature.clone());
+      let user_name_ref = builder.func.declare_imported_user_function(ir::UserExternalName {
+        namespace: 0,
+        index:     func.id.as_u32(),
+      });
+      let colocated = func.decl.linkage.is_final();
+      builder.func.import_function(ir::ExtFuncData {
+        name: ir::ExternalName::user(user_name_ref),
+        signature,
+        colocated,
+      })
     });
 
-    FuncBuilder { builder, mir, call_func_ref, locals: HashMap::new(), next_variable: 0 }
+    FuncBuilder { builder, mir, funcs, locals: HashMap::new(), next_variable: 0 }
   }
 
   pub fn translate_function(&mut self, mir: &mir::Function) { self.new_function(mir).translate(); }
@@ -310,7 +334,7 @@ impl FuncBuilder<'_> {
 
         let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, slot, 0);
 
-        let call = self.builder.ins().call(self.call_func_ref, &[lhs, arg_ptr]);
+        let call = self.builder.ins().call(self.funcs.call, &[lhs, arg_ptr]);
 
         match *sig_ty {
           Type::Function(_, ref ret) => match **ret {
