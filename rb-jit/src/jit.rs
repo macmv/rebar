@@ -311,6 +311,23 @@ impl BlockBuilder<'_> {
         }
       }
 
+      mir::Expr::Unary(lhs, ref op, _) => {
+        let lhs = self.compile_expr(lhs);
+
+        let res = match op {
+          mir::UnaryOp::Neg => self.builder.ins().ineg(lhs),
+          mir::UnaryOp::Not => self.builder.ins().bxor_imm(lhs, 1),
+        };
+
+        #[cfg(debug_assertions)]
+        {
+          use cranelift::codegen::ir::InstBuilderBase;
+          assert_eq!(self.builder.ins().data_flow_graph().value_type(res), ir::types::I64);
+        }
+
+        res
+      }
+
       mir::Expr::Binary(lhs, ref op, rhs, _) => {
         let lhs = self.compile_expr(lhs);
         let rhs = self.compile_expr(rhs);
