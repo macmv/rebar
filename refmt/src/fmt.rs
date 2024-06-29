@@ -2,7 +2,7 @@
 //!
 //! TODO: Move to another crate.
 
-use rb_syntax::{cst, AstNode, NodeOrToken, SyntaxKind, SyntaxNode, T};
+use rb_syntax::{cst, AstNode, NodeOrToken, SyntaxKind, SyntaxKind::*, SyntaxNode, SyntaxToken, T};
 
 pub struct Formatter {
   pub max_line_length: u32,
@@ -25,271 +25,179 @@ struct FormatterContext<'a> {
   indent: u32,
 
   out: String,
+
+  multiline: bool,
 }
 
 impl Formatter {
   fn ctx(&self) -> FormatterContext {
-    FormatterContext { formatter: self, indent: 0, out: String::new() }
+    FormatterContext { formatter: self, indent: 0, out: String::new(), multiline: false }
   }
 
-  fn fmt_leading_whitespace(&self, node: &SyntaxNode) -> String {
+  fn fmt(&self, cst: &cst::SourceFile) -> String {
     let mut ctx = self.ctx();
-    ctx.fmt_leading_whitespace(node);
-    ctx.out
-  }
-
-  fn fmt_stmt(&self, node: &cst::Stmt) -> String {
-    let mut ctx = self.ctx();
-    ctx.fmt_stmt(node);
+    ctx.fmt_syntax(cst.syntax());
     ctx.out
   }
 }
 
+enum Spacing {
+  None,
+  Space,
+  Newline,
+}
+
 impl FormatterContext<'_> {
-  fn fmt_leading_whitespace(&mut self, node: &SyntaxNode) {
-    let mut whitespace = String::new();
-    let mut found_ws = false;
-    for child in node.children_with_tokens() {
-      if !is_whitespace(child.kind()) {
-        break;
-      }
-      found_ws = true;
+  fn indent(&mut self, kind: SyntaxKind) {
+    match kind {
+      T!['{'] | T!['('] => self.indent += 1,
+      T!['}'] | T![')'] => self.indent -= 1,
 
-      let s = match child {
-        NodeOrToken::Node(ref n) => n.text().to_string(),
-        NodeOrToken::Token(ref n) => n.text().to_string(),
-      };
-
-      whitespace += &s;
+      _ => {}
     }
-
-    if !found_ws {
-      return;
-    }
-
-    // Act line there's a newline before the file.
-    whitespace.insert(0, '\n');
-    self.out += &self.fmt_whitespace(whitespace).trim_start().to_string();
   }
 
-  fn fmt_trailing_whitespace(&mut self, node: &SyntaxNode) {
-    let mut whitespace = String::new();
-    let mut curr = NodeOrToken::from(node.clone());
-    let mut found_ws = false;
-    while let Some(ws) = curr.next_sibling_or_token() {
-      found_ws = true;
-      if !is_whitespace(ws.kind()) {
-        break;
+  fn spacing(&self, token: &SyntaxToken) -> (Spacing, Spacing) {
+    use Spacing::*;
+
+    match (token.kind(), token.parent().unwrap().kind()) {
+      (T![ws], _) => {
+        let text = token.text().to_string();
+        if text.trim().is_empty() {
+          (None, None)
+        } else if text.trim().starts_with("/*") {
+          (Space, Space)
+        } else if text.trim().starts_with("//") {
+          (None, Newline)
+        } else {
+          panic!("unexpected whitespace: {:?}", text);
+        }
       }
 
-      let s = match ws {
-        NodeOrToken::Node(ref n) => n.text().to_string(),
-        NodeOrToken::Token(ref n) => n.text().to_string(),
-      };
+      // Newlines in some places are significant, elsewhere we just make our own newlines (for
+      // example, blocks add newlines as part of the `{` token, so we want to remove user-defined
+      // newlines there).
+      (T![nl], SOURCE_FILE) => (None, Newline),
+      (T![nl], _) => (None, None),
 
-      whitespace += &s;
-      curr = ws;
+      (T![')'], _) if self.multiline => (None, None),
+      (T!['('], _) if self.multiline => (None, Newline),
+
+      (T!['('] | T![')'] | IDENT, _) => (None, None),
+
+      (T!['}'], _) => (Newline, Space),
+      (T!['{'], _) => (Space, Newline),
+
+      (T![let] | T![if] | T![def], _) => (None, Space),
+      (_, LET) => (Space, Space),
+
+      (_, BINARY_OP) => {
+        if self.multiline {
+          (None, Space)
+        } else {
+          (Space, Space)
+        }
+      }
+
+      (_, LITERAL) => (None, None),
+
+      (T![,], _) if self.multiline => (None, Newline),
+      (T![,] | T![:], _) => (None, Space),
+
+      (_, _) => (None, None),
     }
-
-    if !found_ws {
-      return;
-    }
-
-    self.out += &self.fmt_whitespace(whitespace);
   }
 
-  fn fmt_whitespace(&self, whitespace: String) -> String {
-    let out = whitespace.trim_start_matches(' ').trim_end_matches(' ');
-    // let out = out.strip_suffix('\n').unwrap_or(out);
+  fn fmt_syntax(&mut self, node: &SyntaxNode) {
+    for node in node.children_with_tokens() {
+      match node {
+        NodeOrToken::Node(ref n) => {
+          let retry = match n.kind() {
+            CALL_EXPR | BINARY_EXPR => Some(self.clone()),
+            _ => None,
+          };
 
-    // `res` is the resulting lines between the previous statement and `node`.
-    let mut res: Vec<&str> = vec![];
-
-    const EMPTY_LINE_THRESHOLD: usize = 2;
-
-    let mut empty_lines = 0;
-
-    // Note that .lines() trims the last line (but only sometimes), and .split('\n')
-    // does not.
-    //
-    // We want to skip the first and last lines, so we use `iter.next()` in this
-    // somewhat odd way.
-    let mut iter = out.split('\n');
-    iter.next(); // Skip the first line.
-    let mut curr = iter.next();
-
-    while let Some(line) = curr {
-      curr = iter.next();
-      if curr.is_none() {
-        // Skip the last line.
-        break;
-      };
-
-      let line = line.trim();
-
-      if line.is_empty() {
-        empty_lines += 1;
-      } else {
-        empty_lines = 0;
-      }
-
-      if empty_lines < EMPTY_LINE_THRESHOLD {
-        res.push(line);
-      }
-    }
-
-    let mut out = String::new();
-
-    out += "\n";
-    for line in res {
-      out += line;
-      out += "\n";
-    }
-
-    out
-  }
-
-  pub fn fmt_stmt(&mut self, stmt: &cst::Stmt) {
-    match stmt {
-      cst::Stmt::ExprStmt(expr) => self.fmt_expr(&expr.expr().unwrap()),
-      cst::Stmt::Let(let_stmt) => {
-        self.out += "let ";
-        self.out += let_stmt.ident_token().unwrap().text();
-        self.out += " = ";
-        self.fmt_expr(&let_stmt.expr().unwrap());
-      }
-      cst::Stmt::Def(def_stmt) => {
-        self.out += "def ";
-        self.out += &def_stmt.ident_token().unwrap().to_string();
-        self.out += "(";
-        let mut first = true;
-        for param in def_stmt.params().unwrap().params() {
-          if !first {
-            self.out += ", ";
+          let old_multiline = self.multiline;
+          if self.multiline && retry.is_some() {
+            self.multiline = false;
           }
-          first = false;
-          self.out += &param.ident_token().unwrap().to_string();
-          self.out += ": ";
+          self.fmt_syntax(n);
+          self.multiline = old_multiline;
 
-          // TODO: Format types.
-          self.out += &param.ty().unwrap().syntax().text().to_string();
-        }
-        self.out += ") ";
-        self.fmt_expr(&cst::Expr::Block(def_stmt.block().unwrap()));
-      }
-      _ => todo!("stmt {stmt:?}"),
-    };
-
-    self.fmt_trailing_whitespace(stmt.syntax());
-  }
-
-  pub fn fmt_expr(&mut self, expr: &cst::Expr) {
-    match expr {
-      cst::Expr::Literal(l) => self.out += &l.syntax().text().to_string(),
-      cst::Expr::Name(name) => self.out += &name.syntax().text().to_string(),
-
-      cst::Expr::Block(expr) => {
-        self.out += "{\n";
-        self.indent += 1;
-        for stmt in expr.stmts() {
-          self.out += "  ";
-          self.fmt_stmt(&stmt);
-        }
-        self.indent -= 1;
-        self.out += "}";
-      }
-
-      cst::Expr::BinaryExpr(expr) => {
-        self.fmt_expr(&expr.lhs().unwrap());
-
-        let retry = self.clone();
-
-        // Attempt 1:
-        // ```
-        // 1 + 2
-        // ```
-        self.out += " ";
-        self.out += &expr.binary_op().unwrap().syntax().text().to_string();
-        self.out += " ";
-        self.fmt_expr(&expr.rhs().unwrap());
-
-        if self.over_line_limit() {
-          // Attempt 2:
-          // ```
-          // 1
-          //   + 2
-          // ```
-          self.reset(retry);
-          self.indent += 1;
-          self.write_line();
-          self.out += &expr.binary_op().unwrap().syntax().text().to_string();
-          self.out += " ";
-          self.fmt_expr(&expr.rhs().unwrap());
-          self.indent -= 1;
-        }
-      }
-
-      cst::Expr::CallExpr(call) => {
-        self.fmt_expr(&call.expr().unwrap());
-
-        // Attempt 1:
-        // ```
-        // print(1, 2, 3)
-        // ```
-        let retry = self.clone();
-        self.out += "(";
-        let mut first = true;
-        for arg in call.arg_list().unwrap().exprs() {
-          if !first {
-            self.out += ", ";
+          if let Some(retry) = retry {
+            if self.over_line_limit() {
+              self.reset(retry);
+              self.multiline = true;
+              self.fmt_syntax(n);
+              self.multiline = false;
+            }
           }
-          first = false;
-          self.fmt_expr(&arg);
         }
-        self.out += ")";
+        NodeOrToken::Token(ref t) => {
+          let (left, right) = self.spacing(t);
+          self.indent(t.kind());
 
-        if self.over_line_limit() {
-          // Attempt 2:
-          // ```
-          // print(
-          //   1,
-          //   2,
-          //   3,
-          // )
-          // ```
-          self.reset(retry);
-          self.out += "(";
-          self.indent += 1;
-          for arg in call.arg_list().unwrap().exprs() {
-            self.write_line();
-            self.fmt_expr(&arg);
-            self.out += ",";
+          let text = t.text().to_string();
+          if text.trim().is_empty() && !text.contains('\n') {
+            continue;
           }
-          self.indent -= 1;
-          self.write_line();
-          self.out += ")";
+
+          let mut curr = NodeOrToken::from(t.clone());
+          while let Some(prev) = curr.prev_sibling_or_token() {
+            curr = prev;
+            if !is_whitespace(curr.kind()) {
+              break;
+            }
+          }
+
+          match (t.kind(), t.parent().unwrap().kind()) {
+            (T![')'], ARG_LIST) if self.multiline && curr.kind() != T![,] => {
+              self.out += ",\n";
+            }
+            (T![+], _) if self.multiline => {
+              self.out += "\n  ";
+            }
+            _ => {}
+          }
+
+          match left {
+            Spacing::None => {}
+            Spacing::Space => self.out += " ",
+            Spacing::Newline => {
+              // Don't insert too many blank lines.
+              if !self.out.ends_with("\n\n") {
+                self.out += "\n"
+              }
+            }
+          }
+
+          if !text.trim().is_empty() {
+            if self.out.ends_with('\n') {
+              for _ in 0..self.indent * self.formatter.indent {
+                self.out.push(' ');
+              }
+            }
+          }
+
+          self.out += &text.trim();
+
+          match right {
+            Spacing::None => {}
+            Spacing::Space => {
+              // Don't insert trailing whitespace.
+              if t.next_token().is_some_and(|t| t.kind() != T![nl]) {
+                self.out += " ";
+              }
+            }
+            Spacing::Newline => {
+              // Don't insert too many blank lines.
+              if !self.out.ends_with("\n\n") {
+                self.out += "\n"
+              }
+            }
+          }
         }
       }
-
-      cst::Expr::IfExpr(expr) => {
-        self.out += "if ";
-        self.fmt_expr(&expr.cond().unwrap());
-        self.out += " ";
-        self.fmt_expr(&expr.then().unwrap());
-        if let Some(els) = expr.els() {
-          self.out += " else ";
-          self.fmt_expr(&els);
-        }
-      }
-
-      _ => todo!("expr {expr:?}"),
-    }
-  }
-
-  fn write_line(&mut self) {
-    self.out.push('\n');
-    for _ in 0..self.indent * self.formatter.indent {
-      self.out.push(' ');
     }
   }
 
@@ -311,10 +219,7 @@ pub fn format(cst: &cst::SourceFile) -> String { format_opts(cst, Formatter::def
 pub fn format_opts(cst: &cst::SourceFile, fmt: Formatter) -> String {
   let mut out = String::new();
 
-  out += &fmt.fmt_leading_whitespace(cst.syntax());
-  for stmt in cst.stmts() {
-    out += &fmt.fmt_stmt(&stmt);
-  }
+  out += &fmt.fmt(&cst);
 
   while out.ends_with('\n') {
     out.pop();
@@ -686,6 +591,17 @@ mod tests {
         def  foo  (  x : int ,  y : str )  {
           x  +  y
         }
+      "#,
+      expect![@r#"
+        def foo(x: int, y: str) {
+          x + y
+        }
+      "#],
+    );
+
+    check(
+      &r#"
+        def foo(x:int,y:str){x+y}
       "#,
       expect![@r#"
         def foo(x: int, y: str) {
