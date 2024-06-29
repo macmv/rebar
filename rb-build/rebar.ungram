@@ -34,6 +34,7 @@ Expr =
   PostfixExpr |
   BinaryExpr |
   IfExpr |
+  ParenExpr |
   Block
 
 String = '"' 'char'* Escape* '"'
@@ -46,6 +47,7 @@ BinaryExpr = Expr BinaryOp Expr
 
 IfExpr = 'if' Expr Block ('else' 'if' Expr Block)* ('else' Block)?
 
+ParenExpr = '(' Expr ')'
 Block = '{' Stmt* '}'
 
 Type = Name

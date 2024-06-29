@@ -102,6 +102,16 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
     }
 
     // test ok
+    // (2 + 3)
+    // -(4 - 5)
+    T!['('] => {
+      p.eat(T!['(']);
+      expr(p);
+      p.expect(T![')']);
+      Some(m.complete(p, PAREN_EXPR))
+    }
+
+    // test ok
     // {
     //   print("hello")
     //   print("goodbye")
