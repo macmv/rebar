@@ -97,11 +97,13 @@ impl FormatterContext<'_> {
       (T!['{'], BLOCK)
         if matches!(token.parent().unwrap().parent().unwrap().kind(), IF_EXPR | DEF) =>
       {
-        (Space, Newline)
+        (Space, if self.multiline { Newline } else { Space })
       }
 
-      (T!['}'], _) => (Newline, None),
-      (T!['{'], _) => (None, Newline),
+      (T!['}'], _) if self.multiline => (Newline, None),
+      (T!['{'], _) if self.multiline => (None, Newline),
+      (T!['}'], _) => (Space, None),
+      (T!['{'], _) => (None, Space),
 
       (T![let] | T![if] | T![def], _) => (None, Space),
       (T![else], _) => (Space, None),
@@ -155,9 +157,18 @@ impl FormatterContext<'_> {
             _ => None,
           };
 
+          // Any blocks with multiple expressions are always multiline.
+          let always_multiline = match n.kind() {
+            BLOCK if n.children().count() > 1 => true,
+            _ => false,
+          };
+
           let old_multiline = self.multiline;
           if self.multiline && retry.is_some() {
             self.multiline = false;
+          }
+          if always_multiline {
+            self.multiline = true;
           }
           self.fmt_syntax(n);
           self.multiline = old_multiline;
@@ -599,6 +610,7 @@ mod tests {
 
   #[test]
   fn if_stmt() {
+    // FIXME: This is pretty dumb.
     check(
       &r#"
         if  0  {
@@ -608,10 +620,28 @@ mod tests {
         }
       "#,
       expect![@r#"
+        if 0 { println(2 + 3) } else { println(4
+          + 5) }
+      "#],
+    );
+
+    check(
+      &r#"
+        if  0  {
+          println(2)
+          println(3)
+        }  else  {
+          println(4)
+          println(5)
+        }
+      "#,
+      expect![@r#"
         if 0 {
-          println(2 + 3)
+          println(2)
+          println(3)
         } else {
-          println(4 + 5)
+          println(4)
+          println(5)
         }
       "#],
     );
@@ -649,9 +679,8 @@ mod tests {
         }
       "#,
       expect![@r#"
-        def foo(x: int, y: str) {
-          x + y
-        }
+        def foo(x: int, y: str) { x
+          + y }
       "#],
     );
 
@@ -660,9 +689,8 @@ mod tests {
         def foo(x:int,y:str){x+y}
       "#,
       expect![@r#"
-        def foo(x: int, y: str) {
-          x + y
-        }
+        def foo(x: int, y: str) { x
+          + y }
       "#],
     );
   }
