@@ -76,12 +76,25 @@ impl Lower<'_> {
         let lhs = self.lower_expr(lhs);
         let rhs = self.lower_expr(rhs);
 
+        // TODO: There might be some things like signed comparisons that should be
+        // different in the MIR tree? Not sure if these need to be distinct
+        // types.
         let op = match op {
           hir::BinaryOp::Add => mir::BinaryOp::Add,
           hir::BinaryOp::Sub => mir::BinaryOp::Sub,
           hir::BinaryOp::Mul => mir::BinaryOp::Mul,
           hir::BinaryOp::Div => mir::BinaryOp::Div,
-          _ => todo!(),
+          hir::BinaryOp::Mod => mir::BinaryOp::Mod,
+          hir::BinaryOp::BitAnd => mir::BinaryOp::BitAnd,
+          hir::BinaryOp::BitOr => mir::BinaryOp::BitOr,
+          hir::BinaryOp::And => mir::BinaryOp::And,
+          hir::BinaryOp::Or => mir::BinaryOp::Or,
+          hir::BinaryOp::Eq => mir::BinaryOp::Eq,
+          hir::BinaryOp::Neq => mir::BinaryOp::Neq,
+          hir::BinaryOp::Lt => mir::BinaryOp::Lt,
+          hir::BinaryOp::Lte => mir::BinaryOp::Lte,
+          hir::BinaryOp::Gt => mir::BinaryOp::Gt,
+          hir::BinaryOp::Gte => mir::BinaryOp::Gte,
         };
 
         mir::Expr::Binary(lhs, op, rhs, self.ty.type_of_expr(expr))
