@@ -311,18 +311,49 @@ impl BlockBuilder<'_> {
         }
       }
 
-      mir::Expr::Binary(lhs, ref op, rhs, ref result) => {
+      mir::Expr::Binary(lhs, ref op, rhs, _) => {
         let lhs = self.compile_expr(lhs);
         let rhs = self.compile_expr(rhs);
 
-        match (op, result) {
-          (mir::BinaryOp::Add, _) => self.builder.ins().iadd(lhs, rhs),
-          (mir::BinaryOp::Sub, _) => self.builder.ins().isub(lhs, rhs),
-          (mir::BinaryOp::Mul, _) => self.builder.ins().imul(lhs, rhs),
-          (mir::BinaryOp::Div, _) => self.builder.ins().udiv(lhs, rhs),
-          (mir::BinaryOp::Mod, _) => self.builder.ins().urem(lhs, rhs),
-          _ => unimplemented!(),
+        let res = match op {
+          mir::BinaryOp::Add => self.builder.ins().iadd(lhs, rhs),
+          mir::BinaryOp::Sub => self.builder.ins().isub(lhs, rhs),
+          mir::BinaryOp::Mul => self.builder.ins().imul(lhs, rhs),
+          mir::BinaryOp::Div => self.builder.ins().udiv(lhs, rhs),
+          mir::BinaryOp::Mod => self.builder.ins().urem(lhs, rhs),
+
+          _ => {
+            // `icmp` returns an I8, we want to extend it to an I64. Because we
+            // have typechecking, we could probably get away with
+            // keeping it as an I8 everywhere, but its a lot simpler
+            // to just keep everything an I64.
+
+            let res = match op {
+              mir::BinaryOp::Eq => self.builder.ins().icmp(IntCC::Equal, lhs, rhs),
+              mir::BinaryOp::Neq => self.builder.ins().icmp(IntCC::NotEqual, lhs, rhs),
+
+              // All numbers are signed.
+              mir::BinaryOp::Lt => self.builder.ins().icmp(IntCC::SignedLessThan, lhs, rhs),
+              mir::BinaryOp::Lte => self.builder.ins().icmp(IntCC::SignedLessThanOrEqual, lhs, rhs),
+              mir::BinaryOp::Gt => self.builder.ins().icmp(IntCC::SignedGreaterThan, lhs, rhs),
+              mir::BinaryOp::Gte => {
+                self.builder.ins().icmp(IntCC::SignedGreaterThanOrEqual, lhs, rhs)
+              }
+
+              _ => unreachable!(),
+            };
+
+            self.builder.ins().uextend(ir::types::I64, res)
+          }
+        };
+
+        #[cfg(debug_assertions)]
+        {
+          use cranelift::codegen::ir::InstBuilderBase;
+          assert_eq!(self.builder.ins().data_flow_graph().value_type(res), ir::types::I64);
         }
+
+        res
       }
 
       mir::Expr::If { cond, then, els: None } => {
