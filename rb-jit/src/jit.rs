@@ -11,6 +11,8 @@ use rb_mir::ast as mir;
 use rb_typer::{Literal, Type};
 use std::{collections::HashMap, marker::PhantomPinned};
 
+use crate::value::RValue;
+
 pub struct JIT {
   module: JITModule,
 
@@ -204,7 +206,7 @@ impl FuncBuilder<'_> {
 
     for &stmt in &self.mir.items {
       let res = self.compile_stmt(stmt);
-      self.builder.def_var(return_variable, res);
+      // self.builder.def_var(return_variable, res);
     }
 
     let return_value = self.builder.use_var(return_variable);
@@ -264,35 +266,38 @@ impl FuncBuilder<'_> {
     var
   }
 
-  fn compile_stmt(&mut self, stmt: mir::StmtId) -> Value {
+  fn compile_stmt(&mut self, stmt: mir::StmtId) -> RValue {
     match self.mir.stmts[stmt] {
       mir::Stmt::Expr(expr) => self.compile_expr(expr),
       mir::Stmt::Let(id, _, expr) => {
+        todo!();
         let value = self.compile_expr(expr);
         let variable = self.new_variable();
-        self.builder.def_var(variable, value);
+        // self.builder.def_var(variable, value);
         self.locals.insert(id, variable);
 
-        // THis doesn't return a value. TODO: Make `stmt` not return a value.
-        self.builder.ins().iconst(ir::types::I64, 0)
+        RValue::Nil
       }
     }
   }
 
-  fn compile_expr(&mut self, expr: mir::ExprId) -> Value {
+  fn compile_expr(&mut self, expr: mir::ExprId) -> RValue {
     match self.mir.exprs[expr] {
       mir::Expr::Literal(ref lit) => match lit {
-        mir::Literal::Int(i) => self.builder.ins().iconst(ir::types::I64, *i),
+        mir::Literal::Int(i) => RValue::Int(self.builder.ins().iconst(ir::types::I64, *i)),
         _ => unimplemented!(),
       },
 
-      mir::Expr::Local(id) => self.builder.use_var(self.locals[&id]),
+      // mir::Expr::Local(id) => self.builder.use_var(self.locals[&id]),
+      mir::Expr::Local(id) => todo!(),
 
-      mir::Expr::Native(ref id, _) => self.builder.ins().iconst(ir::types::I64, id.0 as i64),
+      mir::Expr::Native(ref id, _) => {
+        RValue::Function(self.builder.ins().iconst(ir::types::I64, id.0 as i64))
+      }
 
       mir::Expr::Block(ref stmts) => {
         // FIXME: Make a new scope so that locals don't leak.
-        let mut return_value = self.builder.ins().iconst(ir::types::I64, 0);
+        let mut return_value = RValue::Nil;
         for &stmt in stmts {
           return_value = self.compile_stmt(stmt);
         }
@@ -321,26 +326,27 @@ impl FuncBuilder<'_> {
         for (i, (&arg, arg_ty)) in args.iter().zip(arg_types.iter()).enumerate() {
           let arg = self.compile_expr(arg);
 
+          let (ty, value) = arg.extended_ir(&mut self.builder);
+
           // Each argument is 16 bytes wide, and we need an 8 byte offset for the length.
           // Store the type of the value in the first 8 bytes, and the value itself in the
           // second 8 bytes.
-          //
-          // TODO: Once unions are supported, this needs to be the runtime type of the
-          // value instead of the static type.
-          let ty = self.builder.ins().iconst(ir::types::I64, id_of_type(arg_ty));
           self.builder.ins().stack_store(ty, slot, i as i32 * 16 + 8);
-          self.builder.ins().stack_store(arg, slot, i as i32 * 16 + 8 + 8);
+          if let Some(v) = value {
+            self.builder.ins().stack_store(v, slot, i as i32 * 16 + 8 + 8);
+          }
         }
 
         let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, slot, 0);
 
-        let call = self.builder.ins().call(self.funcs.call, &[lhs, arg_ptr]);
+        let func = lhs.as_function().unwrap();
+        let call = self.builder.ins().call(self.funcs.call, &[func, arg_ptr]);
 
         match *sig_ty {
           Type::Function(_, ref ret) => match **ret {
-            // TODO: Don't return a value for everything.
-            Type::Literal(Literal::Unit) => self.builder.ins().iconst(ir::types::I64, 0),
-            _ => self.builder.inst_results(call)[0],
+            // FIXME: Need to create RValues from ir extended form.
+            Type::Literal(Literal::Unit) => RValue::Nil,
+            _ => RValue::Int(self.builder.inst_results(call)[0]),
           },
           _ => unreachable!(),
         }
@@ -350,15 +356,9 @@ impl FuncBuilder<'_> {
         let lhs = self.compile_expr(lhs);
 
         let res = match op {
-          mir::UnaryOp::Neg => self.builder.ins().ineg(lhs),
-          mir::UnaryOp::Not => self.builder.ins().bxor_imm(lhs, 1),
+          mir::UnaryOp::Neg => RValue::Int(self.builder.ins().ineg(lhs.as_int().unwrap())),
+          mir::UnaryOp::Not => RValue::Bool(self.builder.ins().bxor_imm(lhs.as_bool().unwrap(), 1)),
         };
-
-        #[cfg(debug_assertions)]
-        {
-          use cranelift::codegen::ir::InstBuilderBase;
-          assert_eq!(self.builder.ins().data_flow_graph().value_type(res), ir::types::I64);
-        }
 
         res
       }
@@ -368,17 +368,29 @@ impl FuncBuilder<'_> {
         let rhs = self.compile_expr(rhs);
 
         let res = match op {
-          mir::BinaryOp::Add => self.builder.ins().iadd(lhs, rhs),
-          mir::BinaryOp::Sub => self.builder.ins().isub(lhs, rhs),
-          mir::BinaryOp::Mul => self.builder.ins().imul(lhs, rhs),
-          mir::BinaryOp::Div => self.builder.ins().udiv(lhs, rhs),
-          mir::BinaryOp::Mod => self.builder.ins().urem(lhs, rhs),
+          mir::BinaryOp::Add
+          | mir::BinaryOp::Sub
+          | mir::BinaryOp::Mul
+          | mir::BinaryOp::Div
+          | mir::BinaryOp::Mod => {
+            let lhs = lhs.as_int().unwrap();
+            let rhs = rhs.as_int().unwrap();
+
+            let res = match op {
+              mir::BinaryOp::Add => self.builder.ins().iadd(lhs, rhs),
+              mir::BinaryOp::Sub => self.builder.ins().isub(lhs, rhs),
+              mir::BinaryOp::Mul => self.builder.ins().imul(lhs, rhs),
+              mir::BinaryOp::Div => self.builder.ins().udiv(lhs, rhs),
+              mir::BinaryOp::Mod => self.builder.ins().urem(lhs, rhs),
+              _ => unreachable!(),
+            };
+
+            RValue::Int(res)
+          }
 
           _ => {
-            // `icmp` returns an I8, we want to extend it to an I64. Because we
-            // have typechecking, we could probably get away with
-            // keeping it as an I8 everywhere, but its a lot simpler
-            // to just keep everything an I64.
+            let lhs = lhs.as_int().unwrap();
+            let rhs = rhs.as_int().unwrap();
 
             let res = match op {
               mir::BinaryOp::Eq => self.builder.ins().icmp(IntCC::Equal, lhs, rhs),
@@ -395,21 +407,16 @@ impl FuncBuilder<'_> {
               _ => unreachable!(),
             };
 
-            self.builder.ins().uextend(ir::types::I64, res)
+            RValue::Bool(res)
           }
         };
-
-        #[cfg(debug_assertions)]
-        {
-          use cranelift::codegen::ir::InstBuilderBase;
-          assert_eq!(self.builder.ins().data_flow_graph().value_type(res), ir::types::I64);
-        }
 
         res
       }
 
       mir::Expr::If { cond, then, els: None } => {
         let cond = self.compile_expr(cond);
+        let cond = cond.as_bool().unwrap();
 
         let then_block = self.builder.create_block();
         let merge_block = self.builder.create_block();
@@ -427,11 +434,12 @@ impl FuncBuilder<'_> {
         self.builder.switch_to_block(merge_block);
         self.builder.seal_block(merge_block);
 
-        self.builder.ins().iconst(ir::types::I64, 0)
+        RValue::Nil
       }
 
       mir::Expr::If { cond, then, els: Some(els) } => {
         let cond = self.compile_expr(cond);
+        let cond = cond.as_bool().unwrap();
 
         let then_block = self.builder.create_block();
         let else_block = self.builder.create_block();
@@ -446,12 +454,17 @@ impl FuncBuilder<'_> {
         self.builder.seal_block(then_block);
         let then_return = self.compile_expr(then);
 
+        // TODO: Need a ir value for any arbitrary RValue.
+        let then_return = then_return.as_int().unwrap();
+
         // Jump to the merge block, passing it the block return value.
         self.builder.ins().jump(merge_block, &[then_return]);
 
         self.builder.switch_to_block(else_block);
         self.builder.seal_block(else_block);
         let else_return = self.compile_expr(els);
+
+        let else_return = else_return.as_int().unwrap();
 
         // Jump to the merge block, passing it the block return value.
         self.builder.ins().jump(merge_block, &[else_return]);
@@ -466,7 +479,7 @@ impl FuncBuilder<'_> {
         // parameter.
         let phi = self.builder.block_params(merge_block)[0];
 
-        phi
+        RValue::Int(phi)
       }
 
       ref v => unimplemented!("expr: {v:?}"),
