@@ -90,7 +90,6 @@ impl FormatterContext<'_> {
 
       (T![let] | T![if] | T![def], _) => (None, Space),
       (T![else], _) => (Space, None),
-      (_, LET) => (Space, Space),
 
       (_, BINARY_OP) => {
         if self.multiline {
@@ -104,6 +103,7 @@ impl FormatterContext<'_> {
 
       (T![,], _) if self.multiline => (None, Newline),
       (T![,] | T![:], _) => (None, Space),
+      (T![=], _) => (Space, Space),
 
       (_, _) => (None, None),
     }
