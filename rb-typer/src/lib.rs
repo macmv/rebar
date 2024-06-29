@@ -160,14 +160,45 @@ impl<'a> Typer<'a> {
 
         let call_type = VType::Function(vec![lhs, rhs], Box::new(ret.clone()));
 
-        self.constrain(
-          &VType::Function(
-            vec![ty::Literal::Int.into(), ty::Literal::Int.into()],
-            Box::new(ty::Literal::Int.into()),
-          ),
-          &call_type,
-          self.span(expr),
-        );
+        match op {
+          hir::BinaryOp::Add
+          | hir::BinaryOp::Sub
+          | hir::BinaryOp::Mul
+          | hir::BinaryOp::Div
+          | hir::BinaryOp::Mod => {
+            self.constrain(
+              &VType::Function(
+                vec![ty::Literal::Int.into(), ty::Literal::Int.into()],
+                Box::new(ty::Literal::Int.into()),
+              ),
+              &call_type,
+              self.span(expr),
+            );
+          }
+
+          hir::BinaryOp::Eq | hir::BinaryOp::Neq => {
+            let arg = VType::Var(self.fresh_var(self.span(expr), format!("arg for {op:?}")));
+
+            self.constrain(
+              &VType::Function(vec![arg.clone(), arg], Box::new(ty::Literal::Bool.into())),
+              &call_type,
+              self.span(expr),
+            );
+          }
+
+          hir::BinaryOp::Lt | hir::BinaryOp::Lte | hir::BinaryOp::Gt | hir::BinaryOp::Gte => {
+            self.constrain(
+              &VType::Function(
+                vec![ty::Literal::Int.into(), ty::Literal::Int.into()],
+                Box::new(ty::Literal::Bool.into()),
+              ),
+              &call_type,
+              self.span(expr),
+            );
+          }
+
+          _ => unimplemented!("binary op {op:?}"),
+        }
 
         ret
       }
@@ -175,8 +206,7 @@ impl<'a> Typer<'a> {
       hir::Expr::If { cond, then, els } => {
         let cond_ty = self.type_expr(cond);
 
-        // FIXME: Should be `Bool`
-        self.constrain(&cond_ty, &VType::Literal(ty::Literal::Int), self.span(cond));
+        self.constrain(&cond_ty, &VType::Literal(ty::Literal::Bool), self.span(cond));
 
         let then_ty = self.type_expr(then);
         if let Some(els) = els {
