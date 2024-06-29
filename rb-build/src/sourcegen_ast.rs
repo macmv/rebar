@@ -558,6 +558,7 @@ fn token_name(name: &str) -> &str {
     "<=" => "less_eq",
     "<" => "less",
     ">" => "greater",
+    "!" => "bang",
 
     "'" => "single_quote",
     "\"" => "double_quote",

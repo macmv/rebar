@@ -18,7 +18,7 @@
 
 Name = 'ident'
 
-BinaryOp = '+' | '-' | '*' | '/' | '==' | '!=' | '<' | '<=' | '>' | '>='
+BinaryOp = '+' | '-' | '*' | '/' | '==' | '!=' | '<' | '<=' | '>' | '>=' | '&&' | '||' | '&' | '|'
 
 Literal = 'integer' | 'float' | 'true' | 'false' | 'nil'
 
@@ -69,4 +69,4 @@ Property = Name ':' Type
 SourceFile = Stmt*
 
 // FIXME: Get rid of this hack. `nl` should be part of `SyntaxKind`, but not part of the grammar.
-always_make_nl = 'nl'
+always_make_nl = 'nl' | '!'
