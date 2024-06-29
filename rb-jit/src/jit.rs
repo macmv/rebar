@@ -11,7 +11,7 @@ use rb_mir::ast as mir;
 use rb_typer::{Literal, Type};
 use std::{collections::HashMap, marker::PhantomPinned};
 
-use crate::value::RValue;
+use crate::value::{CompactValues, RValue};
 
 pub struct JIT {
   module: JITModule,
@@ -57,7 +57,7 @@ pub struct FuncBuilder<'a> {
   //
   // `VarId` is an opaque identifier for a local variable in the AST, whereas `Variable` is a
   // cranelift IR variable. There will usually be more cranelift variables than local variables.
-  locals:        HashMap<mir::VarId, Variable>,
+  locals:        HashMap<mir::VarId, CompactValues<Variable>>,
   next_variable: usize,
 }
 
@@ -206,7 +206,7 @@ impl FuncBuilder<'_> {
 
     for &stmt in &self.mir.items {
       let res = self.compile_stmt(stmt);
-      // self.builder.def_var(return_variable, res);
+      // self.def_var(return_variable, res.to_ir());
     }
 
     let return_value = self.builder.use_var(return_variable);
@@ -266,15 +266,63 @@ impl FuncBuilder<'_> {
     var
   }
 
+  fn def_var(&mut self, var: CompactValues<Variable>, value: RValue) {
+    match (var, value.to_ir()) {
+      (CompactValues::None, CompactValues::None) => {}
+      (CompactValues::None, _) => panic!("cannot assign a value to a nil"),
+
+      // This is effectively setting a value to `nil`. Shouldn't ever happen.
+      (CompactValues::One(_), CompactValues::None) => panic!("cannot assign nil to a variable"),
+      (CompactValues::One(var), CompactValues::One(value)) => {
+        self.builder.def_var(var, value);
+      }
+      // This is effectively assigning a union to a single variable. Definition doesn't make sense.
+      (CompactValues::One(_), CompactValues::Two(_, _)) => {
+        panic!("cannot assign a union to a variable")
+      }
+
+      // Any value can be assigned to a union.
+      (CompactValues::Two(var0, var1), _) => {
+        let (a, b) = value.extended_ir(&mut self.builder);
+
+        // The first value is the only one that must be set. For example, if a value is
+        // set to `nil`, the second variable is undefined.
+        self.builder.def_var(var0, a);
+        if let Some(b) = b {
+          self.builder.def_var(var1, b);
+        }
+      }
+    }
+  }
+
+  fn use_var(&mut self, var: CompactValues<Variable>) -> RValue {
+    match var {
+      CompactValues::None => RValue::Nil,
+      CompactValues::One(var) => {
+        let ir = self.builder.use_var(var);
+        // TODO: Need to get the static type in here and use that.
+        RValue::Int(ir)
+      }
+      CompactValues::Two(ty, value) => {
+        let _ty = self.builder.use_var(ty);
+        let value = self.builder.use_var(value);
+
+        // TODO: RValue from type.
+        RValue::Int(value)
+      }
+    }
+  }
+
   fn compile_stmt(&mut self, stmt: mir::StmtId) -> RValue {
     match self.mir.stmts[stmt] {
       mir::Stmt::Expr(expr) => self.compile_expr(expr),
       mir::Stmt::Let(id, _, expr) => {
-        todo!();
         let value = self.compile_expr(expr);
-        let variable = self.new_variable();
-        // self.builder.def_var(variable, value);
-        self.locals.insert(id, variable);
+        // FIXME: This should use the static type to build variables, not the IR value.
+        let variables = value.to_ir().map(|_| self.new_variable());
+
+        self.def_var(variables, value);
+        self.locals.insert(id, variables);
 
         RValue::Nil
       }
@@ -288,8 +336,7 @@ impl FuncBuilder<'_> {
         _ => unimplemented!(),
       },
 
-      // mir::Expr::Local(id) => self.builder.use_var(self.locals[&id]),
-      mir::Expr::Local(id) => todo!(),
+      mir::Expr::Local(id) => self.use_var(self.locals[&id]),
 
       mir::Expr::Native(ref id, _) => {
         RValue::Function(self.builder.ins().iconst(ir::types::I64, id.0 as i64))
@@ -445,6 +492,7 @@ impl FuncBuilder<'_> {
         let else_block = self.builder.create_block();
         let merge_block = self.builder.create_block();
 
+        // FIXME: Get the static types in here and append the parameters we need.
         self.builder.append_block_param(merge_block, ir::types::I64);
 
         // Test the if condition and conditionally branch.
@@ -452,22 +500,21 @@ impl FuncBuilder<'_> {
 
         self.builder.switch_to_block(then_block);
         self.builder.seal_block(then_block);
-        let then_return = self.compile_expr(then);
-
-        // TODO: Need a ir value for any arbitrary RValue.
-        let then_return = then_return.as_int().unwrap();
+        let then_return = self.compile_expr(then).to_ir();
 
         // Jump to the merge block, passing it the block return value.
-        self.builder.ins().jump(merge_block, &[then_return]);
+        then_return.with_slice(|slice| {
+          self.builder.ins().jump(merge_block, slice);
+        });
 
         self.builder.switch_to_block(else_block);
         self.builder.seal_block(else_block);
-        let else_return = self.compile_expr(els);
-
-        let else_return = else_return.as_int().unwrap();
+        let else_return = self.compile_expr(els).to_ir();
 
         // Jump to the merge block, passing it the block return value.
-        self.builder.ins().jump(merge_block, &[else_return]);
+        else_return.with_slice(|slice| {
+          self.builder.ins().jump(merge_block, slice);
+        });
 
         // Switch to the merge block for subsequent statements.
         self.builder.switch_to_block(merge_block);

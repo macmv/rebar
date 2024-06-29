@@ -15,6 +15,31 @@ pub enum RValue {
   Function(ir::Value),
 }
 
+#[derive(Clone, Copy)]
+pub enum CompactValues<T> {
+  None,
+  One(T),
+  Two(T, T),
+}
+
+impl<T> CompactValues<T> {
+  pub fn map<U>(self, mut f: impl FnMut(T) -> U) -> CompactValues<U> {
+    match self {
+      CompactValues::None => CompactValues::None,
+      CompactValues::One(a) => CompactValues::One(f(a)),
+      CompactValues::Two(a, b) => CompactValues::Two(f(a), f(b)),
+    }
+  }
+
+  pub fn with_slice<R>(self, f: impl FnOnce(&[T]) -> R) -> R {
+    match self {
+      CompactValues::None => f(&[]),
+      CompactValues::One(a) => f(&[a]),
+      CompactValues::Two(a, b) => f(&[a, b]),
+    }
+  }
+}
+
 impl RValue {
   /// Returns the extended form of this value. This is used when passing a value
   /// into a union slot, or back to native code.
@@ -35,6 +60,17 @@ impl RValue {
     };
 
     (ty, value)
+  }
+
+  /// Returns the compact for of this value. This is used wherever the static
+  /// type of the value is simple (ie, not a union).
+  pub fn to_ir(&self) -> CompactValues<ir::Value> {
+    match self {
+      RValue::Nil => CompactValues::None,
+      RValue::Bool(v) => CompactValues::One(*v),
+      RValue::Int(v) => CompactValues::One(*v),
+      RValue::Function(v) => CompactValues::One(*v),
+    }
   }
 
   pub fn as_bool(&self) -> Option<ir::Value> {
