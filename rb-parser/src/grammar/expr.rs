@@ -90,6 +90,16 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
       Some(m.complete(p, STRING))
     }
 
+    // test ok
+    // {
+    //   print("hello")
+    //   print("goodbye")
+    // }
+    T!['{'] => {
+      m.abandon(p);
+      Some(super::stmt::block(p))
+    }
+
     T![if] => {
       p.eat(T![if]);
       expr_cond(p);

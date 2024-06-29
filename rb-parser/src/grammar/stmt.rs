@@ -1,6 +1,6 @@
-use crate::{Parser, SyntaxKind::*, T};
+use crate::{CompletedMarker, Parser, SyntaxKind::*, T};
 
-pub fn block(p: &mut Parser) {
+pub fn block(p: &mut Parser) -> CompletedMarker {
   let m = p.start();
   p.expect(T!['{']);
 
@@ -9,7 +9,7 @@ pub fn block(p: &mut Parser) {
   }
 
   p.expect(T!['}']);
-  m.complete(p, BLOCK);
+  m.complete(p, BLOCK)
 }
 
 pub fn stmt(p: &mut Parser) {
