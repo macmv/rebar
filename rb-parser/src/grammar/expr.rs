@@ -8,12 +8,12 @@ fn expr_cond(p: &mut Parser) { expr_bp(p, 0, true); }
 
 fn op_bp(t: SyntaxKind) -> Option<(u8, u8)> {
   // test ok
-  // 1 + 2 - 3 * 4 / 5 == 6 != 7 < 8 > 9 <= 10 >= 11 && 12 || 13
+  // 1 + 2 - 3 * 4 / 5 % 0 == 6 != 7 < 8 > 9 <= 10 >= 11 && 12 || 13
   let prec = match t {
     T![||] | T![&&] => 1,
     T![==] | T![!=] | T![<] | T![>] | T![<=] | T![>=] => 1,
     T![+] | T![-] => 2,
-    T![*] | T![/] => 3,
+    T![*] | T![/] | T![%] => 3,
 
     _ => return None,
   };

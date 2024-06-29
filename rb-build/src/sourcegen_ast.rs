@@ -547,6 +547,7 @@ fn token_name(name: &str) -> &str {
     "+" => "plus",
     "*" => "star",
     "/" => "slash",
+    "%" => "percent",
     "&&" => "and",
     "||" => "or",
     "&" => "bit_and",
