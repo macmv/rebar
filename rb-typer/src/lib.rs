@@ -151,6 +151,37 @@ impl<'a> Typer<'a> {
         }
       }
 
+      hir::Expr::Paren(expr) => self.type_expr(expr),
+
+      hir::Expr::UnaryOp(expr, ref op) => {
+        let ty = self.type_expr(expr);
+
+        let ret =
+          VType::Var(self.fresh_var(self.span(expr), format!("return type of binary op {op:?}")));
+
+        let call_type = VType::Function(vec![ty], Box::new(ret.clone()));
+
+        match op {
+          hir::UnaryOp::Neg => {
+            self.constrain(
+              &VType::Function(vec![ty::Literal::Int.into()], Box::new(ty::Literal::Int.into())),
+              &call_type,
+              self.span(expr),
+            );
+          }
+
+          hir::UnaryOp::Not => {
+            self.constrain(
+              &VType::Function(vec![ty::Literal::Bool.into()], Box::new(ty::Literal::Bool.into())),
+              &call_type,
+              self.span(expr),
+            );
+          }
+        }
+
+        ret
+      }
+
       hir::Expr::BinaryOp(lhs_expr, ref op, rhs_expr) => {
         let lhs = self.type_expr(lhs_expr);
         let rhs = self.type_expr(rhs_expr);
