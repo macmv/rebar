@@ -227,21 +227,23 @@ impl<'a> Lexer<'a> {
 
       // Double-wide tokens.
       T![>] | T![<] | T![=] | T![!] | T![-] | T![|] | T![&] => {
-        let doubles = [
-          (T![>], T![=], T![>=]),
-          (T![<], T![=], T![<=]),
-          (T![=], T![=], T![==]),
-          (T![!], T![=], T![!=]),
-          (T![-], T![>], T![->]),
-          (T![|], T![|], T![||]),
-          (T![&], T![&], T![&&]),
-        ];
+        fn double(a: SyntaxKind, b: SyntaxKind) -> Option<SyntaxKind> {
+          Some(match (a, b) {
+            (T![>], T![=]) => T![>=],
+            (T![<], T![=]) => T![<=],
+            (T![=], T![=]) => T![==],
+            (T![!], T![=]) => T![!=],
+            (T![-], T![>]) => T![->],
+            (T![|], T![|]) => T![||],
+            (T![&], T![&]) => T![&&],
+            _ => return None,
+          })
+        }
 
-        let peeked = self.tok.peek();
-        for (a, b, pair) in doubles {
-          if first == a && peeked == Ok(Some(b)) {
+        if let Ok(Some(peeked)) = self.tok.peek() {
+          if let Some(t) = double(first, peeked) {
             self.tok.eat()?;
-            return self.ok(start, pair);
+            return self.ok(start, t);
           }
         }
 
