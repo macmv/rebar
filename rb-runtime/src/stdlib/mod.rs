@@ -47,7 +47,7 @@ impl Environment {
           for i in 0..arg_value.len() {
             let rb_value = arg_value.arg(i);
             let value = match rb_value.kind {
-              0 => Value::Unit,
+              0 => Value::Nil,
               1 => Value::Bool(rb_value.value != 0),
               2 => Value::Int(rb_value.value),
               v => panic!("unknown value kind {v}"),
@@ -62,7 +62,7 @@ impl Environment {
         match f(args) {
           Value::Int(v) => v,
           Value::Bool(_) => 0,
-          Value::Unit => 0,
+          Value::Nil => 0,
         }
       })
     }
@@ -97,7 +97,7 @@ pub trait DynFunction<T> {
 enum Value {
   Int(i64),
   Bool(bool),
-  Unit,
+  Nil,
 }
 
 impl Environment {
@@ -177,7 +177,7 @@ impl FunctionRet for bool {
 
 impl FunctionRet for () {
   fn static_type() -> Type { Type::Literal(Literal::Unit) }
-  fn into_value(self) -> Value { Value::Unit }
+  fn into_value(self) -> Value { Value::Nil }
 }
 
 #[cfg(test)]
