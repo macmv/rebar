@@ -30,7 +30,7 @@ pub struct ThreadCtx<'a> {
   call_func_decl: &'a FunctionDeclaration,
 }
 
-pub struct BlockBuilder<'a> {
+pub struct FuncBuilder<'a> {
   builder:       FunctionBuilder<'a>,
   mir:           &'a mir::Function,
   call_func_ref: FuncRef,
@@ -139,7 +139,7 @@ impl JIT {
 }
 
 impl ThreadCtx<'_> {
-  pub fn new_function<'a>(&'a mut self, mir: &'a mir::Function) -> BlockBuilder<'a> {
+  pub fn new_function<'a>(&'a mut self, mir: &'a mir::Function) -> FuncBuilder<'a> {
     let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
     let entry_block = builder.create_block();
 
@@ -164,13 +164,13 @@ impl ThreadCtx<'_> {
       colocated,
     });
 
-    BlockBuilder { builder, mir, call_func_ref, locals: HashMap::new(), next_variable: 0 }
+    FuncBuilder { builder, mir, call_func_ref, locals: HashMap::new(), next_variable: 0 }
   }
 
   pub fn translate_function(&mut self, mir: &mir::Function) { self.new_function(mir).translate(); }
 }
 
-impl BlockBuilder<'_> {
+impl FuncBuilder<'_> {
   fn translate(mut self) {
     self.builder.func.signature.returns.push(AbiParam::new(ir::types::I64));
 
@@ -232,7 +232,7 @@ pub enum Error {
   MissingExpr,
 }
 
-impl BlockBuilder<'_> {
+impl FuncBuilder<'_> {
   fn new_variable(&mut self) -> Variable {
     let var = Variable::new(self.next_variable);
     self.builder.declare_var(var, ir::types::I64);
