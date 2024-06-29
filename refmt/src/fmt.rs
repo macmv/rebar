@@ -78,6 +78,14 @@ impl FormatterContext<'_> {
       // example, blocks add newlines as part of the `{` token, so we want to remove user-defined
       // newlines there).
       (T![nl], SOURCE_FILE) => (None, Newline),
+      (T![nl], BLOCK) => {
+        // The newlines in the middle of blocks matter, but the first and last don't.
+        if self.before(token).kind() == T!['{'] || self.after(token).kind() == T!['}'] {
+          (None, None)
+        } else {
+          (None, Newline)
+        }
+      }
       (T![nl], _) => (None, None),
 
       (T![')'], _) if self.multiline => (None, None),
@@ -85,8 +93,15 @@ impl FormatterContext<'_> {
 
       (T!['('] | T![')'] | IDENT, _) => (None, None),
 
+      // The opening brace in if statements and defs needs some extra whitespace.
+      (T!['{'], BLOCK)
+        if matches!(token.parent().unwrap().parent().unwrap().kind(), IF_EXPR | DEF) =>
+      {
+        (Space, Newline)
+      }
+
       (T!['}'], _) => (Newline, None),
-      (T!['{'], _) => (Space, Newline),
+      (T!['{'], _) => (None, Newline),
 
       (T![let] | T![if] | T![def], _) => (None, Space),
       (T![else], _) => (Space, None),
@@ -647,6 +662,24 @@ mod tests {
       expect![@r#"
         def foo(x: int, y: str) {
           x + y
+        }
+      "#],
+    );
+  }
+
+  #[test]
+  fn blocks() {
+    check(
+      r#"
+        {
+           let  x  =  2  +  3
+           let  y  =  4
+        }
+      "#,
+      expect![@r#"
+        {
+          let x = 2 + 3
+          let y = 4
         }
       "#],
     );
