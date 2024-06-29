@@ -36,7 +36,7 @@ impl Formatter {
 
   fn fmt(&self, cst: &cst::SourceFile) -> String {
     let mut ctx = self.ctx();
-    ctx.fmt_syntax(cst.syntax());
+    ctx.fmt_syntax(cst.syntax(), false);
     ctx.out
   }
 }
@@ -148,12 +148,12 @@ impl FormatterContext<'_> {
     next
   }
 
-  fn fmt_syntax(&mut self, node: &SyntaxNode) {
+  fn fmt_syntax(&mut self, node: &SyntaxNode, parent_can_retry: bool) {
     for node in node.children_with_tokens() {
       match node {
         NodeOrToken::Node(ref n) => {
           let retry = match n.kind() {
-            CALL_EXPR | BINARY_EXPR => Some(self.clone()),
+            CALL_EXPR | BINARY_EXPR | IF_EXPR => Some(self.clone()),
             _ => None,
           };
 
@@ -170,14 +170,14 @@ impl FormatterContext<'_> {
           if always_multiline {
             self.multiline = true;
           }
-          self.fmt_syntax(n);
+          self.fmt_syntax(n, retry.is_some() || parent_can_retry);
           self.multiline = old_multiline;
 
           if let Some(retry) = retry {
-            if self.over_line_limit() {
+            if self.over_line_limit() && !parent_can_retry {
               self.reset(retry);
               self.multiline = true;
-              self.fmt_syntax(n);
+              self.fmt_syntax(n, parent_can_retry);
               self.multiline = false;
             }
           }
@@ -610,7 +610,6 @@ mod tests {
 
   #[test]
   fn if_stmt() {
-    // FIXME: This is pretty dumb.
     check(
       &r#"
         if  0  {
@@ -620,8 +619,11 @@ mod tests {
         }
       "#,
       expect![@r#"
-        if 0 { println(2 + 3) } else { println(4
-          + 5) }
+        if 0 {
+          println(2 + 3)
+        } else {
+          println(4 + 5)
+        }
       "#],
     );
 
