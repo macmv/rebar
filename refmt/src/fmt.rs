@@ -108,6 +108,28 @@ impl FormatterContext<'_> {
     }
   }
 
+  fn before(&self, t: &SyntaxToken) -> NodeOrToken {
+    let mut prev = NodeOrToken::from(t.clone());
+    while let Some(p) = prev.prev_sibling_or_token() {
+      prev = p;
+      if !is_whitespace(prev.kind()) {
+        break;
+      }
+    }
+    prev
+  }
+
+  fn after(&self, t: &SyntaxToken) -> NodeOrToken {
+    let mut next = NodeOrToken::from(t.clone());
+    while let Some(n) = next.next_sibling_or_token() {
+      next = n;
+      if !is_whitespace(next.kind()) {
+        break;
+      }
+    }
+    next
+  }
+
   fn fmt_syntax(&mut self, node: &SyntaxNode) {
     for node in node.children_with_tokens() {
       match node {
@@ -142,19 +164,21 @@ impl FormatterContext<'_> {
             continue;
           }
 
-          let mut curr = NodeOrToken::from(t.clone());
-          while let Some(prev) = curr.prev_sibling_or_token() {
-            curr = prev;
-            if !is_whitespace(curr.kind()) {
-              break;
-            }
-          }
-
           match (t.kind(), t.parent().unwrap().kind()) {
-            (T![')'], ARG_LIST) if self.multiline && curr.kind() != T![,] => {
-              self.out += ",\n";
+            // Add trailing commas on mutliline calls.
+            (T![')'], ARG_LIST) if self.multiline => {
+              if self.before(t).kind() != T![,] {
+                self.out += ",\n";
+              }
             }
-            (T![+], _) if self.multiline => {
+            // Remove trailing commas on non-multiline calls.
+            (T![,], ARG_LIST) if !self.multiline => {
+              if self.after(t).kind() == T![')'] {
+                continue;
+              }
+            }
+            // Add indents to multiline binary ops.
+            (_, BINARY_OP) if self.multiline => {
               self.out += "\n  ";
             }
             _ => {}
@@ -269,6 +293,15 @@ mod tests {
       "#,
       expect![@r#"
         print_impl(2 + 3, 4 * 5)
+      "#],
+    );
+
+    check(
+      r#"
+        print_impl(2,3,)
+      "#,
+      expect![@r#"
+        print_impl(2, 3)
       "#],
     );
   }
