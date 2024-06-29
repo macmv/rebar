@@ -79,6 +79,19 @@ impl FunctionLower<'_> {
         hir::Expr::Block(stmts)
       }
 
+      cst::Expr::ParenExpr(ref expr) => {
+        let expr = self.expr_opt(expr.expr());
+        hir::Expr::Paren(expr)
+      }
+
+      cst::Expr::PrefixExpr(ref expr) => {
+        let rhs = self.expr_opt(expr.expr());
+
+        let op = unary_op_from_cst(&expr.prefix_op().unwrap());
+
+        hir::Expr::UnaryOp(rhs, op)
+      }
+
       cst::Expr::BinaryExpr(ref expr) => {
         let lhs = self.expr_opt(expr.lhs());
         let rhs = self.expr_opt(expr.rhs());
@@ -144,6 +157,24 @@ fn binary_op_from_cst(cst: &cst::BinaryOp) -> hir::BinaryOp {
     or_token => Or
     bit_and_token => BitAnd
     bit_or_token => BitAnd
+  }
+  panic!("unexpected binary operator {cst}");
+}
+
+fn unary_op_from_cst(cst: &cst::PrefixOp) -> hir::UnaryOp {
+  macro_rules! ops {
+    { $($cst:ident => $hir:ident)* } => {
+      $(
+        if cst.$cst().is_some() {
+          return hir::UnaryOp::$hir;
+        }
+      )*
+    };
+  }
+
+  ops! {
+    minus_token => Neg
+    bang_token => Not
   }
   panic!("unexpected binary operator {cst}");
 }

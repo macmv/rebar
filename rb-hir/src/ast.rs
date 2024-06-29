@@ -27,8 +27,11 @@ pub enum Expr {
   Name(String),
 
   Call(ExprId, Vec<ExprId>),
+  UnaryOp(ExprId, UnaryOp),
   BinaryOp(ExprId, BinaryOp, ExprId),
 
+  // TODO: Is this really needed?
+  Paren(ExprId),
   Block(Vec<StmtId>),
   If { cond: ExprId, then: ExprId, els: Option<ExprId> },
 
@@ -48,6 +51,12 @@ pub enum Literal {
   Int(i64),
   Bool(bool),
   Unit,
+}
+
+#[derive(Debug)]
+pub enum UnaryOp {
+  Neg,
+  Not,
 }
 
 #[derive(Debug)]

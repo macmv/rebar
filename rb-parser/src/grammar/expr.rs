@@ -96,7 +96,11 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
     // !!false
     // -true
     T![!] | T![-] => {
-      p.bump();
+      {
+        let m = p.start();
+        p.bump();
+        m.complete(p, PREFIX_OP);
+      }
       expr(p);
       Some(m.complete(p, PREFIX_EXPR))
     }
