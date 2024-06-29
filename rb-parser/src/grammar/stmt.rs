@@ -6,6 +6,9 @@ pub fn block(p: &mut Parser) -> CompletedMarker {
 
   while !p.at(EOF) && !p.at(T!['}']) {
     stmt(p);
+    while p.at(T![nl]) {
+      p.eat(T![nl]);
+    }
   }
 
   p.expect(T!['}']);
@@ -123,4 +126,41 @@ fn params(p: &mut Parser) {
   }
 
   m.complete(p, PARAMS);
+}
+
+#[cfg(test)]
+mod tests {
+  use crate::tests::check;
+
+  #[test]
+  fn handles_newlines_in_blocks() {
+    check(
+      r#"
+        {
+
+          1
+
+        }
+      "#,
+      expect![@r#"
+        SOURCE_FILE
+          NL_KW '\n'
+          WHITESPACE '        '
+          EXPR_STMT
+            BLOCK
+              OPEN_CURLY '{'
+              NL_KW '\n'
+              NL_KW '\n'
+              WHITESPACE '          '
+              EXPR_STMT
+                LITERAL
+                  INTEGER_KW '1'
+              NL_KW '\n'
+              NL_KW '\n'
+              WHITESPACE '        '
+              CLOSE_CURLY '}'
+          NL_KW '\n'
+      "#],
+    );
+  }
 }
