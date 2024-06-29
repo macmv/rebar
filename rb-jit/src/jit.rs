@@ -259,7 +259,8 @@ impl BlockBuilder<'_> {
       mir::Expr::Native(ref name, ref _ty) => {
         let id = match name.as_str() {
           "assert_eq" => 0,
-          "println" => 1,
+          "assert" => 1,
+          "println" => 2,
           _ => panic!("unknown name {name}"),
         };
 

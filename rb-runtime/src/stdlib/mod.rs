@@ -45,7 +45,11 @@ impl Environment {
           let mut args = vec![];
           for i in 0..arg_value.len() {
             // TODO: We're going to need some more shenanigans here to convert other types.
-            args.push(Value::Int(arg_value.arg(i)));
+            if func == 1 {
+              args.push(Value::Bool(arg_value.arg(i) != 0));
+            } else {
+              args.push(Value::Int(arg_value.arg(i)));
+            }
           }
           args
         };

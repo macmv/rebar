@@ -10,6 +10,12 @@ impl Environment {
       }
     });
 
+    env.add_fn("assert", |v: bool| {
+      if !v {
+        panic!("assertion failed");
+      }
+    });
+
     env
   }
 }
