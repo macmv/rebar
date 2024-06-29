@@ -45,12 +45,15 @@ impl Environment {
 
           let mut args = vec![];
           for i in 0..arg_value.len() {
-            // TODO: We're going to need some more shenanigans here to convert other types.
-            if func == 1 {
-              args.push(Value::Bool(arg_value.arg(i) != 0));
-            } else {
-              args.push(Value::Int(arg_value.arg(i)));
-            }
+            let rb_value = arg_value.arg(i);
+            let value = match rb_value.kind {
+              0 => Value::Unit,
+              1 => Value::Bool(rb_value.value != 0),
+              2 => Value::Int(rb_value.value),
+              v => panic!("unknown value kind {v}"),
+            };
+
+            args.push(value);
           }
           args
         };

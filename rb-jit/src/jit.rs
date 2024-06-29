@@ -49,8 +49,8 @@ pub struct BlockBuilder<'a> {
 /// should look something like this:
 /// [
 ///   len: 8 bytes
-///   arg0: 8 bytes
-///   arg1: 8 bytes
+///   arg0: 16 bytes
+///   arg1: 16 bytes
 ///   ...etc
 /// ]
 ///
@@ -67,14 +67,22 @@ pub struct RebarSlice {
   _phantom: PhantomPinned,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct RebarValue {
+  pub kind:  u64,
+  pub value: i64,
+}
+
 impl RebarSlice {
   pub unsafe fn len(&self) -> usize { self.len as usize }
 
-  pub unsafe fn arg(&self, idx: usize) -> i64 {
+  pub unsafe fn arg(&self, idx: usize) -> RebarValue {
     assert!(idx < self.len as usize);
     unsafe {
       let ptr = self as *const _;
-      let arg_ptr = (ptr as *const i64).offset(1);
+      // `offset(1)` skips the `len` field.
+      let arg_ptr = (ptr as *const i64).offset(1) as *const RebarValue;
       *arg_ptr.offset(idx as isize)
     }
   }
@@ -270,23 +278,34 @@ impl BlockBuilder<'_> {
       mir::Expr::Call(lhs, ref sig_ty, ref args) => {
         let lhs = self.compile_expr(lhs);
 
-        // Store 2 values:
-        // - The length of the arguments.
-        // - The first argument.
         let slot = self.builder.create_sized_stack_slot(StackSlotData {
           kind: StackSlotKind::ExplicitSlot,
-          // Each argument is 8 bytes wide.
-          size: (args.len() as u32 + 1) * 8,
+          // Each argument is 16 bytes wide, and we need 8 bytes for the length..
+          size: args.len() as u32 * 16 + 8,
         });
 
         let arg_len = self.builder.ins().iconst(ir::types::I64, args.len() as i64);
         self.builder.ins().stack_store(arg_len, slot, 0);
 
-        for (i, &arg) in args.iter().enumerate() {
+        let arg_types = match sig_ty {
+          Type::Function(ref args, _) => args,
+          _ => unreachable!(),
+        };
+
+        assert_eq!(args.len(), arg_types.len());
+
+        for (i, (&arg, arg_ty)) in args.iter().zip(arg_types.iter()).enumerate() {
           let arg = self.compile_expr(arg);
 
-          // Each argument is 8 bytes wide.
-          self.builder.ins().stack_store(arg, slot, (i as i32 + 1) * 8);
+          // Each argument is 16 bytes wide, and we need an 8 byte offset for the length.
+          // Store the type of the value in the first 8 bytes, and the value itself in the
+          // second 8 bytes.
+          //
+          // TODO: Once unions are supported, this needs to be the runtime type of the
+          // value instead of the static type.
+          let ty = self.builder.ins().iconst(ir::types::I64, id_of_type(arg_ty));
+          self.builder.ins().stack_store(ty, slot, i as i32 * 16 + 8);
+          self.builder.ins().stack_store(arg, slot, i as i32 * 16 + 8 + 8);
         }
 
         let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, slot, 0);
@@ -428,5 +447,14 @@ impl BlockBuilder<'_> {
 
       ref v => unimplemented!("expr: {v:?}"),
     }
+  }
+}
+
+fn id_of_type(ty: &Type) -> i64 {
+  match ty {
+    Type::Literal(Literal::Unit) => 0,
+    Type::Literal(Literal::Bool) => 1,
+    Type::Literal(Literal::Int) => 2,
+    _ => unimplemented!(),
   }
 }
