@@ -41,7 +41,9 @@ pub fn eval(src: &str) {
 
     for function in hir.functions.values() {
       let typer = rb_typer::Typer::check(&static_env, function, &span_map);
-      functions.push(rb_mir_lower::lower_function(&mir_env, &typer, function));
+      if rb_diagnostic::is_ok() {
+        functions.push(rb_mir_lower::lower_function(&mir_env, &typer, function));
+      }
     }
   });
 

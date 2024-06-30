@@ -42,6 +42,8 @@ pub fn emit(diagnostic: Diagnostic) {
   });
 }
 
+pub fn is_ok() -> bool { Context::run(|ctx| ctx.is_ok()) }
+
 #[macro_export]
 macro_rules! emit {
   ($message:expr, $span:expr) => {
