@@ -26,6 +26,22 @@ struct FunctionLower<'a> {
   span_map: &'a mut SpanMap,
 }
 
+macro_rules! match_token {
+  {
+    match $id:ident {
+      $($cst:ident($pat:pat) => $hir:expr,)*
+    }
+  } => {
+    $(
+      if let Some($pat) = $id.$cst() {
+        $hir
+      } else
+    )* {
+      panic!("unexpected token {}", $id)
+    }
+  };
+}
+
 impl FunctionLower<'_> {
   fn stmt(&mut self, cst: cst::Stmt) -> hir::StmtId {
     let stmt = match cst {
@@ -58,16 +74,13 @@ impl FunctionLower<'_> {
   fn expr(&mut self, cst: cst::Expr) -> hir::ExprId {
     let expr = match cst {
       cst::Expr::Literal(ref lit) => {
-        if let Some(lit) = lit.integer_token() {
-          hir::Expr::Literal(hir::Literal::Int(lit.text().parse().unwrap()))
-        } else if let Some(_) = lit.true_token() {
-          hir::Expr::Literal(hir::Literal::Bool(true))
-        } else if let Some(_) = lit.false_token() {
-          hir::Expr::Literal(hir::Literal::Bool(false))
-        } else if let Some(_) = lit.nil_token() {
-          hir::Expr::Literal(hir::Literal::Nil)
-        } else {
-          panic!("unexpected literal {lit}");
+        match_token! {
+          match lit {
+            integer_token(lit) => hir::Expr::Literal(hir::Literal::Int(lit.text().parse().unwrap())),
+            true_token(_) => hir::Expr::Literal(hir::Literal::Bool(true)),
+            false_token(_) => hir::Expr::Literal(hir::Literal::Bool(false)),
+            nil_token(_) => hir::Expr::Literal(hir::Literal::Nil),
+          }
         }
       }
 
@@ -136,43 +149,28 @@ impl FunctionLower<'_> {
   }
 }
 
-macro_rules! match_token {
-  {
-    match $id:ident {
-      $($cst:ident => $hir:expr,)*
-    }
-  } => {
-    $(
-      if $id.$cst().is_some() {
-        return $hir;
-      }
-    )*
-  };
-}
-
 fn binary_op_from_cst(cst: &cst::BinaryOp) -> hir::BinaryOp {
   use hir::BinaryOp::*;
 
   match_token! {
     match cst {
-      plus_token => Add,
-      minus_token => Sub,
-      star_token => Mul,
-      slash_token => Div,
-      percent_token => Mod,
-      eq_eq_token => Eq,
-      not_eq_token => Neq,
-      less_token => Lt,
-      less_eq_token => Lte,
-      greater_token => Gt,
-      greater_eq_token => Gte,
-      and_token => And,
-      or_token => Or,
-      bit_and_token => BitAnd,
-      bit_or_token => BitAnd,
+      plus_token(_) => Add,
+      minus_token(_) => Sub,
+      star_token(_) => Mul,
+      slash_token(_) => Div,
+      percent_token(_) => Mod,
+      eq_eq_token(_) => Eq,
+      not_eq_token(_) => Neq,
+      less_token(_) => Lt,
+      less_eq_token(_) => Lte,
+      greater_token(_) => Gt,
+      greater_eq_token(_) => Gte,
+      and_token(_) => And,
+      or_token(_) => Or,
+      bit_and_token(_) => BitAnd,
+      bit_or_token(_) => BitAnd,
     }
   }
-  panic!("unexpected binary operator {cst}");
 }
 
 fn unary_op_from_cst(cst: &cst::PrefixOp) -> hir::UnaryOp {
@@ -180,9 +178,8 @@ fn unary_op_from_cst(cst: &cst::PrefixOp) -> hir::UnaryOp {
 
   match_token! {
     match cst {
-      minus_token => Neg,
-      bang_token => Not,
+      minus_token(_) => Neg,
+      bang_token(_) => Not,
     }
   }
-  panic!("unexpected binary operator {cst}");
 }
