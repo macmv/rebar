@@ -108,7 +108,9 @@ impl<T: Copy> CompactValues<T> {
 
 impl RValue {
   /// Returns the extended form of this value. This is used when passing a value
-  /// into a union slot, or back to native code.
+  /// into a union slot, or back to native code. The number of values may change
+  /// depending on the type (so this works for function calls, but not for
+  /// block arguments).
   fn to_extended_ir(&self, builder: &mut FunctionBuilder) -> CompactValues<ir::Value> {
     let ty = match self {
       RValue::Nil => builder.ins().iconst(ir::types::I64, 0),
@@ -133,30 +135,23 @@ impl RValue {
   }
 
   /// Returns the compact for of this value. This is used wherever the static
-  /// type of the value is simple (ie, not a union).
+  /// type of the value is simple (ie, not a union), and when the number of
+  /// values can change depending on the type (so this works for function
+  /// arguments, but not for block arguments).
   fn to_compact_ir(&self) -> CompactValues<ir::Value> {
     match self {
       RValue::Nil => CompactValues::None,
       RValue::Bool(v) => CompactValues::One(*v),
       RValue::Int(v) => CompactValues::One(*v),
       RValue::Function(v) => CompactValues::One(*v),
-      RValue::Dynamic(ty, v) => CompactValues::Two(*ty, *v),
+      RValue::Dynamic(_, _) => panic!("dynamic values cannot be compact"),
     }
   }
 
-  pub fn from_compact_ir(ir: CompactValues<ir::Value>, ty: &Type) -> Self {
-    match ir {
-      CompactValues::None => RValue::Nil,
-      CompactValues::One(v) => match ty {
-        Type::Literal(Literal::Bool) => RValue::Bool(v),
-        Type::Literal(Literal::Int) => RValue::Int(v),
-        Type::Function(_, _) => RValue::Function(v),
-        _ => panic!("invalid type"),
-      },
-      CompactValues::Two(ty, v) => RValue::Dynamic(ty, v),
-    }
-  }
-
+  /// Returns the dynamic IR values for this RValue. This should be used
+  /// whenever the length of arguments can change (for example in a function
+  /// call). For block arguments, which must have a consistent size, use
+  /// `to_sized_ir`.
   pub fn to_ir(&self, kind: ParamKind, builder: &mut FunctionBuilder) -> CompactValues<ir::Value> {
     match kind {
       ParamKind::Compact => self.to_compact_ir(),
@@ -210,10 +205,22 @@ impl RValue {
     }
   }
 
+  /// Creates an RValue from a fixed sized list of IR values. This should be
+  /// used for returns from blocks, where the size is fixed.
   pub fn from_sized_ir(ir: &[ir::Value], ty: &Type) -> RValue {
-    let values = CompactValues::from_slice(ir);
+    let size = ParamSize::for_type(ty);
+    assert_eq!(ir.len(), size.len() as usize);
 
-    RValue::from_compact_ir(values, ty)
+    match size {
+      ParamSize::Unit => RValue::Nil,
+      ParamSize::Single => match ty {
+        Type::Literal(Literal::Bool) => RValue::Bool(ir[0]),
+        Type::Literal(Literal::Int) => RValue::Int(ir[0]),
+        Type::Function(_, _) => RValue::Function(ir[0]),
+        _ => panic!("invalid type"),
+      },
+      ParamSize::Double => RValue::Dynamic(ir[0], ir[1]),
+    }
   }
 
   pub fn as_bool(&self) -> Option<ir::Value> {
