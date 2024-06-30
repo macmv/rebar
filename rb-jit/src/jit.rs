@@ -9,9 +9,9 @@ use cranelift_module::{DataDescription, FuncId, FunctionDeclaration, Linkage, Mo
 use isa::TargetIsa;
 use rb_mir::ast as mir;
 use rb_typer::{Literal, Type};
-use std::{collections::HashMap, fmt::write, marker::PhantomPinned};
+use std::{collections::HashMap, marker::PhantomPinned};
 
-use crate::value::{CompactValues, ParamSize, RValue};
+use crate::value::{CompactValues, ParamKind, ParamSize, RValue};
 
 pub struct JIT {
   module: JITModule,
@@ -190,7 +190,7 @@ impl FuncBuilder<'_> {
     self.builder.def_var(return_variable, zero);
 
     for &stmt in &self.mir.items {
-      let res = self.compile_stmt(stmt);
+      let _res = self.compile_stmt(stmt);
       // self.def_var(return_variable, res.to_ir());
     }
 
@@ -306,7 +306,7 @@ impl FuncBuilder<'_> {
       mir::Stmt::Expr(expr) => self.compile_expr(expr),
       mir::Stmt::Let(id, ref ty, expr) => {
         let value = self.compile_expr(expr);
-        let ir = value.to_sized_ir(param_size_of_type(&ty), &mut self.builder);
+        let ir = value.to_ir(ParamKind::for_type(&ty), &mut self.builder);
 
         let variables = ir.map(|_| self.new_variable());
 
@@ -355,8 +355,13 @@ impl FuncBuilder<'_> {
 
         // Argument length in 8 byte increments.
         let mut arg_len = 0;
-        for arg_ty in arg_types.iter() {
-          arg_len += param_size_of_type(arg_ty).len();
+        let mut arg_values = vec![];
+        for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
+          let arg = self.compile_expr(arg);
+
+          let v = arg.to_ir(ParamKind::for_type(arg_ty), &mut self.builder);
+          arg_len += v.len();
+          arg_values.push(v);
         }
 
         let slot = self.builder.create_sized_stack_slot(StackSlotData {
@@ -366,11 +371,7 @@ impl FuncBuilder<'_> {
         });
 
         let mut slot_index = 0;
-        for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
-          let arg = self.compile_expr(arg);
-
-          let v = arg.to_sized_ir(param_size_of_type(arg_ty), &mut self.builder);
-
+        for v in arg_values {
           v.with_slice(|slice| {
             for &v in slice.iter() {
               self.builder.ins().stack_store(v, slot, slot_index * 8);
@@ -473,28 +474,28 @@ impl FuncBuilder<'_> {
               RValue::Bool(res)
             }
 
-            (RValue::Dynamic(lty, l), _) => {
-              let rhs = rhs.to_sized_ir(ParamSize::Double, &mut self.builder);
+            (RValue::Dynamic(lty, l_v), _) => {
+              let rhs = rhs.to_ir(ParamKind::Extended, &mut self.builder);
 
               let res = match op {
-                mir::BinaryOp::Eq => match rhs {
-                  CompactValues::None => unreachable!(),
-                  CompactValues::One(rty) => self.builder.ins().icmp(IntCC::Equal, lty, rty),
-                  CompactValues::Two(rty, r) => {
-                    let ty_eq = self.builder.ins().icmp(IntCC::Equal, lty, rty);
-                    let v_eq = self.builder.ins().icmp(IntCC::Equal, l, r);
+                mir::BinaryOp::Eq => {
+                  let ty_eq = self.builder.ins().icmp(IntCC::Equal, lty, rhs.first().unwrap());
+                  if let Some(r_v) = rhs.second() {
+                    let v_eq = self.builder.ins().icmp(IntCC::Equal, l_v, r_v);
                     self.builder.ins().band(ty_eq, v_eq)
+                  } else {
+                    ty_eq
                   }
-                },
-                mir::BinaryOp::Neq => match rhs {
-                  CompactValues::None => unreachable!(),
-                  CompactValues::One(rty) => self.builder.ins().icmp(IntCC::NotEqual, lty, rty),
-                  CompactValues::Two(rty, r) => {
-                    let ty_eq = self.builder.ins().icmp(IntCC::NotEqual, lty, rty);
-                    let v_eq = self.builder.ins().icmp(IntCC::NotEqual, l, r);
-                    self.builder.ins().bor(ty_eq, v_eq)
+                }
+                mir::BinaryOp::Neq => {
+                  let ty_neq = self.builder.ins().icmp(IntCC::NotEqual, lty, rhs.first().unwrap());
+                  if let Some(r_v) = rhs.second() {
+                    let v_neq = self.builder.ins().icmp(IntCC::NotEqual, l_v, r_v);
+                    self.builder.ins().bor(ty_neq, v_neq)
+                  } else {
+                    ty_neq
                   }
-                },
+                }
                 _ => unreachable!(),
               };
 
@@ -558,7 +559,9 @@ impl FuncBuilder<'_> {
         let else_block = self.builder.create_block();
         let merge_block = self.builder.create_block();
 
-        let param_size = param_size_of_type(&ty);
+        // Blocks must always take the same parameters, even if some go unused. So use
+        // `to_sizedir_` instead of `to_ir` here.
+        let param_size = ParamSize::for_type(&ty);
 
         // FIXME: Get the static types in here and append the parameters we need.
         param_size.append_block_params(&mut self.builder, merge_block);
@@ -597,13 +600,5 @@ impl FuncBuilder<'_> {
 
       ref v => unimplemented!("expr: {v:?}"),
     }
-  }
-}
-
-fn param_size_of_type(ty: &Type) -> ParamSize {
-  match ty {
-    Type::Literal(Literal::Unit) => ParamSize::Unit,
-    Type::Union(_) => ParamSize::Double,
-    _ => ParamSize::Single,
   }
 }

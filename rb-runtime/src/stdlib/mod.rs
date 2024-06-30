@@ -3,7 +3,10 @@ use ::std::{cell::RefCell, collections::HashMap};
 mod core;
 mod std;
 
-use rb_jit::{jit::RebarSlice, value::ParamSize};
+use rb_jit::{
+  jit::RebarSlice,
+  value::{ParamKind, ParamSize},
+};
 use rb_mir::ast as mir;
 use rb_typer::{Literal, Type};
 
@@ -46,30 +49,49 @@ impl Environment {
           let mut args = vec![];
           let mut offset = 0;
           for ty in f.args.iter() {
-            let param_size = ParamSize::size_of_type(ty);
+            let param_kind = ParamKind::for_type(ty);
 
-            let value = match param_size {
-              ParamSize::Unit => Value::Nil,
-              ParamSize::Single => {
-                let value = (*arg_value.arg(offset)).one;
-                offset += 1;
+            let value = match param_kind {
+              ParamKind::Compact => {
+                // A nil won't take up any slots, so we must check for that to avoid reading out
+                // of bounds.
                 match ty {
                   Type::Literal(Literal::Unit) => Value::Nil,
-                  // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
-                  Type::Literal(Literal::Bool) => Value::Bool(value as u8 != 0),
-                  Type::Literal(Literal::Int) => Value::Int(value),
-                  v => unimplemented!("{v:?}"),
+                  _ => {
+                    // Now that we know its not a unit, we can safely read the value. The value
+                    // will always take up 8 bytes, even if less bytes are used.
+                    let value = (*arg_value.arg(offset)).one;
+                    offset += 1;
+
+                    match ty {
+                      // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
+                      Type::Literal(Literal::Bool) => Value::Bool(value as u8 != 0),
+                      Type::Literal(Literal::Int) => Value::Int(value),
+                      v => unimplemented!("{v:?}"),
+                    }
+                  }
                 }
               }
-              ParamSize::Double => {
-                let [ty, value] = (*arg_value.arg(offset)).two;
-                offset += 2;
-                match ty {
+              ParamKind::Extended => {
+                // A nil will only take up one slot, so we must check for that to avoid reading
+                // out of bounds.
+                let dyn_ty = (*arg_value.arg(offset)).one;
+                offset += 1;
+
+                match dyn_ty {
                   0 => Value::Nil,
-                  // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
-                  1 => Value::Bool(value as u8 != 0),
-                  2 => Value::Int(value),
-                  v => panic!("unknown value kind {v}"),
+                  _ => {
+                    let [_, value] = (*arg_value.arg(offset)).two;
+                    offset += 1;
+
+                    match dyn_ty {
+                      0 => Value::Nil,
+                      // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
+                      1 => Value::Bool(value as u8 != 0),
+                      2 => Value::Int(value),
+                      v => panic!("unknown value kind {v}"),
+                    }
+                  }
                 }
               }
             };

@@ -37,6 +37,22 @@ pub enum ParamSize {
   Double,
 }
 
+/// The parameter kind for passing a value around. This is most commonly used
+/// for local variables. Compact values have their static type known, wheras
+/// extended types have a static type that is a union or unknown.
+#[derive(Clone, Copy)]
+pub enum ParamKind {
+  /// The compact format. This will returns in a `CompactValues` containing zero
+  /// or one values. Zero values will show up for a `nil`, and one value will
+  /// show up for everything else.
+  Compact,
+
+  /// The extended format. This will always return one or two `CompactValues`.
+  /// Nil will produce a single value, and everything else will produce two
+  /// values.
+  Extended,
+}
+
 impl<T> CompactValues<T> {
   pub fn map<U>(self, mut f: impl FnMut(T) -> U) -> CompactValues<U> {
     match self {
@@ -54,15 +70,23 @@ impl<T> CompactValues<T> {
     }
   }
 
-  pub fn first(self) -> T {
+  pub fn first(self) -> Option<T> {
     match self {
-      CompactValues::None => panic!("cannot call first() on empty compact values"),
-      CompactValues::One(a) => a,
-      CompactValues::Two(a, _) => a,
+      CompactValues::None => None,
+      CompactValues::One(a) => Some(a),
+      CompactValues::Two(a, _) => Some(a),
     }
   }
 
-  pub fn len(&self) -> usize {
+  pub fn second(self) -> Option<T> {
+    match self {
+      CompactValues::None => None,
+      CompactValues::One(_) => None,
+      CompactValues::Two(_, b) => Some(b),
+    }
+  }
+
+  pub fn len(&self) -> u32 {
     match self {
       CompactValues::None => 0,
       CompactValues::One(_) => 1,
@@ -133,6 +157,16 @@ impl RValue {
     }
   }
 
+  pub fn to_ir(&self, kind: ParamKind, builder: &mut FunctionBuilder) -> CompactValues<ir::Value> {
+    match kind {
+      ParamKind::Compact => self.to_compact_ir(),
+      ParamKind::Extended => self.to_extended_ir(builder),
+    }
+  }
+
+  /// Returns an IR value that is always exactly `size` elements. This should
+  /// only be used for conditionals, where blocks need an exact number of
+  /// arguments. Prefer `to_ir` when possible.
   pub fn to_sized_ir(
     &self,
     size: ParamSize,
@@ -197,11 +231,20 @@ impl ParamSize {
     }
   }
 
-  pub fn size_of_type(ty: &Type) -> ParamSize {
+  pub fn for_type(ty: &Type) -> ParamSize {
     match ty {
       Type::Literal(Literal::Unit) => ParamSize::Unit,
       Type::Union(_) => ParamSize::Double,
       _ => ParamSize::Single,
+    }
+  }
+}
+
+impl ParamKind {
+  pub fn for_type(ty: &Type) -> Self {
+    match ty {
+      Type::Union(_) => ParamKind::Extended,
+      _ => ParamKind::Compact,
     }
   }
 }
