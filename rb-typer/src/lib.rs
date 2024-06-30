@@ -74,7 +74,7 @@ impl<'a> Typer<'a> {
         let var = &self.variables[*v];
 
         assert!(var.values.len() == 1, "variable {var:?} has multiple values");
-        self.lower_type(&var.values[0])
+        self.lower_type(&var.values.iter().next().unwrap())
       }
 
       ref ty => panic!("invalid type: {ty:?}"),

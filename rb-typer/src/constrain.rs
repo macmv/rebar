@@ -84,9 +84,10 @@ impl Constrain<'_, '_> {
         let sp = self.typer.variables[*v].span;
         self.ctx(format!("constraining {desc} to {u:?}"), Some(sp), |c| {
           let vvar = &mut c.typer.variables[*v];
-          vvar.uses.push(u.clone());
-          for v0 in vvar.values.clone() {
-            c.constrain(&v0, u, span);
+          if vvar.uses.insert(u.clone()) {
+            for v0 in vvar.values.clone() {
+              c.constrain(&v0, u, span);
+            }
           }
         });
       }
@@ -95,9 +96,10 @@ impl Constrain<'_, '_> {
         let sp = self.typer.variables[*u].span;
         self.ctx(format!("constraining {v:?} to {desc}"), Some(sp), |c| {
           let uvar = &mut c.typer.variables[*u];
-          uvar.values.push(v.clone());
-          for u0 in uvar.uses.clone() {
-            c.constrain(v, &u0, span);
+          if uvar.values.insert(v.clone()) {
+            for u0 in uvar.uses.clone() {
+              c.constrain(v, &u0, span);
+            }
           }
         });
       }
