@@ -52,6 +52,17 @@ impl<'a> Typer<'a> {
   pub fn check(env: &'a Environment, function: &'a hir::Function, span_map: &'a SpanMap) -> Self {
     let mut typer = Typer::new(env, function, span_map);
 
+    for (arg, ty) in &function.args {
+      let ty = match ty {
+        hir::TypeExpr::Nil => VType::Literal(Literal::Unit),
+        hir::TypeExpr::Bool => VType::Literal(Literal::Bool),
+        hir::TypeExpr::Int => VType::Literal(Literal::Int),
+        _ => todo!("type expr {ty:?}"),
+      };
+
+      typer.locals.insert(arg.clone(), ty.clone());
+    }
+
     for &item in function.items.iter() {
       typer.type_stmt(item);
     }

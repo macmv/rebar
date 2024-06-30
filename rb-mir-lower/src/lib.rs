@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use rb_hir::ast as hir;
 use rb_mir::ast as mir;
-use rb_typer::{Type, Typer};
+use rb_typer::{Literal, Type, Typer};
 
 pub struct Env {
   pub functions: HashMap<String, mir::NativeFunctionId>,
@@ -14,6 +14,20 @@ pub fn lower_function(env: &Env, ty: &Typer, hir: &hir::Function) -> mir::Functi
   let mut mir = mir::Function::default();
 
   let mut lower = Lower { env, ty, hir, mir: &mut mir, locals: HashMap::new() };
+
+  for (name, ty) in hir.args.iter() {
+    // FIXME: Need a better way to do this.
+    let ty = match ty {
+      hir::TypeExpr::Nil => Type::Literal(Literal::Unit),
+      hir::TypeExpr::Bool => Type::Literal(Literal::Bool),
+      hir::TypeExpr::Int => Type::Literal(Literal::Int),
+      _ => todo!("type expr {ty:?}"),
+    };
+
+    let id = lower.next_var_id(ty);
+    lower.locals.insert(name.clone(), id);
+  }
+
   for stmt in hir.items.iter() {
     let id = lower.lower_stmt(*stmt);
     lower.mir.items.push(id);
