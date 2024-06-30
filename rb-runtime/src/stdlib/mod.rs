@@ -84,7 +84,6 @@ impl Environment {
                     offset += 1;
 
                     match dyn_ty {
-                      0 => Value::Nil,
                       // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
                       1 => Value::Bool(value as u8 != 0),
                       2 => Value::Int(value),
