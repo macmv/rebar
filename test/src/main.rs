@@ -1,6 +1,8 @@
 use std::path::{Path, PathBuf};
 
 fn main() {
+  let filter = std::env::args().nth(1).unwrap_or_default();
+
   let files = gather_files(Path::new("test/integration"));
 
   println!("running tests...");
@@ -10,13 +12,17 @@ fn main() {
 
   std::thread::scope(|scope| {
     for chunk in files.chunks(chunk_size) {
+      let f = &filter;
       scope.spawn(move || {
         for path in chunk {
           if path.extension().unwrap() == "rbr" {
-            let source = std::fs::read_to_string(&path).unwrap();
-            rb_runtime::eval(&source);
+            let stringified = path.display().to_string();
+            if stringified.contains(f) {
+              let source = std::fs::read_to_string(&path).unwrap();
+              rb_runtime::eval(&source);
 
-            println!("{}... \x1b[32mok\x1b[0m", path.display());
+              println!("{}... \x1b[32mok\x1b[0m", stringified);
+            }
           }
         }
       });
