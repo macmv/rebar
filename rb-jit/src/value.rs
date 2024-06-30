@@ -187,4 +187,12 @@ impl ParamSize {
       ParamSize::Double => 2,
     }
   }
+
+  pub fn size_of_type(ty: &Type) -> ParamSize {
+    match ty {
+      Type::Literal(Literal::Unit) => ParamSize::Unit,
+      Type::Union(_) => ParamSize::Double,
+      _ => ParamSize::Single,
+    }
+  }
 }

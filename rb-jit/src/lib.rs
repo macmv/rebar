@@ -3,4 +3,4 @@
 
 // pub mod interp;
 pub mod jit;
-mod value;
+pub mod value;

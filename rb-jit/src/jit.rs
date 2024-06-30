@@ -9,7 +9,7 @@ use cranelift_module::{DataDescription, FuncId, FunctionDeclaration, Linkage, Mo
 use isa::TargetIsa;
 use rb_mir::ast as mir;
 use rb_typer::{Literal, Type};
-use std::{collections::HashMap, marker::PhantomPinned};
+use std::{collections::HashMap, fmt::write, marker::PhantomPinned};
 
 use crate::value::{CompactValues, ParamSize, RValue};
 
@@ -61,47 +61,32 @@ pub struct FuncBuilder<'a> {
   next_variable: usize,
 }
 
-/// This struct is horribly dangerous to use.
+/// This struct is horribly dangerous to use. It is a struct storing the
+/// arguments passed from the Rebar runtime up to rust code. Because calls know
+/// the signature of the called function statically, this struct's layout
+/// depends on the function signature. Its essentially a wrapper for a pointer
+/// and should only be used as such.
 ///
-/// It should only be constructed from within the rebar runtime. The layout
-/// should look something like this:
-/// [
-///   len: 8 bytes
-///   arg0: 16 bytes
-///   arg1: 16 bytes
-///   ...etc
-/// ]
-///
-/// The compiled rebar instructions will construct a slice with the correct
-/// arguments all lined up in memory. Then, that pointer will be passed to rust,
-/// where it will be cast to a reference, and then functions like `arg` may be
-/// called on it.
-///
-/// So, TLDR, don't move this thing around. I would wrap it in a `Pin`, but
-/// `Pin` is annoying to use, so all the functions are just unsafe instead.
+/// So, don't move this thing around. I would wrap it in a `Pin`, but `Pin` is
+/// annoying to use, so all the functions are just unsafe instead.
 #[repr(C)]
 pub struct RebarSlice {
-  len:      u64,
   _phantom: PhantomPinned,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct RebarValue {
-  pub kind:  u64,
-  pub value: i64,
+pub union RebarValue {
+  pub nil: (),
+  pub one: i64,
+  pub two: [i64; 2],
 }
 
 impl RebarSlice {
-  pub unsafe fn len(&self) -> usize { self.len as usize }
-
-  pub unsafe fn arg(&self, idx: usize) -> RebarValue {
-    assert!(idx < self.len as usize);
+  pub unsafe fn arg(&self, offset: usize) -> *const RebarValue {
     unsafe {
       let ptr = self as *const _;
-      // `offset(1)` skips the `len` field.
-      let arg_ptr = (ptr as *const i64).offset(1) as *const RebarValue;
-      *arg_ptr.offset(idx as isize)
+      (ptr as *const i64).offset(offset as isize) as *const RebarValue
     }
   }
 }

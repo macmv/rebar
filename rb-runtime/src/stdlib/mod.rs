@@ -3,7 +3,7 @@ use ::std::{cell::RefCell, collections::HashMap};
 mod core;
 mod std;
 
-use rb_jit::jit::RebarSlice;
+use rb_jit::{jit::RebarSlice, value::ParamSize};
 use rb_mir::ast as mir;
 use rb_typer::{Literal, Type};
 
@@ -38,19 +38,40 @@ impl Environment {
         let env = env.borrow();
         let env = env.as_ref().unwrap();
 
-        let f = &env.names[&env.ids[func as usize]].imp;
+        let f = &env.names[&env.ids[func as usize]];
 
         let args = unsafe {
           let arg_value = &*arg;
 
           let mut args = vec![];
-          for i in 0..arg_value.len() {
-            let rb_value = arg_value.arg(i);
-            let value = match rb_value.kind {
-              0 => Value::Nil,
-              1 => Value::Bool(rb_value.value != 0),
-              2 => Value::Int(rb_value.value),
-              v => panic!("unknown value kind {v}"),
+          let mut offset = 0;
+          for ty in f.args.iter() {
+            let param_size = ParamSize::size_of_type(ty);
+
+            let value = match param_size {
+              ParamSize::Unit => Value::Nil,
+              ParamSize::Single => {
+                let value = (*arg_value.arg(offset)).one;
+                offset += 1;
+                match ty {
+                  Type::Literal(Literal::Unit) => Value::Nil,
+                  // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
+                  Type::Literal(Literal::Bool) => Value::Bool(value as u8 != 0),
+                  Type::Literal(Literal::Int) => Value::Int(value),
+                  v => unimplemented!("{v:?}"),
+                }
+              }
+              ParamSize::Double => {
+                let [ty, value] = (*arg_value.arg(offset)).two;
+                offset += 2;
+                match ty {
+                  0 => Value::Nil,
+                  // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
+                  1 => Value::Bool(value as u8 != 0),
+                  2 => Value::Int(value),
+                  v => panic!("unknown value kind {v}"),
+                }
+              }
             };
 
             args.push(value);
@@ -58,11 +79,16 @@ impl Environment {
           args
         };
 
-        // TODO: And we need opposite shenanigans here to convert the return value.
-        match f(args) {
-          Value::Int(v) => v,
-          Value::Bool(_) => 0,
-          Value::Nil => 0,
+        let ret = (f.imp)(args);
+
+        // TODO: Native functions must always return a value, but the runtime isn't
+        // going to assume that. Need to figure out a way to return something
+        // sane here.
+        match f.ret {
+          Type::Literal(Literal::Unit) => 0,
+          Type::Literal(Literal::Bool) => ret.as_bool() as i64,
+          Type::Literal(Literal::Int) => ret.as_int(),
+          ref v => unimplemented!("{v:?}"),
         }
       })
     }
@@ -98,6 +124,22 @@ enum Value {
   Int(i64),
   Bool(bool),
   Nil,
+}
+
+impl Value {
+  pub fn as_int(&self) -> i64 {
+    match self {
+      Value::Int(i) => *i,
+      _ => panic!("expected int"),
+    }
+  }
+
+  pub fn as_bool(&self) -> bool {
+    match self {
+      Value::Bool(b) => *b,
+      _ => panic!("expected bool"),
+    }
+  }
 }
 
 impl Environment {
