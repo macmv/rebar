@@ -7,23 +7,46 @@ use rb_syntax::{cst, AstNode};
 
 pub fn lower_source(cst: cst::SourceFile, source: SourceId) -> (hir::SourceFile, SpanMap) {
   let mut out = hir::SourceFile::default();
-  let mut main = hir::Function::default();
   let mut span_map = SpanMap::default();
 
-  let mut lower = FunctionLower { source, f: &mut main, span_map: &mut span_map };
-  for stmt in cst.stmts() {
-    let item = lower.stmt(stmt);
-    lower.f.items.push(item);
-  }
+  let mut lower = SourceLower { source, out: &mut out, span_map: &mut span_map };
+  let main = lower.source(&cst);
 
-  out.main_function = Some(out.functions.alloc(main));
+  out.main_function = Some(main);
   (out, span_map)
 }
 
-struct FunctionLower<'a> {
+struct SourceLower<'a> {
   source:   SourceId,
-  f:        &'a mut hir::Function,
+  out:      &'a mut hir::SourceFile,
   span_map: &'a mut SpanMap,
+}
+
+impl SourceLower<'_> {
+  fn source(&mut self, cst: &cst::SourceFile) -> hir::FunctionId {
+    let mut func = hir::Function::default();
+    let mut lower = FunctionLower { source: self, f: &mut func };
+    for stmt in cst.stmts() {
+      let item = lower.stmt(stmt);
+      lower.f.items.push(item);
+    }
+    self.out.functions.alloc(func)
+  }
+
+  fn function(&mut self, cst: &cst::Def) -> hir::FunctionId {
+    let mut f = hir::Function::default();
+    let mut lower = FunctionLower { source: self, f: &mut f };
+    for stmt in cst.block().unwrap().stmts() {
+      let item = lower.stmt(stmt);
+      lower.f.items.push(item);
+    }
+    self.out.functions.alloc(f)
+  }
+}
+
+struct FunctionLower<'a, 'b> {
+  source: &'a mut SourceLower<'b>,
+  f:      &'a mut hir::Function,
 }
 
 macro_rules! match_token {
@@ -42,7 +65,7 @@ macro_rules! match_token {
   };
 }
 
-impl FunctionLower<'_> {
+impl FunctionLower<'_, '_> {
   fn stmt(&mut self, cst: cst::Stmt) -> hir::StmtId {
     let stmt = match cst {
       cst::Stmt::ExprStmt(ref expr) => {
@@ -58,10 +81,22 @@ impl FunctionLower<'_> {
         hir::Stmt::Let(name, expr)
       }
 
+      // TODO: Allow inner defs to capture local variables.
+      cst::Stmt::Def(ref def) => {
+        self.source.function(def);
+
+        let dummy = hir::Expr::Literal(hir::Literal::Nil);
+        hir::Stmt::Expr(self.f.exprs.alloc(dummy))
+      }
+
       _ => unimplemented!("lowering for {:?}", cst),
     };
 
-    self.span_map.stmts.push(Span { file: self.source, range: cst.syntax().text_range() });
+    self
+      .source
+      .span_map
+      .stmts
+      .push(Span { file: self.source.source, range: cst.syntax().text_range() });
     self.f.stmts.alloc(stmt)
   }
 
@@ -144,7 +179,11 @@ impl FunctionLower<'_> {
       _ => unimplemented!("lowering for {:?}", cst),
     };
 
-    self.span_map.exprs.push(Span { file: self.source, range: cst.syntax().text_range() });
+    self
+      .source
+      .span_map
+      .exprs
+      .push(Span { file: self.source.source, range: cst.syntax().text_range() });
     self.f.exprs.alloc(expr)
   }
 }
