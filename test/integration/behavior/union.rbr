@@ -1,0 +1,2 @@
+assert(if true { 1 } else {  } == 1)
+assert(if false { 1 } else {  } == nil)

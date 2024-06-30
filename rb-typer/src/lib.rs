@@ -73,8 +73,19 @@ impl<'a> Typer<'a> {
       VType::Var(v) => {
         let var = &self.variables[*v];
 
-        assert!(var.values.len() == 1, "variable {var:?} has multiple values");
-        self.lower_type(&var.values.iter().next().unwrap())
+        if var.values.is_empty() {
+          Type::Literal(Literal::Unit)
+        } else if var.values.len() == 1 {
+          self.lower_type(&var.values.iter().next().unwrap())
+        } else {
+          let mut types = vec![];
+          for ty in &var.values {
+            types.push(self.lower_type(ty));
+          }
+          // TODO: Need to sort types.
+          // types.sort_unstable();
+          Type::Union(types)
+        }
       }
 
       ref ty => panic!("invalid type: {ty:?}"),

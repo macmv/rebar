@@ -454,7 +454,54 @@ impl FuncBuilder<'_> {
               RValue::Bool(res)
             }
 
-            _ => unreachable!("cannot compare values"),
+            (RValue::Dynamic(lty, l), RValue::Dynamic(rty, r)) => {
+              let res = match op {
+                mir::BinaryOp::Eq => {
+                  let ty_eq = self.builder.ins().icmp(IntCC::Equal, lty, rty);
+                  let v_eq = self.builder.ins().icmp(IntCC::Equal, l, r);
+                  self.builder.ins().band(ty_eq, v_eq)
+                }
+                mir::BinaryOp::Neq => {
+                  let ty_neq = self.builder.ins().icmp(IntCC::NotEqual, l, r);
+                  let v_neq = self.builder.ins().icmp(IntCC::NotEqual, l, r);
+
+                  self.builder.ins().bor(ty_neq, v_neq)
+                }
+                _ => unreachable!(),
+              };
+
+              RValue::Bool(res)
+            }
+
+            (RValue::Dynamic(lty, l), _) => {
+              let rhs = rhs.to_sized_ir(ParamSize::Double, &mut self.builder);
+
+              let res = match op {
+                mir::BinaryOp::Eq => match rhs {
+                  CompactValues::None => unreachable!(),
+                  CompactValues::One(rty) => self.builder.ins().icmp(IntCC::Equal, lty, rty),
+                  CompactValues::Two(rty, r) => {
+                    let ty_eq = self.builder.ins().icmp(IntCC::Equal, lty, rty);
+                    let v_eq = self.builder.ins().icmp(IntCC::Equal, l, r);
+                    self.builder.ins().band(ty_eq, v_eq)
+                  }
+                },
+                mir::BinaryOp::Neq => match rhs {
+                  CompactValues::None => unreachable!(),
+                  CompactValues::One(rty) => self.builder.ins().icmp(IntCC::NotEqual, lty, rty),
+                  CompactValues::Two(rty, r) => {
+                    let ty_eq = self.builder.ins().icmp(IntCC::NotEqual, lty, rty);
+                    let v_eq = self.builder.ins().icmp(IntCC::NotEqual, l, r);
+                    self.builder.ins().bor(ty_eq, v_eq)
+                  }
+                },
+                _ => unreachable!(),
+              };
+
+              RValue::Bool(res)
+            }
+
+            (l, r) => unreachable!("cannot compare values {l:?} and {r:?}"),
           },
 
           _ => {

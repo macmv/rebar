@@ -5,7 +5,7 @@ use cranelift::{
 };
 use rb_typer::{Literal, Type};
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum RValue {
   /// Nil stores no value.
   Nil,
@@ -18,6 +18,9 @@ pub enum RValue {
 
   /// Stores a function pointer.
   Function(ir::Value),
+
+  /// Stores a value that can change type at runtime.
+  Dynamic(ir::Value, ir::Value),
 }
 
 #[derive(Clone, Copy)]
@@ -83,19 +86,20 @@ impl RValue {
   /// Returns the extended form of this value. This is used when passing a value
   /// into a union slot, or back to native code.
   fn to_extended_ir(&self, builder: &mut FunctionBuilder) -> CompactValues<ir::Value> {
-    let id = match self {
-      RValue::Nil => 0,
-      RValue::Bool(_) => 1,
-      RValue::Int(_) => 2,
-      RValue::Function(_) => 3,
+    let ty = match self {
+      RValue::Nil => builder.ins().iconst(ir::types::I64, 0),
+      RValue::Bool(_) => builder.ins().iconst(ir::types::I64, 1),
+      RValue::Int(_) => builder.ins().iconst(ir::types::I64, 2),
+      RValue::Function(_) => builder.ins().iconst(ir::types::I64, 3),
+      RValue::Dynamic(ty, _) => *ty,
     };
-    let ty = builder.ins().iconst(ir::types::I64, id);
 
     let value = match self {
       RValue::Nil => None,
       RValue::Bool(v) => Some(*v),
       RValue::Int(v) => Some(*v),
       RValue::Function(v) => Some(*v),
+      RValue::Dynamic(_, v) => Some(*v),
     };
 
     match value {
@@ -112,6 +116,7 @@ impl RValue {
       RValue::Bool(v) => CompactValues::One(*v),
       RValue::Int(v) => CompactValues::One(*v),
       RValue::Function(v) => CompactValues::One(*v),
+      RValue::Dynamic(ty, v) => CompactValues::Two(*ty, *v),
     }
   }
 
@@ -124,7 +129,7 @@ impl RValue {
         Type::Function(_, _) => RValue::Function(v),
         _ => panic!("invalid type"),
       },
-      _ => panic!("expected 0 or 1 values"),
+      CompactValues::Two(ty, v) => RValue::Dynamic(ty, v),
     }
   }
 
@@ -136,7 +141,11 @@ impl RValue {
     match size {
       ParamSize::Unit => self.to_compact_ir(),
       ParamSize::Single => self.to_compact_ir(),
-      ParamSize::Double => self.to_extended_ir(builder),
+      ParamSize::Double => match self.to_extended_ir(builder) {
+        CompactValues::None => unreachable!(),
+        CompactValues::One(ty) => CompactValues::Two(ty, builder.ins().iconst(ir::types::I64, 0)),
+        CompactValues::Two(ty, v) => CompactValues::Two(ty, v),
+      },
     }
   }
 
