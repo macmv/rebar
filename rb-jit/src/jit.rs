@@ -11,7 +11,7 @@ use rb_mir::ast as mir;
 use rb_typer::{Literal, Type};
 use std::{collections::HashMap, marker::PhantomPinned};
 
-use crate::value::{CompactValues, RValue};
+use crate::value::{CompactValues, ParamSize, RValue};
 
 pub struct JIT {
   module: JITModule,
@@ -267,7 +267,7 @@ impl FuncBuilder<'_> {
   }
 
   fn def_var(&mut self, var: CompactValues<Variable>, value: RValue) {
-    match (var, value.to_ir()) {
+    match (var, value.to_compact_ir()) {
       (CompactValues::None, CompactValues::None) => {}
       (CompactValues::None, _) => panic!("cannot assign a value to a nil"),
 
@@ -319,7 +319,7 @@ impl FuncBuilder<'_> {
       mir::Stmt::Let(id, _, expr) => {
         let value = self.compile_expr(expr);
         // FIXME: This should use the static type to build variables, not the IR value.
-        let variables = value.to_ir().map(|_| self.new_variable());
+        let variables = value.to_compact_ir().map(|_| self.new_variable());
 
         self.def_var(variables, value);
         self.locals.insert(id, variables);
@@ -461,7 +461,7 @@ impl FuncBuilder<'_> {
         res
       }
 
-      mir::Expr::If { cond, then, els: None } => {
+      mir::Expr::If { cond, then, els: None, ty: _ } => {
         let cond = self.compile_expr(cond);
         let cond = cond.as_bool().unwrap();
 
@@ -484,7 +484,7 @@ impl FuncBuilder<'_> {
         RValue::Nil
       }
 
-      mir::Expr::If { cond, then, els: Some(els) } => {
+      mir::Expr::If { cond, then, els: Some(els), ref ty } => {
         let cond = self.compile_expr(cond);
         let cond = cond.as_bool().unwrap();
 
@@ -492,15 +492,17 @@ impl FuncBuilder<'_> {
         let else_block = self.builder.create_block();
         let merge_block = self.builder.create_block();
 
+        let param_size = param_size_of_type(&ty);
+
         // FIXME: Get the static types in here and append the parameters we need.
-        self.builder.append_block_param(merge_block, ir::types::I64);
+        param_size.append_block_params(&mut self.builder, merge_block);
 
         // Test the if condition and conditionally branch.
         self.builder.ins().brif(cond, then_block, &[], else_block, &[]);
 
         self.builder.switch_to_block(then_block);
         self.builder.seal_block(then_block);
-        let then_return = self.compile_expr(then).to_ir();
+        let then_return = self.compile_expr(then).to_sized_ir(param_size);
 
         // Jump to the merge block, passing it the block return value.
         then_return.with_slice(|slice| {
@@ -509,7 +511,7 @@ impl FuncBuilder<'_> {
 
         self.builder.switch_to_block(else_block);
         self.builder.seal_block(else_block);
-        let else_return = self.compile_expr(els).to_ir();
+        let else_return = self.compile_expr(els).to_sized_ir(param_size);
 
         // Jump to the merge block, passing it the block return value.
         else_return.with_slice(|slice| {
@@ -524,9 +526,7 @@ impl FuncBuilder<'_> {
 
         // Read the value of the if-else by reading the merge block
         // parameter.
-        let phi = self.builder.block_params(merge_block)[0];
-
-        RValue::Int(phi)
+        RValue::from_sized_ir(self.builder.block_params(merge_block), ty)
       }
 
       ref v => unimplemented!("expr: {v:?}"),
@@ -534,11 +534,10 @@ impl FuncBuilder<'_> {
   }
 }
 
-fn id_of_type(ty: &Type) -> i64 {
+fn param_size_of_type(ty: &Type) -> ParamSize {
   match ty {
-    Type::Literal(Literal::Unit) => 0,
-    Type::Literal(Literal::Bool) => 1,
-    Type::Literal(Literal::Int) => 2,
-    _ => unimplemented!(),
+    Type::Literal(Literal::Unit) => ParamSize::Unit,
+    Type::Union(_) => ParamSize::Double,
+    _ => ParamSize::Single,
   }
 }

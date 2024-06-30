@@ -37,7 +37,7 @@ pub enum Expr {
 
   Block(Vec<StmtId>),
 
-  If { cond: ExprId, then: ExprId, els: Option<ExprId> },
+  If { cond: ExprId, then: ExprId, els: Option<ExprId>, ty: Type },
   Assign { variable: String, ty: Type, rhs: ExprId },
 
   While { cond: ExprId },

@@ -1,4 +1,9 @@
-use cranelift::{codegen::ir, frontend::FunctionBuilder, prelude::InstBuilder};
+use cranelift::{
+  codegen::ir,
+  frontend::FunctionBuilder,
+  prelude::{Block, InstBuilder},
+};
+use rb_typer::{Literal, Type};
 
 #[derive(Clone, Copy)]
 pub enum RValue {
@@ -22,6 +27,13 @@ pub enum CompactValues<T> {
   Two(T, T),
 }
 
+#[derive(Clone, Copy)]
+pub enum ParamSize {
+  Unit,
+  Single,
+  Double,
+}
+
 impl<T> CompactValues<T> {
   pub fn map<U>(self, mut f: impl FnMut(T) -> U) -> CompactValues<U> {
     match self {
@@ -36,6 +48,17 @@ impl<T> CompactValues<T> {
       CompactValues::None => f(&[]),
       CompactValues::One(a) => f(&[a]),
       CompactValues::Two(a, b) => f(&[a, b]),
+    }
+  }
+}
+
+impl<T: Copy> CompactValues<T> {
+  pub fn from_slice(elems: &[T]) -> Self {
+    match elems {
+      [] => CompactValues::None,
+      [a] => CompactValues::One(*a),
+      [a, b] => CompactValues::Two(*a, *b),
+      _ => panic!("expected 0..=2 values"),
     }
   }
 }
@@ -64,13 +87,40 @@ impl RValue {
 
   /// Returns the compact for of this value. This is used wherever the static
   /// type of the value is simple (ie, not a union).
-  pub fn to_ir(&self) -> CompactValues<ir::Value> {
+  pub fn to_compact_ir(&self) -> CompactValues<ir::Value> {
     match self {
       RValue::Nil => CompactValues::None,
       RValue::Bool(v) => CompactValues::One(*v),
       RValue::Int(v) => CompactValues::One(*v),
       RValue::Function(v) => CompactValues::One(*v),
     }
+  }
+
+  pub fn from_compact_ir(ir: CompactValues<ir::Value>, ty: &Type) -> Self {
+    match ir {
+      CompactValues::None => RValue::Nil,
+      CompactValues::One(v) => match ty {
+        Type::Literal(Literal::Bool) => RValue::Bool(v),
+        Type::Literal(Literal::Int) => RValue::Int(v),
+        Type::Function(_, _) => RValue::Function(v),
+        _ => panic!("invalid type"),
+      },
+      _ => panic!("expected 0 or 1 values"),
+    }
+  }
+
+  pub fn to_sized_ir(&self, size: ParamSize) -> CompactValues<ir::Value> {
+    match size {
+      ParamSize::Unit => self.to_compact_ir(),
+      ParamSize::Single => self.to_compact_ir(),
+      ParamSize::Double => todo!(),
+    }
+  }
+
+  pub fn from_sized_ir(ir: &[ir::Value], ty: &Type) -> RValue {
+    let values = CompactValues::from_slice(ir);
+
+    RValue::from_compact_ir(values, ty)
   }
 
   pub fn as_bool(&self) -> Option<ir::Value> {
@@ -89,6 +139,21 @@ impl RValue {
     match self {
       RValue::Function(v) => Some(*v),
       _ => None,
+    }
+  }
+}
+
+impl ParamSize {
+  pub fn append_block_params(&self, builder: &mut FunctionBuilder, block: Block) {
+    match self {
+      ParamSize::Unit => {}
+      ParamSize::Single => {
+        builder.append_block_param(block, ir::types::I64);
+      }
+      ParamSize::Double => {
+        builder.append_block_param(block, ir::types::I64);
+        builder.append_block_param(block, ir::types::I64);
+      }
     }
   }
 }

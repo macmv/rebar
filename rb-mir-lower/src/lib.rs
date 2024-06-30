@@ -134,7 +134,7 @@ impl Lower<'_> {
         let then = self.lower_expr(then);
         let els = els.map(|e| self.lower_expr(e));
 
-        mir::Expr::If { cond, then, els }
+        mir::Expr::If { cond, then, els, ty: self.ty.type_of_expr(expr) }
       }
 
       ref v => unimplemented!("lowering expression {v:?}"),
