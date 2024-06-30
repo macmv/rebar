@@ -50,6 +50,14 @@ impl<T> CompactValues<T> {
       CompactValues::Two(a, b) => f(&[a, b]),
     }
   }
+
+  pub fn first(self) -> T {
+    match self {
+      CompactValues::None => panic!("cannot call first() on empty compact values"),
+      CompactValues::One(a) => a,
+      CompactValues::Two(a, _) => a,
+    }
+  }
 }
 
 impl<T: Copy> CompactValues<T> {
@@ -66,7 +74,7 @@ impl<T: Copy> CompactValues<T> {
 impl RValue {
   /// Returns the extended form of this value. This is used when passing a value
   /// into a union slot, or back to native code.
-  pub fn extended_ir(&self, builder: &mut FunctionBuilder) -> (ir::Value, Option<ir::Value>) {
+  pub fn extended_ir(&self, builder: &mut FunctionBuilder) -> CompactValues<ir::Value> {
     let id = match self {
       RValue::Nil => 0,
       RValue::Bool(_) => 1,
@@ -82,7 +90,10 @@ impl RValue {
       RValue::Function(v) => Some(*v),
     };
 
-    (ty, value)
+    match value {
+      None => CompactValues::One(ty),
+      Some(v) => CompactValues::Two(ty, v),
+    }
   }
 
   /// Returns the compact for of this value. This is used wherever the static

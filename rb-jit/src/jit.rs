@@ -283,14 +283,15 @@ impl FuncBuilder<'_> {
 
       // Any value can be assigned to a union.
       (CompactValues::Two(var0, var1), _) => {
-        let (a, b) = value.extended_ir(&mut self.builder);
+        let values = value.extended_ir(&mut self.builder);
 
         // The first value is the only one that must be set. For example, if a value is
         // set to `nil`, the second variable is undefined.
-        self.builder.def_var(var0, a);
-        if let Some(b) = b {
-          self.builder.def_var(var1, b);
-        }
+        values.with_slice(|slice| {
+          for (var, &value) in [var0, var1].into_iter().zip(slice.iter()) {
+            self.builder.def_var(var, value);
+          }
+        });
       }
     }
   }
@@ -373,7 +374,7 @@ impl FuncBuilder<'_> {
         for (i, (&arg, arg_ty)) in args.iter().zip(arg_types.iter()).enumerate() {
           let arg = self.compile_expr(arg);
 
-          let (ty, value) = arg.extended_ir(&mut self.builder);
+          let v = arg.extended_ir(&mut self.builder);
 
           // Each argument is 16 bytes wide, and we need an 8 byte offset for the length.
           // Store the type of the value in the first 8 bytes, and the value itself in the
@@ -381,13 +382,14 @@ impl FuncBuilder<'_> {
           #[cfg(debug_assertions)]
           {
             use cranelift::codegen::ir::InstBuilderBase;
-            assert_eq!(self.builder.ins().data_flow_graph().value_type(ty), ir::types::I64);
+            assert_eq!(self.builder.ins().data_flow_graph().value_type(v.first()), ir::types::I64);
           }
 
-          self.builder.ins().stack_store(ty, slot, i as i32 * 16 + 8);
-          if let Some(v) = value {
-            self.builder.ins().stack_store(v, slot, i as i32 * 16 + 8 + 8);
-          }
+          v.with_slice(|slice| {
+            for (j, &v) in slice.iter().enumerate() {
+              self.builder.ins().stack_store(v, slot, i as i32 * 16 + 8 + j as i32 * 8);
+            }
+          });
         }
 
         let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, slot, 0);
