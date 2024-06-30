@@ -11,7 +11,7 @@ use rb_mir::ast as mir;
 use rb_typer::{Literal, Type};
 use std::{collections::HashMap, marker::PhantomPinned};
 
-use crate::value::{CompactValues, ParamKind, ParamSize, RValue};
+use crate::value::{CompactValues, ParamKind, RValue};
 
 pub struct JIT {
   module: JITModule,
@@ -552,18 +552,15 @@ impl FuncBuilder<'_> {
         let merge_block = self.builder.create_block();
 
         // Blocks must always take the same parameters, even if some go unused. So use
-        // `to_sizedir_` instead of `to_ir` here.
-        let param_size = ParamSize::for_type(&ty);
-
-        // FIXME: Get the static types in here and append the parameters we need.
-        param_size.append_block_params(&mut self.builder, merge_block);
+        // `to_sized_ir` instead of `to_ir` here.
+        let param_kind = ParamKind::block_params(&mut self.builder, &ty, merge_block);
 
         // Test the if condition and conditionally branch.
         self.builder.ins().brif(cond, then_block, &[], else_block, &[]);
 
         self.builder.switch_to_block(then_block);
         self.builder.seal_block(then_block);
-        let then_return = self.compile_expr(then).to_sized_ir(param_size, &mut self.builder);
+        let then_return = self.compile_expr(then).to_sized_ir(param_kind, &mut self.builder);
 
         // Jump to the merge block, passing it the block return value.
         then_return.with_slice(|slice| {
@@ -572,7 +569,7 @@ impl FuncBuilder<'_> {
 
         self.builder.switch_to_block(else_block);
         self.builder.seal_block(else_block);
-        let else_return = self.compile_expr(els).to_sized_ir(param_size, &mut self.builder);
+        let else_return = self.compile_expr(els).to_sized_ir(param_kind, &mut self.builder);
 
         // Jump to the merge block, passing it the block return value.
         else_return.with_slice(|slice| {

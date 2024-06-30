@@ -30,13 +30,6 @@ pub enum CompactValues<T> {
   Two(T, T),
 }
 
-#[derive(Clone, Copy)]
-pub enum ParamSize {
-  Unit,
-  Single,
-  Double,
-}
-
 /// The parameter kind for passing a value around. This is most commonly used
 /// for local variables. Compact values have their static type known, wheras
 /// extended types have a static type that is a union or unknown.
@@ -186,18 +179,18 @@ impl RValue {
     }
   }
 
-  /// Returns an IR value that is always exactly `size` elements. This should
-  /// only be used for conditionals, where blocks need an exact number of
-  /// arguments. Prefer `to_ir` when possible.
+  /// Returns an IR value that has a consistent number of values. This means
+  /// passing in `ParamKind::Extended` will always return two values. This
+  /// should only be used in places where consistent sizes are required, ie
+  /// the block arguments for a conditional. Prefer `to_ir` when possible.
   pub fn to_sized_ir(
     &self,
-    size: ParamSize,
+    kind: ParamKind,
     builder: &mut FunctionBuilder,
   ) -> CompactValues<ir::Value> {
-    match size {
-      ParamSize::Unit => self.to_compact_ir(),
-      ParamSize::Single => self.to_compact_ir(),
-      ParamSize::Double => match self.to_extended_ir(builder) {
+    match kind {
+      ParamKind::Compact => self.to_compact_ir(),
+      ParamKind::Extended => match self.to_extended_ir(builder) {
         CompactValues::None => unreachable!(),
         CompactValues::One(ty) => CompactValues::Two(ty, builder.ins().iconst(ir::types::I64, 0)),
         CompactValues::Two(ty, v) => CompactValues::Two(ty, v),
@@ -208,18 +201,24 @@ impl RValue {
   /// Creates an RValue from a fixed sized list of IR values. This should be
   /// used for returns from blocks, where the size is fixed.
   pub fn from_sized_ir(ir: &[ir::Value], ty: &Type) -> RValue {
-    let size = ParamSize::for_type(ty);
-    assert_eq!(ir.len(), size.len() as usize);
+    let kind = ParamKind::for_type(ty);
+    match kind {
+      ParamKind::Compact => match ty {
+        Type::Literal(Literal::Unit) => assert_eq!(ir.len(), 0),
+        _ => assert_eq!(ir.len(), 1),
+      },
+      ParamKind::Extended => assert!(ir.len() == 2),
+    }
 
-    match size {
-      ParamSize::Unit => RValue::Nil,
-      ParamSize::Single => match ty {
+    match kind {
+      ParamKind::Compact => match ty {
+        Type::Literal(Literal::Unit) => RValue::Nil,
         Type::Literal(Literal::Bool) => RValue::Bool(ir[0]),
         Type::Literal(Literal::Int) => RValue::Int(ir[0]),
         Type::Function(_, _) => RValue::Function(ir[0]),
         _ => panic!("invalid type"),
       },
-      ParamSize::Double => RValue::Dynamic(ir[0], ir[1]),
+      ParamKind::Extended => RValue::Dynamic(ir[0], ir[1]),
     }
   }
 
@@ -243,38 +242,26 @@ impl RValue {
   }
 }
 
-impl ParamSize {
-  pub fn append_block_params(&self, builder: &mut FunctionBuilder, block: Block) {
-    match self {
-      ParamSize::Unit => {}
-      ParamSize::Single => {
-        builder.append_block_param(block, ir::types::I64);
-      }
-      ParamSize::Double => {
-        builder.append_block_param(block, ir::types::I64);
-        builder.append_block_param(block, ir::types::I64);
-      }
-    }
-  }
-
-  pub fn len(&self) -> u32 {
-    match self {
-      ParamSize::Unit => 0,
-      ParamSize::Single => 1,
-      ParamSize::Double => 2,
-    }
-  }
-
-  pub fn for_type(ty: &Type) -> ParamSize {
-    match ty {
-      Type::Literal(Literal::Unit) => ParamSize::Unit,
-      Type::Union(_) => ParamSize::Double,
-      _ => ParamSize::Single,
-    }
-  }
-}
-
 impl ParamKind {
+  pub fn block_params(builder: &mut FunctionBuilder, ty: &Type, block: Block) -> Self {
+    let kind = ParamKind::for_type(ty);
+
+    match kind {
+      ParamKind::Compact => match ty {
+        Type::Literal(Literal::Unit) => {}
+        _ => {
+          builder.append_block_param(block, ir::types::I64);
+        }
+      },
+      ParamKind::Extended => {
+        builder.append_block_param(block, ir::types::I64);
+        builder.append_block_param(block, ir::types::I64);
+      }
+    }
+
+    kind
+  }
+
   pub fn for_type(ty: &Type) -> Self {
     match ty {
       Type::Union(_) => ParamKind::Extended,
