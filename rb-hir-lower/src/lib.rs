@@ -136,51 +136,53 @@ impl FunctionLower<'_> {
   }
 }
 
-fn binary_op_from_cst(cst: &cst::BinaryOp) -> hir::BinaryOp {
-  macro_rules! ops {
-    { $($cst:ident => $hir:ident)* } => {
-      $(
-        if cst.$cst().is_some() {
-          return hir::BinaryOp::$hir;
-        }
-      )*
-    };
-  }
+macro_rules! match_token {
+  {
+    match $id:ident {
+      $($cst:ident => $hir:expr,)*
+    }
+  } => {
+    $(
+      if $id.$cst().is_some() {
+        return $hir;
+      }
+    )*
+  };
+}
 
-  ops! {
-    plus_token => Add
-    minus_token => Sub
-    star_token => Mul
-    slash_token => Div
-    percent_token => Mod
-    eq_eq_token => Eq
-    not_eq_token => Neq
-    less_token => Lt
-    less_eq_token => Lte
-    greater_token => Gt
-    greater_eq_token => Gte
-    and_token => And
-    or_token => Or
-    bit_and_token => BitAnd
-    bit_or_token => BitAnd
+fn binary_op_from_cst(cst: &cst::BinaryOp) -> hir::BinaryOp {
+  use hir::BinaryOp::*;
+
+  match_token! {
+    match cst {
+      plus_token => Add,
+      minus_token => Sub,
+      star_token => Mul,
+      slash_token => Div,
+      percent_token => Mod,
+      eq_eq_token => Eq,
+      not_eq_token => Neq,
+      less_token => Lt,
+      less_eq_token => Lte,
+      greater_token => Gt,
+      greater_eq_token => Gte,
+      and_token => And,
+      or_token => Or,
+      bit_and_token => BitAnd,
+      bit_or_token => BitAnd,
+    }
   }
   panic!("unexpected binary operator {cst}");
 }
 
 fn unary_op_from_cst(cst: &cst::PrefixOp) -> hir::UnaryOp {
-  macro_rules! ops {
-    { $($cst:ident => $hir:ident)* } => {
-      $(
-        if cst.$cst().is_some() {
-          return hir::UnaryOp::$hir;
-        }
-      )*
-    };
-  }
+  use hir::UnaryOp::*;
 
-  ops! {
-    minus_token => Neg
-    bang_token => Not
+  match_token! {
+    match cst {
+      minus_token => Neg,
+      bang_token => Not,
+    }
   }
   panic!("unexpected binary operator {cst}");
 }
