@@ -373,15 +373,11 @@ impl FuncBuilder<'_> {
 
         let slot = self.builder.create_sized_stack_slot(StackSlotData {
           kind: StackSlotKind::ExplicitSlot,
-          // Each argument is 8 bytes wide, and we need 8 bytes for the length..
-          size: arg_len * 8 + 8,
+          // Each argument is 8 bytes wide.
+          size: arg_len * 8,
         });
 
-        let arg_len = self.builder.ins().iconst(ir::types::I64, args.len() as i64);
-        self.builder.ins().stack_store(arg_len, slot, 0);
-
-        // Start after the `arg_len` slot.
-        let mut slot_index = 1;
+        let mut slot_index = 0;
         for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
           let arg = self.compile_expr(arg);
 
