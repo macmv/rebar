@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use la_arena::Idx;
 use rb_diagnostic::Span;
@@ -18,7 +18,7 @@ pub struct Environment {
 }
 
 /// A type with variables in it. Internal to the typer.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum VType {
   Literal(Literal),
 
@@ -44,7 +44,7 @@ impl From<Type> for VType {
   }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Literal {
   Int,
   Bool,
@@ -62,8 +62,8 @@ pub type VarId = Idx<TypeVar>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeVar {
-  pub values: Vec<VType>,
-  pub uses:   Vec<VType>,
+  pub values: HashSet<VType>,
+  pub uses:   HashSet<VType>,
 
   pub span:        Span,
   pub description: String,
@@ -71,6 +71,6 @@ pub struct TypeVar {
 
 impl TypeVar {
   pub fn new(span: Span, description: String) -> Self {
-    TypeVar { values: vec![], uses: vec![], span, description }
+    TypeVar { values: HashSet::new(), uses: HashSet::new(), span, description }
   }
 }
