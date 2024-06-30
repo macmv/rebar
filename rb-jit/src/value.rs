@@ -164,6 +164,33 @@ impl RValue {
     }
   }
 
+  // TODO: Need to actually use this with a function return.
+  pub fn from_ir(ir: &[ir::Value], ty: &Type) -> RValue {
+    match /*ParamKind::for_type(ty)*/ ParamKind::Extended {
+      ParamKind::Compact => match ty {
+        Type::Literal(Literal::Unit) => {
+          assert_eq!(ir.len(), 0);
+          RValue::Nil
+        }
+        _ => {
+          assert_eq!(ir.len(), 1);
+          let v = ir[0];
+
+          match ty {
+            Type::Literal(Literal::Bool) => RValue::Bool(v),
+            Type::Literal(Literal::Int) => RValue::Int(v),
+            Type::Function(_, _) => RValue::Function(v),
+            _ => panic!("invalid type"),
+          }
+        }
+      },
+      ParamKind::Extended => {
+        assert_eq!(ir.len(), 2);
+        RValue::Dynamic(ir[0], ir[1])
+      }
+    }
+  }
+
   /// Returns an IR value that is always exactly `size` elements. This should
   /// only be used for conditionals, where blocks need an exact number of
   /// arguments. Prefer `to_ir` when possible.
