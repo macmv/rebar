@@ -51,9 +51,9 @@ pub enum Stmt {
 
 #[derive(Debug)]
 pub enum Literal {
-  Int(i64),
+  Nil,
   Bool(bool),
-  Unit,
+  Int(i64),
 }
 
 #[derive(Debug)]

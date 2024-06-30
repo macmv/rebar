@@ -103,9 +103,9 @@ impl<'a> Typer<'a> {
   fn type_expr(&mut self, expr: ExprId) -> VType {
     let ty = match self.function.exprs[expr] {
       hir::Expr::Literal(ref lit) => match lit {
-        hir::Literal::Int(_) => VType::Literal(ty::Literal::Int),
+        hir::Literal::Nil => VType::Literal(ty::Literal::Unit),
         hir::Literal::Bool(_) => VType::Literal(ty::Literal::Bool),
-        hir::Literal::Unit => VType::Literal(ty::Literal::Unit),
+        hir::Literal::Int(_) => VType::Literal(ty::Literal::Int),
       },
 
       hir::Expr::Call(lhs_expr, ref args) => {

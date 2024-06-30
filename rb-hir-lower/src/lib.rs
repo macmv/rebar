@@ -60,6 +60,12 @@ impl FunctionLower<'_> {
       cst::Expr::Literal(ref lit) => {
         if let Some(lit) = lit.integer_token() {
           hir::Expr::Literal(hir::Literal::Int(lit.text().parse().unwrap()))
+        } else if let Some(_) = lit.true_token() {
+          hir::Expr::Literal(hir::Literal::Bool(true))
+        } else if let Some(_) = lit.false_token() {
+          hir::Expr::Literal(hir::Literal::Bool(false))
+        } else if let Some(_) = lit.nil_token() {
+          hir::Expr::Literal(hir::Literal::Nil)
         } else {
           panic!("unexpected literal {lit}");
         }

@@ -321,8 +321,11 @@ impl FuncBuilder<'_> {
   fn compile_expr(&mut self, expr: mir::ExprId) -> RValue {
     match self.mir.exprs[expr] {
       mir::Expr::Literal(ref lit) => match lit {
+        mir::Literal::Nil => RValue::Nil,
+        mir::Literal::Bool(v) => {
+          RValue::Bool(self.builder.ins().iconst(ir::types::I8, if *v { 1 } else { 0 }))
+        }
         mir::Literal::Int(i) => RValue::Int(self.builder.ins().iconst(ir::types::I64, *i)),
-        _ => unimplemented!(),
       },
 
       mir::Expr::Local(id) => self.use_var(self.locals[&id]),
@@ -427,15 +430,39 @@ impl FuncBuilder<'_> {
             RValue::Int(res)
           }
 
+          mir::BinaryOp::Eq | mir::BinaryOp::Neq => match (lhs, rhs) {
+            (RValue::Nil, RValue::Nil) => {
+              let tru = self.builder.ins().iconst(ir::types::I8, 1);
+              RValue::Bool(tru)
+            }
+            (RValue::Bool(l), RValue::Bool(r)) => {
+              let res = match op {
+                mir::BinaryOp::Eq => self.builder.ins().icmp(IntCC::Equal, l, r),
+                mir::BinaryOp::Neq => self.builder.ins().icmp(IntCC::NotEqual, l, r),
+                _ => unreachable!(),
+              };
+
+              RValue::Bool(res)
+            }
+            (RValue::Int(l), RValue::Int(r)) => {
+              let res = match op {
+                mir::BinaryOp::Eq => self.builder.ins().icmp(IntCC::Equal, l, r),
+                mir::BinaryOp::Neq => self.builder.ins().icmp(IntCC::NotEqual, l, r),
+                _ => unreachable!(),
+              };
+
+              RValue::Bool(res)
+            }
+
+            _ => unreachable!("cannot compare values"),
+          },
+
           _ => {
             let lhs = lhs.as_int().unwrap();
             let rhs = rhs.as_int().unwrap();
 
+            // All numbers are signed.
             let res = match op {
-              mir::BinaryOp::Eq => self.builder.ins().icmp(IntCC::Equal, lhs, rhs),
-              mir::BinaryOp::Neq => self.builder.ins().icmp(IntCC::NotEqual, lhs, rhs),
-
-              // All numbers are signed.
               mir::BinaryOp::Lt => self.builder.ins().icmp(IntCC::SignedLessThan, lhs, rhs),
               mir::BinaryOp::Lte => self.builder.ins().icmp(IntCC::SignedLessThanOrEqual, lhs, rhs),
               mir::BinaryOp::Gt => self.builder.ins().icmp(IntCC::SignedGreaterThan, lhs, rhs),
