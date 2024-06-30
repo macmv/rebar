@@ -82,7 +82,7 @@ impl<T: Copy> CompactValues<T> {
 impl RValue {
   /// Returns the extended form of this value. This is used when passing a value
   /// into a union slot, or back to native code.
-  pub fn to_extended_ir(&self, builder: &mut FunctionBuilder) -> CompactValues<ir::Value> {
+  fn to_extended_ir(&self, builder: &mut FunctionBuilder) -> CompactValues<ir::Value> {
     let id = match self {
       RValue::Nil => 0,
       RValue::Bool(_) => 1,
@@ -177,6 +177,14 @@ impl ParamSize {
         builder.append_block_param(block, ir::types::I64);
         builder.append_block_param(block, ir::types::I64);
       }
+    }
+  }
+
+  pub fn len(&self) -> u32 {
+    match self {
+      ParamSize::Unit => 0,
+      ParamSize::Single => 1,
+      ParamSize::Double => 2,
     }
   }
 }

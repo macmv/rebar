@@ -358,15 +358,6 @@ impl FuncBuilder<'_> {
       mir::Expr::Call(lhs, ref sig_ty, ref args) => {
         let lhs = self.compile_expr(lhs);
 
-        let slot = self.builder.create_sized_stack_slot(StackSlotData {
-          kind: StackSlotKind::ExplicitSlot,
-          // Each argument is 16 bytes wide, and we need 8 bytes for the length..
-          size: args.len() as u32 * 16 + 8,
-        });
-
-        let arg_len = self.builder.ins().iconst(ir::types::I64, args.len() as i64);
-        self.builder.ins().stack_store(arg_len, slot, 0);
-
         let arg_types = match sig_ty {
           Type::Function(ref args, _) => args,
           _ => unreachable!(),
@@ -374,23 +365,32 @@ impl FuncBuilder<'_> {
 
         assert_eq!(args.len(), arg_types.len());
 
-        for (i, (&arg, arg_ty)) in args.iter().zip(arg_types.iter()).enumerate() {
+        // Argument length in 8 byte increments.
+        let mut arg_len = 0;
+        for arg_ty in arg_types.iter() {
+          arg_len += param_size_of_type(arg_ty).len();
+        }
+
+        let slot = self.builder.create_sized_stack_slot(StackSlotData {
+          kind: StackSlotKind::ExplicitSlot,
+          // Each argument is 8 bytes wide, and we need 8 bytes for the length..
+          size: arg_len * 8 + 8,
+        });
+
+        let arg_len = self.builder.ins().iconst(ir::types::I64, args.len() as i64);
+        self.builder.ins().stack_store(arg_len, slot, 0);
+
+        // Start after the `arg_len` slot.
+        let mut slot_index = 1;
+        for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
           let arg = self.compile_expr(arg);
 
-          let v = arg.to_extended_ir(&mut self.builder);
-
-          // Each argument is 16 bytes wide, and we need an 8 byte offset for the length.
-          // Store the type of the value in the first 8 bytes, and the value itself in the
-          // second 8 bytes. The value itself may take any of 0 to 8 bytes.
-          #[cfg(debug_assertions)]
-          {
-            use cranelift::codegen::ir::InstBuilderBase;
-            assert_eq!(self.builder.ins().data_flow_graph().value_type(v.first()), ir::types::I64);
-          }
+          let v = arg.to_sized_ir(param_size_of_type(arg_ty), &mut self.builder);
 
           v.with_slice(|slice| {
-            for (j, &v) in slice.iter().enumerate() {
-              self.builder.ins().stack_store(v, slot, i as i32 * 16 + 8 + j as i32 * 8);
+            for &v in slice.iter() {
+              self.builder.ins().stack_store(v, slot, slot_index * 8);
+              slot_index += 1;
             }
           });
         }
