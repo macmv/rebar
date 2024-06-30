@@ -50,7 +50,7 @@ IfExpr = 'if' Expr Block ('else' 'if' Expr Block)* ('else' Block)?
 ParenExpr = '(' Expr ')'
 Block = '{' Stmt* '}'
 
-Type = Name
+Type = 'ident'
 
 CallExpr = Expr '(' ArgList ')'
 ArgList = Expr (',' Expr)*
