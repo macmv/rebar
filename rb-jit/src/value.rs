@@ -73,7 +73,7 @@ impl RValue {
       RValue::Int(_) => 2,
       RValue::Function(_) => 3,
     };
-    let ty = builder.ins().iconst(ir::types::I8, id);
+    let ty = builder.ins().iconst(ir::types::I64, id);
 
     let value = match self {
       RValue::Nil => None,

@@ -377,7 +377,13 @@ impl FuncBuilder<'_> {
 
           // Each argument is 16 bytes wide, and we need an 8 byte offset for the length.
           // Store the type of the value in the first 8 bytes, and the value itself in the
-          // second 8 bytes.
+          // second 8 bytes. The value itself may take any of 0 to 8 bytes.
+          #[cfg(debug_assertions)]
+          {
+            use cranelift::codegen::ir::InstBuilderBase;
+            assert_eq!(self.builder.ins().data_flow_graph().value_type(ty), ir::types::I64);
+          }
+
           self.builder.ins().stack_store(ty, slot, i as i32 * 16 + 8);
           if let Some(v) = value {
             self.builder.ins().stack_store(v, slot, i as i32 * 16 + 8 + 8);
