@@ -266,8 +266,8 @@ impl FuncBuilder<'_> {
     var
   }
 
-  fn def_var(&mut self, var: CompactValues<Variable>, value: RValue) {
-    match (var, value.to_compact_ir()) {
+  fn def_var(&mut self, var: CompactValues<Variable>, ir: CompactValues<ir::Value>) {
+    match (var, ir) {
       (CompactValues::None, CompactValues::None) => {}
       (CompactValues::None, _) => panic!("cannot assign a value to a nil"),
 
@@ -283,11 +283,13 @@ impl FuncBuilder<'_> {
 
       // Any value can be assigned to a union.
       (CompactValues::Two(var0, var1), _) => {
-        let values = value.extended_ir(&mut self.builder);
+        // The `ir` must be in extended form, which means it must have a length of 1 or
+        // 2.
+        assert!(ir.len() == 1 || ir.len() == 2);
 
         // The first value is the only one that must be set. For example, if a value is
         // set to `nil`, the second variable is undefined.
-        values.with_slice(|slice| {
+        ir.with_slice(|slice| {
           for (var, &value) in [var0, var1].into_iter().zip(slice.iter()) {
             self.builder.def_var(var, value);
           }
@@ -317,12 +319,13 @@ impl FuncBuilder<'_> {
   fn compile_stmt(&mut self, stmt: mir::StmtId) -> RValue {
     match self.mir.stmts[stmt] {
       mir::Stmt::Expr(expr) => self.compile_expr(expr),
-      mir::Stmt::Let(id, _, expr) => {
+      mir::Stmt::Let(id, ref ty, expr) => {
         let value = self.compile_expr(expr);
-        // FIXME: This should use the static type to build variables, not the IR value.
-        let variables = value.to_compact_ir().map(|_| self.new_variable());
+        let ir = value.to_sized_ir(param_size_of_type(&ty), &mut self.builder);
 
-        self.def_var(variables, value);
+        let variables = ir.map(|_| self.new_variable());
+
+        self.def_var(variables, ir);
         self.locals.insert(id, variables);
 
         RValue::Nil
@@ -374,7 +377,7 @@ impl FuncBuilder<'_> {
         for (i, (&arg, arg_ty)) in args.iter().zip(arg_types.iter()).enumerate() {
           let arg = self.compile_expr(arg);
 
-          let v = arg.extended_ir(&mut self.builder);
+          let v = arg.to_extended_ir(&mut self.builder);
 
           // Each argument is 16 bytes wide, and we need an 8 byte offset for the length.
           // Store the type of the value in the first 8 bytes, and the value itself in the
@@ -510,7 +513,7 @@ impl FuncBuilder<'_> {
 
         self.builder.switch_to_block(then_block);
         self.builder.seal_block(then_block);
-        let then_return = self.compile_expr(then).to_sized_ir(param_size);
+        let then_return = self.compile_expr(then).to_sized_ir(param_size, &mut self.builder);
 
         // Jump to the merge block, passing it the block return value.
         then_return.with_slice(|slice| {
@@ -519,7 +522,7 @@ impl FuncBuilder<'_> {
 
         self.builder.switch_to_block(else_block);
         self.builder.seal_block(else_block);
-        let else_return = self.compile_expr(els).to_sized_ir(param_size);
+        let else_return = self.compile_expr(els).to_sized_ir(param_size, &mut self.builder);
 
         // Jump to the merge block, passing it the block return value.
         else_return.with_slice(|slice| {

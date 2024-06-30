@@ -58,6 +58,14 @@ impl<T> CompactValues<T> {
       CompactValues::Two(a, _) => a,
     }
   }
+
+  pub fn len(&self) -> usize {
+    match self {
+      CompactValues::None => 0,
+      CompactValues::One(_) => 1,
+      CompactValues::Two(_, _) => 2,
+    }
+  }
 }
 
 impl<T: Copy> CompactValues<T> {
@@ -74,7 +82,7 @@ impl<T: Copy> CompactValues<T> {
 impl RValue {
   /// Returns the extended form of this value. This is used when passing a value
   /// into a union slot, or back to native code.
-  pub fn extended_ir(&self, builder: &mut FunctionBuilder) -> CompactValues<ir::Value> {
+  pub fn to_extended_ir(&self, builder: &mut FunctionBuilder) -> CompactValues<ir::Value> {
     let id = match self {
       RValue::Nil => 0,
       RValue::Bool(_) => 1,
@@ -98,7 +106,7 @@ impl RValue {
 
   /// Returns the compact for of this value. This is used wherever the static
   /// type of the value is simple (ie, not a union).
-  pub fn to_compact_ir(&self) -> CompactValues<ir::Value> {
+  fn to_compact_ir(&self) -> CompactValues<ir::Value> {
     match self {
       RValue::Nil => CompactValues::None,
       RValue::Bool(v) => CompactValues::One(*v),
@@ -120,11 +128,15 @@ impl RValue {
     }
   }
 
-  pub fn to_sized_ir(&self, size: ParamSize) -> CompactValues<ir::Value> {
+  pub fn to_sized_ir(
+    &self,
+    size: ParamSize,
+    builder: &mut FunctionBuilder,
+  ) -> CompactValues<ir::Value> {
     match size {
       ParamSize::Unit => self.to_compact_ir(),
       ParamSize::Single => self.to_compact_ir(),
-      ParamSize::Double => todo!(),
+      ParamSize::Double => self.to_extended_ir(builder),
     }
   }
 
