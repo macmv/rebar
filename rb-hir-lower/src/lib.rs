@@ -5,37 +5,42 @@ use rb_diagnostic::{SourceId, Span};
 use rb_hir::{ast as hir, SpanMap};
 use rb_syntax::{cst, AstNode};
 
-pub fn lower_source(cst: cst::SourceFile, source: SourceId) -> (hir::SourceFile, SpanMap) {
+pub fn lower_source(cst: cst::SourceFile, source: SourceId) -> (hir::SourceFile, Vec<SpanMap>) {
   let mut out = hir::SourceFile::default();
-  let mut span_map = SpanMap::default();
+  let mut span_maps = vec![];
 
-  let mut lower = SourceLower { source, out: &mut out, span_map: &mut span_map };
+  let mut lower = SourceLower { source, out: &mut out, span_maps: &mut span_maps };
   let main = lower.source(&cst);
 
   out.main_function = Some(main);
-  (out, span_map)
+  (out, span_maps)
 }
 
 struct SourceLower<'a> {
-  source:   SourceId,
-  out:      &'a mut hir::SourceFile,
-  span_map: &'a mut SpanMap,
+  source:    SourceId,
+  span_maps: &'a mut Vec<SpanMap>,
+  out:       &'a mut hir::SourceFile,
 }
 
 impl SourceLower<'_> {
   fn source(&mut self, cst: &cst::SourceFile) -> hir::FunctionId {
     let mut func = hir::Function::default();
-    let mut lower = FunctionLower { source: self, f: &mut func };
+    let mut span_map = SpanMap::default();
+    let mut lower = FunctionLower { source: self, f: &mut func, span_map: &mut span_map };
+
     for stmt in cst.stmts() {
       let item = lower.stmt(stmt);
       lower.f.items.push(item);
     }
+
+    self.span_maps.push(span_map);
     self.out.functions.alloc(func)
   }
 
   fn function(&mut self, cst: &cst::Def) -> hir::FunctionId {
     let mut f = hir::Function::default();
-    let mut lower = FunctionLower { source: self, f: &mut f };
+    let mut span_map = SpanMap::default();
+    let mut lower = FunctionLower { source: self, f: &mut f, span_map: &mut span_map };
 
     for arg in cst.params().unwrap().params() {
       let name = arg.ident_token().unwrap().to_string();
@@ -48,13 +53,16 @@ impl SourceLower<'_> {
       let item = lower.stmt(stmt);
       lower.f.items.push(item);
     }
+
+    self.span_maps.push(span_map);
     self.out.functions.alloc(f)
   }
 }
 
 struct FunctionLower<'a, 'b> {
-  source: &'a mut SourceLower<'b>,
-  f:      &'a mut hir::Function,
+  source:   &'a mut SourceLower<'b>,
+  f:        &'a mut hir::Function,
+  span_map: &'a mut SpanMap,
 }
 
 macro_rules! match_token {
@@ -93,18 +101,19 @@ impl FunctionLower<'_, '_> {
       cst::Stmt::Def(ref def) => {
         self.source.function(def);
 
+        // TODO: Need something else here? Maybe?
         let dummy = hir::Expr::Literal(hir::Literal::Nil);
+        self
+          .span_map
+          .exprs
+          .push(Span { file: self.source.source, range: def.syntax().text_range() });
         hir::Stmt::Expr(self.f.exprs.alloc(dummy))
       }
 
       _ => unimplemented!("lowering for {:?}", cst),
     };
 
-    self
-      .source
-      .span_map
-      .stmts
-      .push(Span { file: self.source.source, range: cst.syntax().text_range() });
+    self.span_map.stmts.push(Span { file: self.source.source, range: cst.syntax().text_range() });
     self.f.stmts.alloc(stmt)
   }
 
@@ -187,11 +196,7 @@ impl FunctionLower<'_, '_> {
       _ => unimplemented!("lowering for {:?}", cst),
     };
 
-    self
-      .source
-      .span_map
-      .exprs
-      .push(Span { file: self.source.source, range: cst.syntax().text_range() });
+    self.span_map.exprs.push(Span { file: self.source.source, range: cst.syntax().text_range() });
     self.f.exprs.alloc(expr)
   }
   fn type_expr(&self, cst: &cst::Type) -> hir::TypeExpr {
