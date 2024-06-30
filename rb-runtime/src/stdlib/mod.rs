@@ -3,10 +3,7 @@ use ::std::{cell::RefCell, collections::HashMap};
 mod core;
 mod std;
 
-use rb_jit::{
-  jit::RebarSlice,
-  value::{ParamKind, ParamSize},
-};
+use rb_jit::{jit::RebarArgs, value::ParamKind};
 use rb_mir::ast as mir;
 use rb_typer::{Literal, Type};
 
@@ -25,7 +22,7 @@ pub struct Function {
 impl Environment {
   fn empty() -> Self { Environment { names: HashMap::new(), ids: vec![] } }
 
-  pub(crate) fn dyn_call_ptr(self) -> fn(i64, *const RebarSlice) -> i64 {
+  pub(crate) fn dyn_call_ptr(self) -> fn(i64, *const RebarArgs) -> i64 {
     // This works pretty well, but it would be nice to support multithreading, and
     // multiple environments on one thread. Probably something for later though.
     thread_local! {
@@ -60,7 +57,7 @@ impl Environment {
                   _ => {
                     // Now that we know its not a unit, we can safely read the value. The value
                     // will always take up 8 bytes, even if less bytes are used.
-                    let value = (*arg_value.arg(offset)).one;
+                    let value = *arg_value.arg(offset);
                     offset += 1;
 
                     match ty {
@@ -75,13 +72,15 @@ impl Environment {
               ParamKind::Extended => {
                 // A nil will only take up one slot, so we must check for that to avoid reading
                 // out of bounds.
-                let dyn_ty = (*arg_value.arg(offset)).one;
+                let dyn_ty = *arg_value.arg(offset);
                 offset += 1;
 
                 match dyn_ty {
                   0 => Value::Nil,
                   _ => {
-                    let [_, value] = (*arg_value.arg(offset)).two;
+                    // `offset` was just incremented, so read the next slot to get the actual
+                    // value.
+                    let value = *arg_value.arg(offset);
                     offset += 1;
 
                     match dyn_ty {

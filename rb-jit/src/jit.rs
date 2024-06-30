@@ -70,30 +70,22 @@ pub struct FuncBuilder<'a> {
 /// So, don't move this thing around. I would wrap it in a `Pin`, but `Pin` is
 /// annoying to use, so all the functions are just unsafe instead.
 #[repr(C)]
-pub struct RebarSlice {
+pub struct RebarArgs {
   _phantom: PhantomPinned,
 }
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub union RebarValue {
-  pub nil: (),
-  pub one: i64,
-  pub two: [i64; 2],
-}
-
-impl RebarSlice {
-  pub unsafe fn arg(&self, offset: usize) -> *const RebarValue {
+impl RebarArgs {
+  pub unsafe fn arg(&self, offset: usize) -> *const i64 {
     unsafe {
       let ptr = self as *const _;
-      (ptr as *const i64).offset(offset as isize) as *const RebarValue
+      (ptr as *const i64).offset(offset as isize)
     }
   }
 }
 
 impl JIT {
   #[allow(clippy::new_without_default)]
-  pub fn new(dyn_call_ptr: fn(i64, *const RebarSlice) -> i64) -> Self {
+  pub fn new(dyn_call_ptr: fn(i64, *const RebarArgs) -> i64) -> Self {
     let mut flag_builder = settings::builder();
     flag_builder.set("use_colocated_libcalls", "false").unwrap();
     flag_builder.set("is_pic", "false").unwrap();
