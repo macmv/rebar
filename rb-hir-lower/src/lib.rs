@@ -36,6 +36,14 @@ impl SourceLower<'_> {
   fn function(&mut self, cst: &cst::Def) -> hir::FunctionId {
     let mut f = hir::Function::default();
     let mut lower = FunctionLower { source: self, f: &mut f };
+
+    for arg in cst.params().unwrap().params() {
+      let name = arg.ident_token().unwrap().to_string();
+      let ty = lower.type_expr(&arg.ty().unwrap());
+
+      lower.f.args.push((name, ty));
+    }
+
     for stmt in cst.block().unwrap().stmts() {
       let item = lower.stmt(stmt);
       lower.f.items.push(item);
@@ -185,6 +193,14 @@ impl FunctionLower<'_, '_> {
       .exprs
       .push(Span { file: self.source.source, range: cst.syntax().text_range() });
     self.f.exprs.alloc(expr)
+  }
+  fn type_expr(&self, cst: &cst::Type) -> hir::TypeExpr {
+    match cst.ident_token().unwrap().text().to_string().as_str() {
+      "nil" => hir::TypeExpr::Nil,
+      "bool" => hir::TypeExpr::Bool,
+      "int" => hir::TypeExpr::Int,
+      _ => unimplemented!("lowering for {:?}", cst),
+    }
   }
 }
 

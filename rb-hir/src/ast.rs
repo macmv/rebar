@@ -15,6 +15,8 @@ pub struct SourceFile {
 
 #[derive(Debug, Default)]
 pub struct Function {
+  pub args: Vec<(String, TypeExpr)>,
+
   pub exprs: Arena<Expr>,
   pub stmts: Arena<Stmt>,
 
@@ -36,6 +38,14 @@ pub enum Expr {
   If { cond: ExprId, then: ExprId, els: Option<ExprId> },
 
   Assign { lhs: ExprId, rhs: ExprId },
+}
+
+#[derive(Debug)]
+pub enum TypeExpr {
+  Nil,
+  Bool,
+  Int,
+  Union(Vec<TypeExpr>),
 }
 
 #[derive(Debug)]
