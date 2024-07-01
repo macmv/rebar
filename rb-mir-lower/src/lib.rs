@@ -29,8 +29,9 @@ pub fn lower_function(env: &Env, ty: &Typer, hir: &hir::Function) -> mir::Functi
   }
 
   for stmt in hir.items.iter() {
-    let id = lower.lower_stmt(*stmt);
-    lower.mir.items.push(id);
+    if let Some(stmt) = lower.lower_stmt(*stmt) {
+      lower.mir.items.push(stmt);
+    }
   }
 
   mir
@@ -53,7 +54,7 @@ impl Lower<'_> {
     mir::VarId(id as u32)
   }
 
-  fn lower_stmt(&mut self, stmt: hir::StmtId) -> mir::StmtId {
+  fn lower_stmt(&mut self, stmt: hir::StmtId) -> Option<mir::StmtId> {
     let stmt = match self.hir.stmts[stmt] {
       hir::Stmt::Expr(expr) => mir::Stmt::Expr(self.lower_expr(expr)),
       hir::Stmt::Let(ref name, expr) => {
@@ -63,9 +64,10 @@ impl Lower<'_> {
         self.locals.insert(name.clone(), id);
         mir::Stmt::Let(id, ty, mir_expr)
       }
+      hir::Stmt::Def(_, _, _) => return None,
     };
 
-    self.mir.stmts.alloc(stmt)
+    Some(self.mir.stmts.alloc(stmt))
   }
 
   fn lower_expr(&mut self, expr: hir::ExprId) -> mir::ExprId {
@@ -89,8 +91,9 @@ impl Lower<'_> {
 
         // FIXME: Make a new scope here so that local variables are local to blocks.
         for stmt in block.iter() {
-          let stmt = self.lower_stmt(*stmt);
-          stmts.push(stmt);
+          if let Some(stmt) = self.lower_stmt(*stmt) {
+            stmts.push(stmt);
+          }
         }
 
         mir::Expr::Block(stmts)

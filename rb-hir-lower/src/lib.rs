@@ -101,13 +101,15 @@ impl FunctionLower<'_, '_> {
       cst::Stmt::Def(ref def) => {
         self.source.function(def);
 
-        // TODO: Need something else here? Maybe?
-        let dummy = hir::Expr::Literal(hir::Literal::Nil);
-        self
-          .span_map
-          .exprs
-          .push(Span { file: self.source.source, range: def.syntax().text_range() });
-        hir::Stmt::Expr(self.f.exprs.alloc(dummy))
+        let name = def.ident_token().unwrap().to_string();
+        let params = def
+          .params()
+          .unwrap()
+          .params()
+          .map(|p| (p.ident_token().unwrap().text().to_string(), self.type_expr(&p.ty().unwrap())))
+          .collect();
+
+        hir::Stmt::Def(name, params, None)
       }
 
       _ => unimplemented!("lowering for {:?}", cst),

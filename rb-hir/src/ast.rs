@@ -40,7 +40,7 @@ pub enum Expr {
   Assign { lhs: ExprId, rhs: ExprId },
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum TypeExpr {
   Nil,
   Bool,
@@ -54,6 +54,8 @@ pub enum Stmt {
 
   // TODO: Add type literals for explicit types.
   Let(String, ExprId),
+
+  Def(String, Vec<(String, TypeExpr)>, Option<TypeExpr>),
 }
 
 #[derive(Debug)]

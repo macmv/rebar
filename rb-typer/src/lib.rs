@@ -33,7 +33,8 @@ pub struct Typer<'a> {
   // Variables in the current block.
   //
   // TODO: This is probably wrong on a few levels, need a wrapper struct for typing each block.
-  locals: HashMap<String, VType>,
+  local_functions: HashMap<String, Type>,
+  locals:          HashMap<String, VType>,
 }
 
 impl<'a> Typer<'a> {
@@ -44,6 +45,7 @@ impl<'a> Typer<'a> {
       span_map,
       exprs: HashMap::new(),
       variables: Arena::new(),
+      local_functions: HashMap::new(),
       locals: HashMap::new(),
     }
   }
@@ -52,15 +54,35 @@ impl<'a> Typer<'a> {
   pub fn check(env: &'a Environment, function: &'a hir::Function, span_map: &'a SpanMap) -> Self {
     let mut typer = Typer::new(env, function, span_map);
 
-    for (arg, ty) in &function.args {
-      let ty = match ty {
-        hir::TypeExpr::Nil => VType::Literal(Literal::Unit),
-        hir::TypeExpr::Bool => VType::Literal(Literal::Bool),
-        hir::TypeExpr::Int => VType::Literal(Literal::Int),
+    fn type_expr_to_type(ty: &hir::TypeExpr) -> Type {
+      match ty {
+        hir::TypeExpr::Nil => Type::Literal(Literal::Unit),
+        hir::TypeExpr::Bool => Type::Literal(Literal::Bool),
+        hir::TypeExpr::Int => Type::Literal(Literal::Int),
         _ => todo!("type expr {ty:?}"),
-      };
+      }
+    }
 
-      typer.locals.insert(arg.clone(), ty.clone());
+    for (arg, ty) in &function.args {
+      let ty = type_expr_to_type(ty);
+
+      typer.locals.insert(arg.clone(), ty.into());
+    }
+
+    for &item in function.items.iter() {
+      match function.stmts[item] {
+        hir::Stmt::Def(ref name, ref args, ref ret) => {
+          let args = args.iter().map(|(_, ty)| type_expr_to_type(ty)).collect();
+          let ret = match ret {
+            Some(ty) => Box::new(type_expr_to_type(ty)),
+            None => Box::new(Type::Literal(Literal::Unit)),
+          };
+
+          let ty = Type::Function(args, ret);
+          typer.local_functions.insert(name.clone(), ty);
+        }
+        _ => {}
+      }
     }
 
     for &item in function.items.iter() {
@@ -114,6 +136,7 @@ impl<'a> Typer<'a> {
         let res = self.type_expr(expr);
         self.locals.insert(name.clone(), res);
       }
+      hir::Stmt::Def(_, _, _) => {}
     }
   }
 
@@ -148,13 +171,16 @@ impl<'a> Typer<'a> {
 
       hir::Expr::Name(ref name) => match self.locals.get(name) {
         Some(ty) => ty.clone(),
-        None => match self.env.names.get(name) {
-          Some(ty) => VType::from(ty.clone()),
-          None => {
-            emit!(format!("undeclared name {name:?}"), self.span(expr));
+        None => match self.local_functions.get(name) {
+          Some(ty) => ty.clone().into(),
+          None => match self.env.names.get(name) {
+            Some(ty) => VType::from(ty.clone()),
+            None => {
+              emit!(format!("undeclared name {name:?}"), self.span(expr));
 
-            VType::Var(self.fresh_var(self.span(expr), format!("")))
-          }
+              VType::Var(self.fresh_var(self.span(expr), format!("")))
+            }
+          },
         },
       },
 
@@ -167,7 +193,7 @@ impl<'a> Typer<'a> {
         match block.last() {
           Some(stmt) => match self.function.stmts[*stmt] {
             hir::Stmt::Expr(expr) => self.type_expr(expr),
-            hir::Stmt::Let(_, _) => VType::Literal(ty::Literal::Unit),
+            hir::Stmt::Let(_, _) | hir::Stmt::Def(_, _, _) => VType::Literal(ty::Literal::Unit),
           },
           None => VType::Literal(ty::Literal::Unit),
         }
