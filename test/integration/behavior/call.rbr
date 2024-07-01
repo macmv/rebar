@@ -1,0 +1,4 @@
+def assert_one(a: int, b: int) { assert_eq(a + 1, b) }
+def assert_two(a: int, b: int) { assert_one(a + 1, b) }
+
+assert_two(0, 2)
