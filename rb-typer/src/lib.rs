@@ -54,19 +54,8 @@ impl<'a> Typer<'a> {
   pub fn check(env: &'a Environment, function: &'a hir::Function, span_map: &'a SpanMap) -> Self {
     let mut typer = Typer::new(env, function, span_map);
 
-    fn type_expr_to_type(ty: &hir::TypeExpr) -> Type {
-      match ty {
-        hir::TypeExpr::Nil => Type::Literal(Literal::Unit),
-        hir::TypeExpr::Bool => Type::Literal(Literal::Bool),
-        hir::TypeExpr::Int => Type::Literal(Literal::Int),
-        hir::TypeExpr::Union(tys) => {
-          Type::Union(tys.iter().map(|ty| type_expr_to_type(&ty)).collect())
-        }
-      }
-    }
-
     for (arg, ty) in &function.args {
-      let ty = type_expr_to_type(ty);
+      let ty = typer.type_of_type_expr(ty);
 
       typer.locals.insert(arg.clone(), ty.into());
     }
@@ -74,9 +63,9 @@ impl<'a> Typer<'a> {
     for &item in function.items.iter() {
       match function.stmts[item] {
         hir::Stmt::Def(ref name, ref args, ref ret) => {
-          let args = args.iter().map(|(_, ty)| type_expr_to_type(ty)).collect();
+          let args = args.iter().map(|(_, ty)| typer.type_of_type_expr(ty)).collect();
           let ret = match ret {
-            Some(ty) => Box::new(type_expr_to_type(ty)),
+            Some(ty) => Box::new(typer.type_of_type_expr(ty)),
             None => Box::new(Type::Literal(Literal::Unit)),
           };
 
@@ -92,6 +81,17 @@ impl<'a> Typer<'a> {
     }
 
     typer
+  }
+
+  pub fn type_of_type_expr(&self, te: &hir::TypeExpr) -> Type {
+    match te {
+      hir::TypeExpr::Nil => Type::Literal(Literal::Unit),
+      hir::TypeExpr::Bool => Type::Literal(Literal::Bool),
+      hir::TypeExpr::Int => Type::Literal(Literal::Int),
+      hir::TypeExpr::Union(tys) => {
+        Type::Union(tys.iter().map(|ty| self.type_of_type_expr(&ty)).collect())
+      }
+    }
   }
 
   pub fn type_of_expr(&self, expr: ExprId) -> Type { self.lower_type(&self.exprs[&expr]) }

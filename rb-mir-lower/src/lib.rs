@@ -28,14 +28,8 @@ pub fn lower_function(env: &Env, ty: &Typer, hir: &hir::Function) -> mir::Functi
 
   let mut lower = Lower { env, ty, hir, mir: &mut mir, locals: HashMap::new() };
 
-  for (name, ty) in hir.args.iter() {
-    // FIXME: Need a better way to do this.
-    let ty = match ty {
-      hir::TypeExpr::Nil => Type::Literal(Literal::Unit),
-      hir::TypeExpr::Bool => Type::Literal(Literal::Bool),
-      hir::TypeExpr::Int => Type::Literal(Literal::Int),
-      _ => todo!("type expr {ty:?}"),
-    };
+  for (name, te) in hir.args.iter() {
+    let ty = ty.type_of_type_expr(te);
 
     lower.mir.params.push(ty.clone());
     let id = lower.next_var_id(ty);
@@ -43,12 +37,7 @@ pub fn lower_function(env: &Env, ty: &Typer, hir: &hir::Function) -> mir::Functi
   }
 
   if let Some(ret) = &hir.ret {
-    lower.mir.ret = Some(match ret {
-      hir::TypeExpr::Nil => Type::Literal(Literal::Unit),
-      hir::TypeExpr::Bool => Type::Literal(Literal::Bool),
-      hir::TypeExpr::Int => Type::Literal(Literal::Int),
-      _ => todo!("type expr {ret:?}"),
-    });
+    lower.mir.ret = Some(ty.type_of_type_expr(ret));
   }
 
   for stmt in hir.items.iter() {
