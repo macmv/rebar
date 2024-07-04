@@ -238,12 +238,19 @@ impl FuncBuilder<'_> {
 
     assert_eq!(self.builder.func.signature.params.len(), param_values.len());
 
+    if let Some(ref ty) = self.mir.ret {
+      match ParamKind::for_type(ty) {
+        ParamKind::Extended => todo!("Extended variables not supported for parameters yet"),
+        _ => {}
+      }
+
+      assert!(self.builder.func.signature.returns.len() == 1);
+    } else {
+      assert!(self.builder.func.signature.returns.is_empty());
+    }
+
     self.builder.switch_to_block(entry_block);
     self.builder.seal_block(entry_block);
-
-    let return_variable = self.new_variable();
-    let zero = self.builder.ins().iconst(ir::types::I64, 0);
-    self.builder.def_var(return_variable, zero);
 
     for (param_id, value) in param_values.into_iter().enumerate() {
       let id = self.new_variable();
@@ -256,10 +263,8 @@ impl FuncBuilder<'_> {
       // self.def_var(return_variable, res.to_ir());
     }
 
-    let return_value = self.builder.use_var(return_variable);
-
     // Emit the return instruction.
-    self.builder.ins().return_(&[return_value]);
+    self.builder.ins().return_(&[]);
 
     println!("done translating {:?}. cranelift ir:", self.mir.id);
     println!("{}", self.builder.func);
@@ -278,11 +283,8 @@ impl JIT {
       0 => {
         sig.params.push(AbiParam::new(ir::types::I64));
         sig.params.push(AbiParam::new(ir::types::I64));
-        sig.returns.push(AbiParam::new(ir::types::I64));
       }
-      1 => {
-        sig.returns.push(AbiParam::new(ir::types::I64));
-      }
+      1 => {}
       _ => panic!("unknown function {:?}", func.id),
     }
 
