@@ -693,6 +693,7 @@ dependencies = [
 name = "rebar-test"
 version = "0.1.0"
 dependencies = [
+ "rb-diagnostic",
  "rb-runtime",
 ]
 

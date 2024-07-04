@@ -4,7 +4,7 @@ mod stdlib;
 
 pub use stdlib::*;
 
-use rb_diagnostic::{emit, Source, Sources, Span};
+use rb_diagnostic::{emit, Diagnostic, Source, Sources, Span};
 use rb_syntax::cst;
 
 const NUM_CPUS: usize = 32;
@@ -53,6 +53,59 @@ pub fn eval(src: &str) {
   // cranelift IR. Collect all the functions, split them into chunks, and compile
   // them on a thread pool.
 
+  eval_mir(env, functions);
+}
+
+pub fn run(src: &str) -> Result<(), Vec<Diagnostic>> {
+  let env = Environment::std();
+
+  let mut sources = Sources::new();
+  let id = sources.add(Source::new("inline.rbr".into(), src.into()));
+  let sources = Arc::new(sources);
+
+  let hir = rb_diagnostic::run(sources.clone(), || {
+    let res = cst::SourceFile::parse(src);
+
+    if res.errors().is_empty() {
+      rb_hir_lower::lower_source(res.tree(), id)
+    } else {
+      for error in res.errors() {
+        emit!(error.message(), Span { file: id, range: error.span() });
+      }
+
+      Default::default()
+    }
+  })?;
+
+  // TODO: This is where we join all the threads, collect all the functions up,
+  // and then split out to a thread pool to typecheck and lower each function.
+  let mut functions = vec![];
+
+  let static_env = env.static_env();
+  let mir_env = env.mir_env();
+  rb_diagnostic::run(sources, || {
+    let (hir, span_maps) = hir;
+
+    for (idx, function) in hir.functions {
+      let span_map = &span_maps[idx.into_raw().into_u32() as usize];
+
+      let typer = rb_typer::Typer::check(&static_env, &function, &span_map);
+      if rb_diagnostic::is_ok() {
+        functions.push(rb_mir_lower::lower_function(&mir_env, &typer, &function));
+      }
+    }
+  })?;
+
+  // If we get to this point, all checks have passed, and we can compile to
+  // cranelift IR. Collect all the functions, split them into chunks, and compile
+  // them on a thread pool.
+
+  eval_mir(env, functions);
+
+  Ok(())
+}
+
+fn eval_mir(env: Environment, functions: Vec<rb_mir::ast::Function>) {
   let mut jit = rb_jit::jit::JIT::new(env.dyn_call_ptr());
 
   let mut results = vec![vec![]; NUM_CPUS];
@@ -62,7 +115,7 @@ pub fn eval(src: &str) {
   assert!(functions.chunks(chunk_size).len() <= results.len());
 
   std::thread::scope(|scope| {
-    for (chunk, out) in functions.chunks_mut(chunk_size).zip(results.iter_mut()) {
+    for (chunk, out) in functions.chunks(chunk_size).zip(results.iter_mut()) {
       let mut thread_ctx = jit.new_thread();
 
       scope.spawn(move || {

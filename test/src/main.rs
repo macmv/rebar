@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use rb_diagnostic::{Source, Sources};
+
 fn main() {
   let filter = std::env::args().nth(1).unwrap_or_default();
 
@@ -18,10 +20,20 @@ fn main() {
           if path.extension().unwrap() == "rbr" {
             let stringified = path.display().to_string();
             if stringified.contains(f) {
-              let source = std::fs::read_to_string(&path).unwrap();
-              rb_runtime::eval(&source);
+              let src = std::fs::read_to_string(&path).unwrap();
 
-              println!("{}... \x1b[32mok\x1b[0m", stringified);
+              let mut sources = Sources::new();
+              sources.add(Source::new(stringified.clone(), src.clone()));
+
+              match rb_runtime::run(&src) {
+                Ok(_) => println!("{}... \x1b[32mok\x1b[0m", stringified),
+                Err(diagnostics) => {
+                  println!("{}... \x1b[31mfail\x1b[0m", stringified);
+                  for d in diagnostics {
+                    println!("{}", d.render(&sources));
+                  }
+                }
+              }
             }
           }
         }
