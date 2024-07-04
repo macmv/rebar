@@ -680,7 +680,7 @@ impl FuncBuilder<'_> {
 
         self.builder.switch_to_block(then_block);
         self.builder.seal_block(then_block);
-        let then_return = self.compile_expr(then).to_sized_ir(param_kind, &mut self.builder);
+        let then_return = self.compile_expr(then).to_ir(param_kind, &mut self.builder);
 
         // Jump to the merge block, passing it the block return value.
         then_return.with_slice(|slice| {
@@ -689,7 +689,7 @@ impl FuncBuilder<'_> {
 
         self.builder.switch_to_block(else_block);
         self.builder.seal_block(else_block);
-        let else_return = self.compile_expr(els).to_sized_ir(param_kind, &mut self.builder);
+        let else_return = self.compile_expr(els).to_ir(param_kind, &mut self.builder);
 
         // Jump to the merge block, passing it the block return value.
         else_return.with_slice(|slice| {
@@ -704,7 +704,7 @@ impl FuncBuilder<'_> {
 
         // Read the value of the if-else by reading the merge block
         // parameter.
-        RValue::from_sized_ir(self.builder.block_params(merge_block), ty)
+        RValue::from_ir(self.builder.block_params(merge_block), ty)
       }
 
       ref v => unimplemented!("expr: {v:?}"),

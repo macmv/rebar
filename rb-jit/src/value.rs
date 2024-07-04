@@ -125,19 +125,17 @@ impl RValue {
     };
 
     let value = match self {
-      RValue::Nil => None,
-      RValue::Bool(v) => Some(*v),
-      RValue::Int(v) => Some(*v),
-      RValue::Function(v) => Some(*v),
-      RValue::Dynamic(_, v) => Some(*v),
+      // TODO: Optimize this into an undefined value.
+      RValue::Nil => builder.ins().iconst(ir::types::I64, 0),
+      RValue::Bool(v) => *v,
+      RValue::Int(v) => *v,
+      RValue::Function(v) => *v,
+      RValue::Dynamic(_, v) => *v,
 
       RValue::UserFunction(_) => todo!(),
     };
 
-    match value {
-      None => CompactValues::One(ty),
-      Some(v) => CompactValues::Two(ty, v),
-    }
+    CompactValues::Two(ty, value)
   }
 
   /// Returns the compact for of this value. This is used wherever the static
@@ -146,7 +144,7 @@ impl RValue {
   /// arguments, but not for block arguments).
   fn to_compact_ir(&self) -> CompactValues<ir::Value> {
     match self {
-      RValue::Nil => CompactValues::None,
+      RValue::Nil => panic!("cannot convert nil to compact value"),
       RValue::Bool(v) => CompactValues::One(*v),
       RValue::Int(v) => CompactValues::One(*v),
       RValue::Function(v) => CompactValues::One(*v),
@@ -170,7 +168,7 @@ impl RValue {
 
   // TODO: Need to actually use this with a function return.
   pub fn from_ir(ir: &[ir::Value], ty: &Type) -> RValue {
-    match /*ParamKind::for_type(ty)*/ ParamKind::Extended {
+    match ParamKind::for_type(ty) {
       ParamKind::Zero => {
         assert_eq!(ir.len(), 0);
         RValue::Nil
@@ -186,54 +184,12 @@ impl RValue {
           Type::Function(_, _) => RValue::Function(v),
           _ => panic!("invalid type"),
         }
-      },
+      }
       ParamKind::Extended => {
         assert_eq!(ir.len(), 2);
+
         RValue::Dynamic(ir[0], ir[1])
       }
-    }
-  }
-
-  /// Returns an IR value that has a consistent number of values. This means
-  /// passing in `ParamKind::Extended` will always return two values. This
-  /// should only be used in places where consistent sizes are required, ie
-  /// the block arguments for a conditional. Prefer `to_ir` when possible.
-  pub fn to_sized_ir(
-    &self,
-    kind: ParamKind,
-    builder: &mut FunctionBuilder,
-  ) -> CompactValues<ir::Value> {
-    match kind {
-      ParamKind::Zero => CompactValues::None,
-      ParamKind::Compact => self.to_compact_ir(),
-      ParamKind::Extended => match self.to_extended_ir(builder) {
-        CompactValues::None => unreachable!(),
-        CompactValues::One(ty) => CompactValues::Two(ty, builder.ins().iconst(ir::types::I64, 0)),
-        CompactValues::Two(ty, v) => CompactValues::Two(ty, v),
-      },
-    }
-  }
-
-  /// Creates an RValue from a fixed sized list of IR values. This should be
-  /// used for returns from blocks, where the size is fixed.
-  pub fn from_sized_ir(ir: &[ir::Value], ty: &Type) -> RValue {
-    let kind = ParamKind::for_type(ty);
-    match kind {
-      ParamKind::Zero => assert_eq!(ir.len(), 0),
-      ParamKind::Compact => assert_eq!(ir.len(), 1),
-      ParamKind::Extended => assert!(ir.len() == 2),
-    }
-
-    match kind {
-      ParamKind::Zero => RValue::Nil,
-      ParamKind::Compact => match ty {
-        Type::Literal(Literal::Unit) => panic!("zero sized type shouldn't take up space"),
-        Type::Literal(Literal::Bool) => RValue::Bool(ir[0]),
-        Type::Literal(Literal::Int) => RValue::Int(ir[0]),
-        Type::Function(_, _) => RValue::Function(ir[0]),
-        _ => panic!("invalid type"),
-      },
-      ParamKind::Extended => RValue::Dynamic(ir[0], ir[1]),
     }
   }
 
