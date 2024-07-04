@@ -4,7 +4,10 @@ pub fn ty(p: &mut Parser) {
   let m = p.start();
 
   match p.current() {
-    T![ident] => {
+    // test ok
+    // def foo(a: int) {}
+    // def foo(a: nil) {}
+    T![ident] | T![nil] => {
       p.bump();
     }
 
@@ -15,6 +18,17 @@ pub fn ty(p: &mut Parser) {
     }
 
     _ => p.error("expected type"),
+  }
+
+  // test ok
+  // def foo(a: int | nil) {}
+  match p.current() {
+    T![|] => {
+      p.bump();
+      ty(p);
+    }
+
+    _ => (),
   }
 
   m.complete(p, TYPE);
