@@ -104,34 +104,53 @@ pub fn run(env: Environment, sources: Arc<Sources>, id: SourceId) -> Result<(), 
 fn eval_mir(env: Environment, functions: Vec<rb_mir::ast::Function>) {
   let mut jit = rb_jit::jit::JIT::new(env.dyn_call_ptr());
 
-  let mut results = vec![];
-  for _ in 0..NUM_CPUS {
-    results.push(vec![]);
-  }
-
-  let chunk_size = (functions.len() / NUM_CPUS).max(1);
-  // Double check that `zip` doesn't skip anything.
-  assert!(functions.chunks(chunk_size).len() <= results.len());
-
-  std::thread::scope(|scope| {
-    for (chunk, out) in functions.chunks(chunk_size).zip(results.iter_mut()) {
-      let mut thread_ctx = jit.new_thread();
-
-      scope.spawn(move || {
-        for f in chunk {
-          out.push(thread_ctx.compile_function(f));
-        }
-      });
-    }
-  });
+  let compiled = run_parallel(&functions, || jit.new_thread(), |ctx, f| ctx.compile_function(f));
 
   let mut function_ids = vec![];
-  for func in results.into_iter().flatten() {
+  for func in compiled.into_iter() {
     function_ids.push(jit.define_function(func).unwrap());
   }
 
   jit.finalize();
   jit.eval(function_ids[0]);
+}
+
+pub fn run_parallel<I: Send + Sync, C: Send, O: Send + Sync>(
+  input: &[I],
+  mut ctx: impl (FnMut() -> C) + Copy,
+  mut f: impl (FnMut(&mut C, &I) -> O) + Copy + Send,
+) -> Vec<O> {
+  if input.len() < NUM_CPUS {
+    let mut out = Vec::with_capacity(input.len());
+    let mut ctx = ctx();
+
+    for i in input {
+      out.push(f(&mut ctx, i));
+    }
+
+    return out;
+  };
+
+  let chunk_size = (input.len() / NUM_CPUS).max(1);
+
+  let mut results = vec![];
+  for _ in 0..NUM_CPUS {
+    results.push(Vec::with_capacity(chunk_size));
+  }
+
+  std::thread::scope(|scope| {
+    for (chunk, out) in input.chunks(chunk_size).zip(results.iter_mut()) {
+      let mut ctx = ctx();
+
+      scope.spawn(move || {
+        for i in chunk {
+          out.push(f(&mut ctx, i));
+        }
+      });
+    }
+  });
+
+  results.into_iter().flatten().collect()
 }
 
 #[cfg(test)]
