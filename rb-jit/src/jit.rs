@@ -266,8 +266,8 @@ impl FuncBuilder<'_> {
     // Emit the return instruction.
     self.builder.ins().return_(&[]);
 
-    println!("done translating {:?}. cranelift ir:", self.mir.id);
-    println!("{}", self.builder.func);
+    // println!("done translating {:?}. cranelift ir:", self.mir.id);
+    // println!("{}", self.builder.func);
 
     // Tell the builder we're done with this function.
     self.builder.finalize();
@@ -279,13 +279,13 @@ impl JIT {
     let mut sig = self.module.make_signature();
 
     sig.call_conv = CallConv::Fast;
-    match func.id.0 {
-      0 => {
-        sig.params.push(AbiParam::new(ir::types::I64));
-        sig.params.push(AbiParam::new(ir::types::I64));
+    for ty in func.params.iter() {
+      match ParamKind::for_type(ty) {
+        ParamKind::Extended => todo!("Extended variables not supported for parameters yet"),
+        _ => {}
       }
-      1 => {}
-      _ => panic!("unknown function {:?}", func.id),
+
+      sig.params.push(AbiParam::new(ir::types::I64));
     }
 
     let id = self
