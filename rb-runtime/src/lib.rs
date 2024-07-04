@@ -104,7 +104,10 @@ pub fn run(env: Environment, sources: Arc<Sources>, id: SourceId) -> Result<(), 
 fn eval_mir(env: Environment, functions: Vec<rb_mir::ast::Function>) {
   let mut jit = rb_jit::jit::JIT::new(env.dyn_call_ptr());
 
-  let mut results = vec![vec![]; NUM_CPUS];
+  let mut results = vec![];
+  for _ in 0..NUM_CPUS {
+    results.push(vec![]);
+  }
 
   let chunk_size = (functions.len() / NUM_CPUS).max(1);
   // Double check that `zip` doesn't skip anything.
@@ -116,24 +119,15 @@ fn eval_mir(env: Environment, functions: Vec<rb_mir::ast::Function>) {
 
       scope.spawn(move || {
         for f in chunk {
-          thread_ctx.translate_function(f);
-          let res = thread_ctx.compile();
-          out.push((
-            res.code_buffer().to_vec().into_boxed_slice(),
-            res.buffer.alignment as u64,
-            res.buffer.relocs().to_vec().into_boxed_slice(),
-            thread_ctx.func().clone(),
-          ));
-
-          thread_ctx.clear();
+          out.push(thread_ctx.compile_function(f));
         }
       });
     }
   });
 
   let mut function_ids = vec![];
-  for (code, alignment, relocs, func) in results.iter().flatten() {
-    function_ids.push(jit.define_function(code, *alignment, func, relocs).unwrap());
+  for func in results.into_iter().flatten() {
+    function_ids.push(jit.define_function(func).unwrap());
   }
 
   jit.finalize();

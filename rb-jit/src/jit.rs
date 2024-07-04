@@ -1,7 +1,7 @@
 use codegen::{
   control::ControlPlane,
   ir::{self, FuncRef},
-  CompiledCode, FinalizedMachReloc,
+  CompiledCode,
 };
 use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
@@ -170,7 +170,29 @@ impl ThreadCtx<'_> {
     FuncBuilder { builder, mir, funcs, locals: HashMap::new(), next_variable: 0 }
   }
 
-  pub fn translate_function(&mut self, mir: &mir::Function) { self.new_function(mir).translate(); }
+  fn translate_function(&mut self, mir: &mir::Function) { self.new_function(mir).translate(); }
+
+  fn compile(&mut self) -> &CompiledCode {
+    self.ctx.compile(self.isa, &mut ControlPlane::default()).unwrap()
+  }
+
+  fn clear(&mut self) { self.ctx.clear(); }
+
+  pub fn compile_function(&mut self, mir: &mir::Function) -> CompiledFunction {
+    self.translate_function(mir);
+    let code = self.compile().clone();
+
+    let compiled = CompiledFunction { code, func: self.ctx.func.clone() };
+
+    self.clear();
+
+    compiled
+  }
+}
+
+pub struct CompiledFunction {
+  code: CompiledCode,
+  func: ir::Function,
 }
 
 impl FuncBuilder<'_> {
@@ -196,35 +218,19 @@ impl FuncBuilder<'_> {
   }
 }
 
-impl ThreadCtx<'_> {
-  pub fn compile(&mut self) -> &CompiledCode {
-    self.ctx.compile(self.isa, &mut ControlPlane::default()).unwrap()
-  }
-
-  pub fn func(&self) -> &ir::Function { &self.ctx.func }
-
-  pub fn finalize(mut self, jit: &mut JIT) -> FuncId {
-    let id =
-      jit.module.declare_function("fooooooo", Linkage::Export, &self.ctx.func.signature).unwrap();
-    jit.module.define_function(id, &mut self.ctx).unwrap();
-    id
-  }
-
-  pub fn clear(&mut self) { self.ctx.clear(); }
-}
-
 impl JIT {
-  pub fn define_function(
-    &mut self,
-    code: &[u8],
-    alignment: u64,
-    func: &ir::Function,
-    relocs: &[FinalizedMachReloc],
-  ) -> Result<FuncId, String> {
-    let id = self.module.declare_function("fooooooo", Linkage::Export, &func.signature).unwrap();
+  pub fn define_function(&mut self, func: CompiledFunction) -> Result<FuncId, String> {
+    let id =
+      self.module.declare_function("fooooooo", Linkage::Export, &func.func.signature).unwrap();
     self
       .module
-      .define_function_bytes(id, func, alignment, code, relocs)
+      .define_function_bytes(
+        id,
+        &func.func,
+        u64::from(func.code.buffer.alignment),
+        func.code.code_buffer(),
+        func.code.buffer.relocs(),
+      )
       .map_err(|e| e.to_string())?;
     Ok(id)
   }
