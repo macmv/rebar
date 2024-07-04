@@ -1,7 +1,7 @@
 //! Lowers the AST from rb_syntax into an HIR tree. Performs no type inferrence,
 //! and only validates syntax.
 
-use rb_diagnostic::{SourceId, Span};
+use rb_diagnostic::{emit, SourceId, Span};
 use rb_hir::{ast as hir, SpanMap};
 use rb_syntax::{cst, AstNode};
 
@@ -204,11 +204,34 @@ impl FunctionLower<'_, '_> {
     self.f.exprs.alloc(expr)
   }
   fn type_expr(&self, cst: &cst::Type) -> hir::TypeExpr {
-    match cst.ident_token().unwrap().text().to_string().as_str() {
-      "nil" => hir::TypeExpr::Nil,
-      "bool" => hir::TypeExpr::Bool,
-      "int" => hir::TypeExpr::Int,
-      _ => unimplemented!("lowering for {:?}", cst),
+    match cst {
+      cst::Type::NameType(cst) => {
+        if let Some(_) = cst.nil_token() {
+          hir::TypeExpr::Nil
+        } else {
+          let name = cst.ident_token().unwrap().text().to_string();
+
+          match name.as_str() {
+            "nil" => hir::TypeExpr::Nil,
+            "bool" => hir::TypeExpr::Bool,
+            "int" => hir::TypeExpr::Int,
+            _ => {
+              emit!(
+                "unknown type {name}",
+                Span { file: self.source.source, range: cst.ident_token().unwrap().text_range() }
+              );
+              hir::TypeExpr::Nil
+            }
+          }
+        }
+      }
+
+      cst::Type::BinaryType(cst) => {
+        let lhs = self.type_expr(&cst.lhs().unwrap());
+        let rhs = self.type_expr(&cst.rhs().unwrap());
+
+        hir::TypeExpr::Union(vec![lhs, rhs])
+      }
     }
   }
 }
