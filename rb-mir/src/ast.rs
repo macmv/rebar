@@ -15,6 +15,11 @@ pub struct Function {
 
   pub items: Vec<StmtId>,
 
+  /// The parameters of this function.
+  pub params: Vec<Type>,
+  /// The return type of this function.
+  pub ret:    Option<Type>,
+
   /// Local variables in this function.
   pub vars: Vec<Type>,
 
