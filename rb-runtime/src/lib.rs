@@ -130,7 +130,7 @@ fn eval_mir(env: Environment, functions: Vec<rb_mir::ast::Function>) {
   }
 
   jit.finalize();
-  jit.eval(function_ids[0]);
+  jit.eval(*function_ids.last().unwrap());
 }
 
 pub fn run_parallel<I: Send + Sync, C: Send, O: Send + Sync>(

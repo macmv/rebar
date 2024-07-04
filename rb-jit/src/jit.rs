@@ -6,7 +6,7 @@ use codegen::{
 use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, FuncId, FunctionDeclaration, Linkage, Module};
-use isa::TargetIsa;
+use isa::{CallConv, TargetIsa};
 use rb_mir::ast::{self as mir, UserFunctionId};
 use rb_typer::{Literal, Type};
 use std::{collections::HashMap, marker::PhantomPinned};
@@ -152,24 +152,14 @@ impl JIT {
 
 impl ThreadCtx<'_> {
   pub fn new_function<'a>(&'a mut self, mir: &'a mir::Function) -> FuncBuilder<'a> {
-    let mut builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
-    let entry_block = builder.create_block();
+    let builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
 
-    builder.append_block_params_for_function_params(entry_block);
-    builder.switch_to_block(entry_block);
-
-    // Tells the compiler there will be no predecessors (???).
-    builder.seal_block(entry_block);
-
-    // TODO: Declare variables.
-    // for stmt in source.stmts() {}
-
+    let mut index = 0;
     let funcs = self.funcs.map(|func| {
       let signature = builder.func.import_signature(func.decl.signature.clone());
-      let user_name_ref = builder.func.declare_imported_user_function(ir::UserExternalName {
-        namespace: 0,
-        index:     func.id.as_u32(),
-      });
+      let user_name_ref =
+        builder.func.declare_imported_user_function(ir::UserExternalName { namespace: 0, index });
+      index += 1;
       let colocated = func.decl.linkage.is_final();
       builder.func.import_function(ir::ExtFuncData {
         name: ir::ExternalName::user(user_name_ref),
@@ -180,17 +170,17 @@ impl ThreadCtx<'_> {
 
     let mut user_funcs = HashMap::new();
     for &dep in mir.deps.iter() {
-      let (func_id, signature) = &self.user_funcs[&dep];
+      let (id, signature) = &self.user_funcs[&dep];
 
       let signature = builder.func.import_signature(signature.clone());
       let user_name_ref = builder.func.declare_imported_user_function(ir::UserExternalName {
         namespace: 0,
-        index:     func_id.as_u32(),
+        index:     id.as_u32(),
       });
       let func_ref = builder.func.import_function(ir::ExtFuncData {
         name: ir::ExternalName::user(user_name_ref),
         signature,
-        colocated: true,
+        colocated: false,
       });
       user_funcs.insert(dep, func_ref);
     }
@@ -207,6 +197,12 @@ impl ThreadCtx<'_> {
   fn clear(&mut self) { self.ctx.clear(); }
 
   pub fn compile_function(&mut self, mir: &mir::Function) -> CompiledFunction {
+    let (id, sig) = &self.user_funcs[&mir.id];
+    self.ctx.func = ir::Function::with_name_signature(
+      ir::UserFuncName::User(ir::UserExternalName { namespace: 0, index: id.as_u32() }),
+      sig.clone(),
+    );
+
     self.translate_function(mir);
     let code = self.compile().clone();
 
@@ -226,20 +222,40 @@ pub struct CompiledFunction {
 
 impl FuncBuilder<'_> {
   fn translate(mut self) {
-    self.builder.func.signature.returns.push(AbiParam::new(ir::types::I64));
+    let entry_block = self.builder.create_block();
 
-    let return_variable = self.new_variable();
-    let zero = self.builder.ins().iconst(ir::types::I64, 0);
-    self.builder.def_var(return_variable, zero);
+    let mut param_values = vec![];
 
-    for (param_id, ty) in self.mir.vars.iter().enumerate() {
+    for ty in self.mir.params.iter() {
       match ParamKind::for_type(ty) {
         ParamKind::Extended => todo!("Extended variables not supported for parameters yet"),
         _ => {}
       }
 
+      let value = self.builder.append_block_param(entry_block, ir::types::I64);
+      param_values.push(value);
+    }
+
+    assert_eq!(self.builder.func.signature.params.len(), param_values.len());
+
+    if let Some(ref ty) = self.mir.ret {
+      match ParamKind::for_type(ty) {
+        ParamKind::Extended => todo!("Extended variables not supported for parameters yet"),
+        _ => {}
+      }
+
+      assert!(self.builder.func.signature.returns.len() == 1);
+    } else {
+      assert!(self.builder.func.signature.returns.is_empty());
+    }
+
+    self.builder.switch_to_block(entry_block);
+    self.builder.seal_block(entry_block);
+
+    for (param_id, value) in param_values.into_iter().enumerate() {
       let id = self.new_variable();
       self.locals.insert(mir::VarId(param_id as u32), CompactValues::One(id));
+      self.builder.def_var(id, value);
     }
 
     for &stmt in &self.mir.items {
@@ -247,10 +263,11 @@ impl FuncBuilder<'_> {
       // self.def_var(return_variable, res.to_ir());
     }
 
-    let return_value = self.builder.use_var(return_variable);
-
     // Emit the return instruction.
-    self.builder.ins().return_(&[return_value]);
+    self.builder.ins().return_(&[]);
+
+    // println!("done translating {:?}. cranelift ir:", self.mir.id);
+    // println!("{}", self.builder.func);
 
     // Tell the builder we're done with this function.
     self.builder.finalize();
@@ -260,13 +277,20 @@ impl FuncBuilder<'_> {
 impl JIT {
   pub fn declare_function(&mut self, func: &mir::Function) {
     let mut sig = self.module.make_signature();
-    sig.params.push(AbiParam::new(ir::types::I64));
-    sig.params.push(AbiParam::new(ir::types::I64));
-    sig.returns.push(AbiParam::new(ir::types::I64));
+
+    sig.call_conv = CallConv::Fast;
+    for ty in func.params.iter() {
+      match ParamKind::for_type(ty) {
+        ParamKind::Extended => todo!("Extended variables not supported for parameters yet"),
+        _ => {}
+      }
+
+      sig.params.push(AbiParam::new(ir::types::I64));
+    }
 
     let id = self
       .module
-      .declare_function(&format!("fooooooo_{}", func.id.0), Linkage::Export, &sig)
+      .declare_function(&format!("fooooooo_{}", func.id.0), Linkage::Local, &sig)
       .unwrap();
     self.user_funcs.insert(func.id, (id, sig));
   }

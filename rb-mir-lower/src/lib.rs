@@ -37,8 +37,18 @@ pub fn lower_function(env: &Env, ty: &Typer, hir: &hir::Function) -> mir::Functi
       _ => todo!("type expr {ty:?}"),
     };
 
+    lower.mir.params.push(ty.clone());
     let id = lower.next_var_id(ty);
     lower.locals.insert(name.clone(), id);
+  }
+
+  if let Some(ret) = &hir.ret {
+    lower.mir.ret = Some(match ret {
+      hir::TypeExpr::Nil => Type::Literal(Literal::Unit),
+      hir::TypeExpr::Bool => Type::Literal(Literal::Bool),
+      hir::TypeExpr::Int => Type::Literal(Literal::Int),
+      _ => todo!("type expr {ret:?}"),
+    });
   }
 
   for stmt in hir.items.iter() {
