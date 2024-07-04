@@ -35,7 +35,11 @@ pub fn eval(src: &str) {
   let mut functions = vec![];
 
   let static_env = env.static_env();
-  let mir_env = env.mir_env();
+  let mut mir_env = env.mir_env();
+  for (id, f) in hir.0.functions.values().enumerate() {
+    mir_env.declare_user_function(id as u64, f);
+  }
+
   rb_diagnostic::run_or_exit(sources, || {
     let (hir, span_maps) = hir;
 
@@ -78,7 +82,11 @@ pub fn run(env: Environment, sources: Arc<Sources>, id: SourceId) -> Result<(), 
   let mut functions = vec![];
 
   let static_env = env.static_env();
-  let mir_env = env.mir_env();
+  let mut mir_env = env.mir_env();
+  for (id, f) in hir.0.functions.values().enumerate() {
+    mir_env.declare_user_function(id as u64, f);
+  }
+
   rb_diagnostic::run(sources, || {
     let (hir, span_maps) = hir;
 

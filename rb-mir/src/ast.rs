@@ -24,6 +24,10 @@ pub struct VarId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NativeFunctionId(pub u64);
 
+/// A user-defined function ID. These are assigned just before lowering to MIR.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UserFunctionId(pub u64);
+
 #[derive(Debug)]
 pub enum Expr {
   Literal(Literal),
@@ -33,6 +37,7 @@ pub enum Expr {
   Binary(ExprId, BinaryOp, ExprId, Type),
 
   Local(VarId),
+  UserFunction(UserFunctionId, Type),
   Native(NativeFunctionId, Type),
 
   Block(Vec<StmtId>),

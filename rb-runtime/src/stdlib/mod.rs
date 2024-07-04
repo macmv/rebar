@@ -4,12 +4,12 @@ mod core;
 mod std;
 
 use rb_jit::{jit::RebarArgs, value::ParamKind};
-use rb_mir::ast as mir;
+use rb_mir::ast::{self as mir};
 use rb_typer::{Literal, Type};
 
 pub struct Environment {
-  pub names: HashMap<String, Function>,
-  ids:       Vec<String>,
+  pub static_functions: HashMap<String, Function>,
+  ids:                  Vec<String>,
 }
 
 pub struct Function {
@@ -20,7 +20,7 @@ pub struct Function {
 }
 
 impl Environment {
-  fn empty() -> Self { Environment { names: HashMap::new(), ids: vec![] } }
+  fn empty() -> Self { Environment { static_functions: HashMap::new(), ids: vec![] } }
 
   pub(crate) fn dyn_call_ptr(self) -> fn(i64, *const RebarArgs) -> i64 {
     // This works pretty well, but it would be nice to support multithreading, and
@@ -38,7 +38,7 @@ impl Environment {
         let env = env.borrow();
         let env = env.as_ref().unwrap();
 
-        let f = &env.names[&env.ids[func as usize]];
+        let f = &env.static_functions[&env.ids[func as usize]];
 
         let args = unsafe {
           let arg_value = &*arg;
@@ -117,7 +117,7 @@ impl Environment {
   pub fn static_env(&self) -> rb_typer::Environment {
     rb_typer::Environment {
       names: self
-        .names
+        .static_functions
         .iter()
         .map(|(k, v)| (k.clone(), Type::Function(v.args.clone(), Box::new(v.ret.clone()))))
         .collect(),
@@ -126,11 +126,13 @@ impl Environment {
 
   pub fn mir_env(&self) -> rb_mir_lower::Env {
     rb_mir_lower::Env {
-      functions: self
+      items: self
         .ids
         .iter()
         .enumerate()
-        .map(|(k, v)| (v.clone(), mir::NativeFunctionId(k as u64)))
+        .map(|(k, v)| {
+          (v.clone(), rb_mir_lower::Item::NativeFunction(mir::NativeFunctionId(k as u64)))
+        })
         .collect(),
     }
   }
@@ -165,7 +167,7 @@ impl Value {
 impl Environment {
   pub fn add_fn<T>(&mut self, name: impl Into<String>, function: impl DynFunction<T>) {
     let name = name.into();
-    self.names.insert(name.clone(), function.into_function());
+    self.static_functions.insert(name.clone(), function.into_function());
     self.ids.push(name);
   }
 }

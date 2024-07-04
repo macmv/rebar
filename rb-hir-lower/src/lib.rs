@@ -42,6 +42,8 @@ impl SourceLower<'_> {
     let mut span_map = SpanMap::default();
     let mut lower = FunctionLower { source: self, f: &mut f, span_map: &mut span_map };
 
+    lower.f.name = cst.ident_token().unwrap().to_string();
+
     for arg in cst.params().unwrap().params() {
       let name = arg.ident_token().unwrap().to_string();
       let ty = lower.type_expr(&arg.ty().unwrap());

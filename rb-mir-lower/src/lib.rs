@@ -3,11 +3,24 @@
 use std::collections::HashMap;
 
 use rb_hir::ast as hir;
-use rb_mir::ast as mir;
+use rb_mir::ast::{self as mir, UserFunctionId};
 use rb_typer::{Literal, Type, Typer};
 
+/// The environment for lowering to MIR. This stores a tree of namespaces to
+/// native IDs, that are stored directly in the MIR.
 pub struct Env {
-  pub functions: HashMap<String, mir::NativeFunctionId>,
+  pub items: HashMap<String, Item>,
+}
+
+pub enum Item {
+  NativeFunction(mir::NativeFunctionId),
+  UserFunction(UserFunctionId),
+}
+
+impl Env {
+  pub fn declare_user_function(&mut self, id: u64, function: &hir::Function) {
+    self.items.insert(function.name.clone(), Item::UserFunction(UserFunctionId(id)));
+  }
 }
 
 pub fn lower_function(env: &Env, ty: &Typer, hir: &hir::Function) -> mir::Function {
@@ -78,13 +91,21 @@ impl Lower<'_> {
 
       // HIR should have fully qualified names, and the typer should get the type of this name.
       // We should probably convert it to something more useful than a string though.
-      hir::Expr::Name(ref v) => match self.locals.get(v) {
-        Some(local) => mir::Expr::Local(*local),
-        None => {
-          let id = self.env.functions[v];
-          mir::Expr::Native(id, self.ty.type_of_expr(expr))
-        }
-      },
+      hir::Expr::Name(ref v) => {
+        println!("resolving {v}");
+
+        let res = match self.locals.get(v) {
+          Some(local) => mir::Expr::Local(*local),
+          None => match self.env.items[v] {
+            Item::UserFunction(id) => mir::Expr::UserFunction(id, self.ty.type_of_expr(expr)),
+            Item::NativeFunction(id) => mir::Expr::Native(id, self.ty.type_of_expr(expr)),
+          },
+        };
+
+        println!("got {res:?}");
+
+        res
+      }
 
       hir::Expr::Block(ref block) => {
         let mut stmts = vec![];

@@ -15,6 +15,8 @@ pub struct SourceFile {
 
 #[derive(Debug, Default)]
 pub struct Function {
+  pub name: String,
+
   pub args: Vec<(String, TypeExpr)>,
 
   pub exprs: Arena<Expr>,
