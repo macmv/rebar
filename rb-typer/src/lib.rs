@@ -123,7 +123,7 @@ impl<'a> Typer<'a> {
         }
       }
 
-      ref ty => panic!("invalid type: {ty:?}"),
+      VType::Union(tys) => Type::Union(tys.iter().map(|ty| self.lower_type(ty)).collect()),
     }
   }
 
