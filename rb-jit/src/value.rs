@@ -3,6 +3,7 @@ use cranelift::{
   frontend::FunctionBuilder,
   prelude::{Block, InstBuilder},
 };
+use rb_mir::ast as mir;
 use rb_typer::{Literal, Type};
 
 #[derive(Debug, Clone, Copy)]
@@ -15,6 +16,9 @@ pub enum RValue {
 
   /// Stores a single i64 value.
   Int(ir::Value),
+
+  /// Stores a user-defined function.
+  UserFunction(mir::UserFunctionId),
 
   /// Stores a function pointer.
   Function(ir::Value),
@@ -111,6 +115,8 @@ impl RValue {
       RValue::Int(_) => builder.ins().iconst(ir::types::I64, 2),
       RValue::Function(_) => builder.ins().iconst(ir::types::I64, 3),
       RValue::Dynamic(ty, _) => *ty,
+
+      RValue::UserFunction(_) => todo!(),
     };
 
     let value = match self {
@@ -119,6 +125,8 @@ impl RValue {
       RValue::Int(v) => Some(*v),
       RValue::Function(v) => Some(*v),
       RValue::Dynamic(_, v) => Some(*v),
+
+      RValue::UserFunction(_) => todo!(),
     };
 
     match value {
@@ -138,6 +146,8 @@ impl RValue {
       RValue::Int(v) => CompactValues::One(*v),
       RValue::Function(v) => CompactValues::One(*v),
       RValue::Dynamic(_, _) => panic!("dynamic values cannot be compact"),
+
+      RValue::UserFunction(_) => todo!(),
     }
   }
 

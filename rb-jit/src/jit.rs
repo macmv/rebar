@@ -7,7 +7,7 @@ use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, FuncId, FunctionDeclaration, Linkage, Module};
 use isa::TargetIsa;
-use rb_mir::ast as mir;
+use rb_mir::ast::{self as mir, UserFunctionId};
 use rb_typer::{Literal, Type};
 use std::{collections::HashMap, marker::PhantomPinned};
 
@@ -20,7 +20,8 @@ pub struct JIT {
   #[allow(dead_code)]
   data_description: DataDescription,
 
-  funcs: NativeFuncs<FuncId>,
+  funcs:      NativeFuncs<FuncId>,
+  user_funcs: HashMap<mir::UserFunctionId, (FuncId, Signature)>,
 }
 
 pub struct ThreadCtx<'a> {
@@ -29,7 +30,8 @@ pub struct ThreadCtx<'a> {
 
   isa: &'a dyn TargetIsa,
 
-  funcs: NativeFuncs<NativeFuncDecl<'a>>,
+  funcs:      NativeFuncs<NativeFuncDecl<'a>>,
+  user_funcs: &'a HashMap<mir::UserFunctionId, (FuncId, Signature)>,
 }
 
 #[derive(Clone, Copy)]
@@ -59,6 +61,9 @@ pub struct FuncBuilder<'a> {
   // cranelift IR variable. There will usually be more cranelift variables than local variables.
   locals:        HashMap<mir::VarId, CompactValues<Variable>>,
   next_variable: usize,
+
+  // A map of user-defined function calls to function refs.
+  user_funcs: HashMap<mir::UserFunctionId, FuncRef>,
 }
 
 /// This struct is horribly dangerous to use. It is a struct storing the
@@ -106,7 +111,12 @@ impl JIT {
 
     let call_func = module.declare_function("__call", Linkage::Import, &call_sig).unwrap();
 
-    JIT { data_description: DataDescription::new(), module, funcs: NativeFuncs { call: call_func } }
+    JIT {
+      data_description: DataDescription::new(),
+      module,
+      funcs: NativeFuncs { call: call_func },
+      user_funcs: HashMap::new(),
+    }
   }
 
   pub fn new_thread(&self) -> ThreadCtx {
@@ -118,6 +128,7 @@ impl JIT {
       isa: self.module.isa(),
 
       funcs: self.funcs(),
+      user_funcs: &self.user_funcs,
     }
   }
 
@@ -167,7 +178,24 @@ impl ThreadCtx<'_> {
       })
     });
 
-    FuncBuilder { builder, mir, funcs, locals: HashMap::new(), next_variable: 0 }
+    let mut user_funcs = HashMap::new();
+    for &dep in mir.deps.iter() {
+      let (func_id, signature) = &self.user_funcs[&dep];
+
+      let signature = builder.func.import_signature(signature.clone());
+      let user_name_ref = builder.func.declare_imported_user_function(ir::UserExternalName {
+        namespace: 0,
+        index:     func_id.as_u32(),
+      });
+      let func_ref = builder.func.import_function(ir::ExtFuncData {
+        name: ir::ExternalName::user(user_name_ref),
+        signature,
+        colocated: true,
+      });
+      user_funcs.insert(dep, func_ref);
+    }
+
+    FuncBuilder { builder, mir, funcs, locals: HashMap::new(), next_variable: 0, user_funcs }
   }
 
   fn translate_function(&mut self, mir: &mir::Function) { self.new_function(mir).translate(); }
@@ -182,7 +210,7 @@ impl ThreadCtx<'_> {
     self.translate_function(mir);
     let code = self.compile().clone();
 
-    let compiled = CompiledFunction { code, func: self.ctx.func.clone() };
+    let compiled = CompiledFunction { id: mir.id, code, func: self.ctx.func.clone() };
 
     self.clear();
 
@@ -191,6 +219,7 @@ impl ThreadCtx<'_> {
 }
 
 pub struct CompiledFunction {
+  id:   UserFunctionId,
   code: CompiledCode,
   func: ir::Function,
 }
@@ -229,9 +258,22 @@ impl FuncBuilder<'_> {
 }
 
 impl JIT {
+  pub fn declare_function(&mut self, func: &mir::Function) {
+    let mut sig = self.module.make_signature();
+    sig.params.push(AbiParam::new(ir::types::I64));
+    sig.params.push(AbiParam::new(ir::types::I64));
+    sig.returns.push(AbiParam::new(ir::types::I64));
+
+    let id = self
+      .module
+      .declare_function(&format!("fooooooo_{}", func.id.0), Linkage::Export, &sig)
+      .unwrap();
+    self.user_funcs.insert(func.id, (id, sig));
+  }
+
   pub fn define_function(&mut self, func: CompiledFunction) -> Result<FuncId, String> {
-    let id =
-      self.module.declare_function("fooooooo", Linkage::Export, &func.func.signature).unwrap();
+    let (id, _) = self.user_funcs[&func.id];
+
     self
       .module
       .define_function_bytes(
@@ -338,6 +380,8 @@ impl FuncBuilder<'_> {
 
       mir::Expr::Local(id) => self.use_var(self.locals[&id]),
 
+      mir::Expr::UserFunction(id, _) => RValue::UserFunction(id),
+
       mir::Expr::Native(ref id, _) => {
         RValue::Function(self.builder.ins().iconst(ir::types::I64, id.0 as i64))
       }
@@ -354,51 +398,88 @@ impl FuncBuilder<'_> {
       mir::Expr::Call(lhs, ref sig_ty, ref args) => {
         let lhs = self.compile_expr(lhs);
 
-        let arg_types = match sig_ty {
-          Type::Function(ref args, _) => args,
-          _ => unreachable!(),
-        };
+        match lhs {
+          RValue::Function(native) => {
+            let arg_types = match sig_ty {
+              Type::Function(ref args, _) => args,
+              _ => unreachable!(),
+            };
 
-        assert_eq!(args.len(), arg_types.len());
+            assert_eq!(args.len(), arg_types.len());
 
-        // Argument length in 8 byte increments.
-        let mut arg_len = 0;
-        let mut arg_values = vec![];
-        for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
-          let arg = self.compile_expr(arg);
+            // Argument length in 8 byte increments.
+            let mut arg_len = 0;
+            let mut arg_values = vec![];
+            for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
+              let arg = self.compile_expr(arg);
 
-          let v = arg.to_ir(ParamKind::for_type(arg_ty), &mut self.builder);
-          arg_len += v.len();
-          arg_values.push(v);
-        }
-
-        let slot = self.builder.create_sized_stack_slot(StackSlotData {
-          kind: StackSlotKind::ExplicitSlot,
-          // Each argument is 8 bytes wide.
-          size: arg_len * 8,
-        });
-
-        let mut slot_index = 0;
-        for v in arg_values {
-          v.with_slice(|slice| {
-            for &v in slice.iter() {
-              self.builder.ins().stack_store(v, slot, slot_index * 8);
-              slot_index += 1;
+              let v = arg.to_ir(ParamKind::for_type(arg_ty), &mut self.builder);
+              arg_len += v.len();
+              arg_values.push(v);
             }
-          });
-        }
 
-        let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, slot, 0);
+            let slot = self.builder.create_sized_stack_slot(StackSlotData {
+              kind: StackSlotKind::ExplicitSlot,
+              // Each argument is 8 bytes wide.
+              size: arg_len * 8,
+            });
 
-        let func = lhs.as_function().unwrap();
-        let call = self.builder.ins().call(self.funcs.call, &[func, arg_ptr]);
+            let mut slot_index = 0;
+            for v in arg_values {
+              v.with_slice(|slice| {
+                for &v in slice.iter() {
+                  self.builder.ins().stack_store(v, slot, slot_index * 8);
+                  slot_index += 1;
+                }
+              });
+            }
 
-        match *sig_ty {
-          Type::Function(_, ref ret) => match **ret {
-            // FIXME: Need to create RValues from ir extended form.
-            Type::Literal(Literal::Unit) => RValue::Nil,
-            _ => RValue::Int(self.builder.inst_results(call)[0]),
-          },
+            let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, slot, 0);
+
+            let call = self.builder.ins().call(self.funcs.call, &[native, arg_ptr]);
+
+            match *sig_ty {
+              Type::Function(_, ref ret) => match **ret {
+                // FIXME: Need to create RValues from ir extended form.
+                Type::Literal(Literal::Unit) => RValue::Nil,
+                _ => RValue::Int(self.builder.inst_results(call)[0]),
+              },
+              _ => unreachable!(),
+            }
+          }
+
+          RValue::UserFunction(id) => {
+            let arg_types = match sig_ty {
+              Type::Function(ref args, _) => args,
+              _ => unreachable!(),
+            };
+
+            assert_eq!(args.len(), arg_types.len());
+
+            // Argument length in 8 byte increments.
+            let mut arg_values = vec![];
+            for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
+              let arg = self.compile_expr(arg);
+
+              let v = arg.to_ir(ParamKind::for_type(arg_ty), &mut self.builder);
+              v.with_slice(|v| {
+                arg_values.extend(v);
+              });
+            }
+
+            let func_ref = self.user_funcs[&id];
+            let call = self.builder.ins().call(func_ref, &arg_values);
+
+            match *sig_ty {
+              Type::Function(_, ref ret) => match **ret {
+                // FIXME: Need to create RValues from ir extended form.
+                Type::Literal(Literal::Unit) => RValue::Nil,
+                _ => RValue::Int(self.builder.inst_results(call)[0]),
+              },
+              _ => unreachable!(),
+            }
+          }
+
           _ => unreachable!(),
         }
       }

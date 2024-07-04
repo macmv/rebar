@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use la_arena::{Arena, Idx};
 use rb_typer::Type;
 
@@ -6,6 +8,8 @@ pub type StmtId = Idx<Stmt>;
 
 #[derive(Debug, Default)]
 pub struct Function {
+  pub id: UserFunctionId,
+
   pub exprs: Arena<Expr>,
   pub stmts: Arena<Stmt>,
 
@@ -13,6 +17,9 @@ pub struct Function {
 
   /// Local variables in this function.
   pub vars: Vec<Type>,
+
+  /// Other user-defined functions that this function calls.
+  pub deps: HashSet<UserFunctionId>,
 }
 
 /// A local variable ID. Variable ids reset at the start of each function
@@ -25,7 +32,7 @@ pub struct VarId(pub u32);
 pub struct NativeFunctionId(pub u64);
 
 /// A user-defined function ID. These are assigned just before lowering to MIR.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct UserFunctionId(pub u64);
 
 #[derive(Debug)]

@@ -48,7 +48,10 @@ pub fn eval(src: &str) {
 
       let typer = rb_typer::Typer::check(&static_env, &function, &span_map);
       if rb_diagnostic::is_ok() {
-        functions.push(rb_mir_lower::lower_function(&mir_env, &typer, &function));
+        let mut func = rb_mir_lower::lower_function(&mir_env, &typer, &function);
+        func.id = rb_mir::ast::UserFunctionId(idx.into_raw().into_u32() as u64);
+
+        functions.push(func);
       }
     }
   });
@@ -95,7 +98,10 @@ pub fn run(env: Environment, sources: Arc<Sources>, id: SourceId) -> Result<(), 
 
       let typer = rb_typer::Typer::check(&static_env, &function, &span_map);
       if rb_diagnostic::is_ok() {
-        functions.push(rb_mir_lower::lower_function(&mir_env, &typer, &function));
+        let mut func = rb_mir_lower::lower_function(&mir_env, &typer, &function);
+        func.id = rb_mir::ast::UserFunctionId(idx.into_raw().into_u32() as u64);
+
+        functions.push(func);
       }
     }
   })?;
@@ -111,6 +117,10 @@ pub fn run(env: Environment, sources: Arc<Sources>, id: SourceId) -> Result<(), 
 
 fn eval_mir(env: Environment, functions: Vec<rb_mir::ast::Function>) {
   let mut jit = rb_jit::jit::JIT::new(env.dyn_call_ptr());
+
+  for func in &functions {
+    jit.declare_function(func);
+  }
 
   let compiled = run_parallel(&functions, || jit.new_thread(), |ctx, f| ctx.compile_function(f));
 
