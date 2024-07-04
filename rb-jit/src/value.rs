@@ -27,7 +27,7 @@ pub enum RValue {
   Dynamic(ir::Value, ir::Value),
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum CompactValues<T> {
   None,
   One(T),

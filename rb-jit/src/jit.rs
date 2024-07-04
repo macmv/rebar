@@ -228,15 +228,20 @@ impl FuncBuilder<'_> {
 
     for ty in self.mir.params.iter() {
       match ParamKind::for_type(ty) {
-        ParamKind::Extended => todo!("Extended variables not supported for parameters yet"),
-        _ => {}
+        ParamKind::Zero => {
+          param_values.push(CompactValues::None);
+        }
+        ParamKind::Compact => {
+          let value = self.builder.append_block_param(entry_block, ir::types::I64);
+          param_values.push(CompactValues::One(value));
+        }
+        ParamKind::Extended => {
+          let v0 = self.builder.append_block_param(entry_block, ir::types::I64);
+          let v1 = self.builder.append_block_param(entry_block, ir::types::I64);
+          param_values.push(CompactValues::Two(v0, v1));
+        }
       }
-
-      let value = self.builder.append_block_param(entry_block, ir::types::I64);
-      param_values.push(value);
     }
-
-    assert_eq!(self.builder.func.signature.params.len(), param_values.len());
 
     if let Some(ref ty) = self.mir.ret {
       match ParamKind::for_type(ty) {
@@ -252,10 +257,11 @@ impl FuncBuilder<'_> {
     self.builder.switch_to_block(entry_block);
     self.builder.seal_block(entry_block);
 
-    for (param_id, value) in param_values.into_iter().enumerate() {
-      let id = self.new_variable();
-      self.locals.insert(mir::VarId(param_id as u32), CompactValues::One(id));
-      self.builder.def_var(id, value);
+    for (id, param) in param_values.into_iter().enumerate() {
+      let variables = param.map(|_| self.new_variable());
+
+      self.locals.insert(mir::VarId(id as u32), variables);
+      self.def_var(variables, param);
     }
 
     for &stmt in &self.mir.items {
@@ -281,11 +287,13 @@ impl JIT {
     sig.call_conv = CallConv::Fast;
     for ty in func.params.iter() {
       match ParamKind::for_type(ty) {
-        ParamKind::Extended => todo!("Extended variables not supported for parameters yet"),
-        _ => {}
+        ParamKind::Zero => {}
+        ParamKind::Compact => sig.params.push(AbiParam::new(ir::types::I64)),
+        ParamKind::Extended => {
+          sig.params.push(AbiParam::new(ir::types::I64));
+          sig.params.push(AbiParam::new(ir::types::I64));
+        }
       }
-
-      sig.params.push(AbiParam::new(ir::types::I64));
     }
 
     let id = self
@@ -342,9 +350,7 @@ impl FuncBuilder<'_> {
 
       // Any value can be assigned to a union.
       (CompactValues::Two(var0, var1), _) => {
-        // The `ir` must be in extended form, which means it must have a length of 1 or
-        // 2.
-        assert!(ir.len() == 1 || ir.len() == 2);
+        assert_eq!(ir.len(), 2, "ir must be in extended form, got {ir:?}");
 
         // The first value is the only one that must be set. For example, if a value is
         // set to `nil`, the second variable is undefined.
