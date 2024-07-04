@@ -414,10 +414,12 @@ fn check(src: &str) -> Vec<Diagnostic> {
   let static_env = env.static_env();
 
   let res = rb_diagnostic::run(sources, || {
-    let (hir, span_map) = hir;
+    let (hir, span_maps) = hir;
 
-    for function in hir.functions.values() {
-      rb_typer::Typer::check(&static_env, function, &span_map);
+    for (idx, function) in hir.functions {
+      let span_map = &span_maps[idx.into_raw().into_u32() as usize];
+
+      rb_typer::Typer::check(&static_env, &function, &span_map);
     }
   });
 
