@@ -372,11 +372,10 @@ impl FuncBuilder<'_> {
         RValue::Int(ir)
       }
       CompactValues::Two(ty, value) => {
-        let _ty = self.builder.use_var(ty);
+        let ty = self.builder.use_var(ty);
         let value = self.builder.use_var(value);
 
-        // TODO: RValue from type.
-        RValue::Int(value)
+        RValue::Dynamic(ty, value)
       }
     }
   }
