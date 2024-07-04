@@ -203,6 +203,16 @@ impl FuncBuilder<'_> {
     let zero = self.builder.ins().iconst(ir::types::I64, 0);
     self.builder.def_var(return_variable, zero);
 
+    for (param_id, ty) in self.mir.vars.iter().enumerate() {
+      match ParamKind::for_type(ty) {
+        ParamKind::Extended => todo!("Extended variables not supported for parameters yet"),
+        _ => {}
+      }
+
+      let id = self.new_variable();
+      self.locals.insert(mir::VarId(param_id as u32), CompactValues::One(id));
+    }
+
     for &stmt in &self.mir.items {
       let _res = self.compile_stmt(stmt);
       // self.def_var(return_variable, res.to_ir());
