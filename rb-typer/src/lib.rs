@@ -59,7 +59,9 @@ impl<'a> Typer<'a> {
         hir::TypeExpr::Nil => Type::Literal(Literal::Unit),
         hir::TypeExpr::Bool => Type::Literal(Literal::Bool),
         hir::TypeExpr::Int => Type::Literal(Literal::Int),
-        _ => todo!("type expr {ty:?}"),
+        hir::TypeExpr::Union(tys) => {
+          Type::Union(tys.iter().map(|ty| type_expr_to_type(&ty)).collect())
+        }
       }
     }
 
