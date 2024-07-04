@@ -224,11 +224,9 @@ impl FuncBuilder<'_> {
   fn translate(mut self) {
     let entry_block = self.builder.create_block();
 
-    self.builder.func.signature.returns.push(AbiParam::new(ir::types::I64));
-
     let mut param_values = vec![];
 
-    for ty in self.mir.vars.iter() {
+    for ty in self.mir.params.iter() {
       match ParamKind::for_type(ty) {
         ParamKind::Extended => todo!("Extended variables not supported for parameters yet"),
         _ => {}
