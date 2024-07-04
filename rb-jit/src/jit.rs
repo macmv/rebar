@@ -672,9 +672,8 @@ impl FuncBuilder<'_> {
         let else_block = self.builder.create_block();
         let merge_block = self.builder.create_block();
 
-        // Blocks must always take the same parameters, even if some go unused. So use
-        // `to_sized_ir` instead of `to_ir` here.
-        let param_kind = ParamKind::block_params(&mut self.builder, &ty, merge_block);
+        let param_kind = ParamKind::for_type(ty);
+        param_kind.append_block_params(&mut self.builder, merge_block);
 
         // Test the if condition and conditionally branch.
         self.builder.ins().brif(cond, then_block, &[], else_block, &[]);

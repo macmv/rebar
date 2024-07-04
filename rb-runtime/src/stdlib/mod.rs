@@ -49,24 +49,17 @@ impl Environment {
             let param_kind = ParamKind::for_type(ty);
 
             let value = match param_kind {
+              ParamKind::Zero => Value::Nil,
               ParamKind::Compact => {
-                // A nil won't take up any slots, so we must check for that to avoid reading out
-                // of bounds.
-                match ty {
-                  Type::Literal(Literal::Unit) => Value::Nil,
-                  _ => {
-                    // Now that we know its not a unit, we can safely read the value. The value
-                    // will always take up 8 bytes, even if less bytes are used.
-                    let value = *arg_value.arg(offset);
-                    offset += 1;
+                // The value will always take up 8 bytes, even if less bytes are used.
+                let value = *arg_value.arg(offset);
+                offset += 1;
 
-                    match ty {
-                      // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
-                      Type::Literal(Literal::Bool) => Value::Bool(value as u8 != 0),
-                      Type::Literal(Literal::Int) => Value::Int(value),
-                      v => unimplemented!("{v:?}"),
-                    }
-                  }
+                match ty {
+                  // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
+                  Type::Literal(Literal::Bool) => Value::Bool(value as u8 != 0),
+                  Type::Literal(Literal::Int) => Value::Int(value),
+                  v => unimplemented!("{v:?}"),
                 }
               }
               ParamKind::Extended => {

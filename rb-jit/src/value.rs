@@ -39,9 +39,14 @@ pub enum CompactValues<T> {
 /// extended types have a static type that is a union or unknown.
 #[derive(Clone, Copy)]
 pub enum ParamKind {
-  /// The compact format. This will returns in a `CompactValues` containing zero
-  /// or one values. Zero values will show up for a `nil`, and one value will
-  /// show up for everything else.
+  /// This parameter doesn't require any information at runtime. Everything
+  /// there is to know about this parameter is in its type. Most commonly,
+  /// this will show up for `nil`, but it can show up for other zero-sized
+  /// types.
+  Zero,
+
+  /// The compact format. This will returns in a `CompactValues` containing one
+  /// value.
   Compact,
 
   /// The extended format. This will always return one or two `CompactValues`.
@@ -157,6 +162,7 @@ impl RValue {
   /// `to_sized_ir`.
   pub fn to_ir(&self, kind: ParamKind, builder: &mut FunctionBuilder) -> CompactValues<ir::Value> {
     match kind {
+      ParamKind::Zero => CompactValues::None,
       ParamKind::Compact => self.to_compact_ir(),
       ParamKind::Extended => self.to_extended_ir(builder),
     }
@@ -165,21 +171,20 @@ impl RValue {
   // TODO: Need to actually use this with a function return.
   pub fn from_ir(ir: &[ir::Value], ty: &Type) -> RValue {
     match /*ParamKind::for_type(ty)*/ ParamKind::Extended {
-      ParamKind::Compact => match ty {
-        Type::Literal(Literal::Unit) => {
-          assert_eq!(ir.len(), 0);
-          RValue::Nil
-        }
-        _ => {
-          assert_eq!(ir.len(), 1);
-          let v = ir[0];
+      ParamKind::Zero => {
+        assert_eq!(ir.len(), 0);
+        RValue::Nil
+      }
+      ParamKind::Compact => {
+        assert_eq!(ir.len(), 1);
+        let v = ir[0];
 
-          match ty {
-            Type::Literal(Literal::Bool) => RValue::Bool(v),
-            Type::Literal(Literal::Int) => RValue::Int(v),
-            Type::Function(_, _) => RValue::Function(v),
-            _ => panic!("invalid type"),
-          }
+        match ty {
+          Type::Literal(Literal::Unit) => panic!("zero sized type shouldn't take up space"),
+          Type::Literal(Literal::Bool) => RValue::Bool(v),
+          Type::Literal(Literal::Int) => RValue::Int(v),
+          Type::Function(_, _) => RValue::Function(v),
+          _ => panic!("invalid type"),
         }
       },
       ParamKind::Extended => {
@@ -199,6 +204,7 @@ impl RValue {
     builder: &mut FunctionBuilder,
   ) -> CompactValues<ir::Value> {
     match kind {
+      ParamKind::Zero => CompactValues::None,
       ParamKind::Compact => self.to_compact_ir(),
       ParamKind::Extended => match self.to_extended_ir(builder) {
         CompactValues::None => unreachable!(),
@@ -213,16 +219,15 @@ impl RValue {
   pub fn from_sized_ir(ir: &[ir::Value], ty: &Type) -> RValue {
     let kind = ParamKind::for_type(ty);
     match kind {
-      ParamKind::Compact => match ty {
-        Type::Literal(Literal::Unit) => assert_eq!(ir.len(), 0),
-        _ => assert_eq!(ir.len(), 1),
-      },
+      ParamKind::Zero => assert_eq!(ir.len(), 0),
+      ParamKind::Compact => assert_eq!(ir.len(), 1),
       ParamKind::Extended => assert!(ir.len() == 2),
     }
 
     match kind {
+      ParamKind::Zero => RValue::Nil,
       ParamKind::Compact => match ty {
-        Type::Literal(Literal::Unit) => RValue::Nil,
+        Type::Literal(Literal::Unit) => panic!("zero sized type shouldn't take up space"),
         Type::Literal(Literal::Bool) => RValue::Bool(ir[0]),
         Type::Literal(Literal::Int) => RValue::Int(ir[0]),
         Type::Function(_, _) => RValue::Function(ir[0]),
@@ -253,28 +258,23 @@ impl RValue {
 }
 
 impl ParamKind {
-  pub fn block_params(builder: &mut FunctionBuilder, ty: &Type, block: Block) -> Self {
-    let kind = ParamKind::for_type(ty);
-
-    match kind {
-      ParamKind::Compact => match ty {
-        Type::Literal(Literal::Unit) => {}
-        _ => {
-          builder.append_block_param(block, ir::types::I64);
-        }
-      },
+  pub fn append_block_params(&self, builder: &mut FunctionBuilder, block: Block) {
+    match self {
+      ParamKind::Zero => {}
+      ParamKind::Compact => {
+        builder.append_block_param(block, ir::types::I64);
+      }
       ParamKind::Extended => {
         builder.append_block_param(block, ir::types::I64);
         builder.append_block_param(block, ir::types::I64);
       }
     }
-
-    kind
   }
 
   pub fn for_type(ty: &Type) -> Self {
     match ty {
       Type::Union(_) => ParamKind::Extended,
+      Type::Literal(Literal::Unit) => ParamKind::Zero,
       _ => ParamKind::Compact,
     }
   }
