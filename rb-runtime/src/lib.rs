@@ -4,7 +4,7 @@ mod stdlib;
 
 pub use stdlib::*;
 
-use rb_diagnostic::{emit, Diagnostic, Source, Sources, Span};
+use rb_diagnostic::{emit, Diagnostic, Source, SourceId, Sources, Span};
 use rb_syntax::cst;
 
 const NUM_CPUS: usize = 32;
@@ -56,15 +56,11 @@ pub fn eval(src: &str) {
   eval_mir(env, functions);
 }
 
-pub fn run(src: &str) -> Result<(), Vec<Diagnostic>> {
-  let env = Environment::std();
-
-  let mut sources = Sources::new();
-  let id = sources.add(Source::new("inline.rbr".into(), src.into()));
-  let sources = Arc::new(sources);
+pub fn run(env: Environment, sources: Arc<Sources>, id: SourceId) -> Result<(), Vec<Diagnostic>> {
+  let src = sources.get(id);
 
   let hir = rb_diagnostic::run(sources.clone(), || {
-    let res = cst::SourceFile::parse(src);
+    let res = cst::SourceFile::parse(&src.source);
 
     if res.errors().is_empty() {
       rb_hir_lower::lower_source(res.tree(), id)

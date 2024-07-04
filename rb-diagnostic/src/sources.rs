@@ -29,6 +29,7 @@ impl Sources {
   pub fn new() -> Self { Self { sources: Arena::new() } }
 
   pub fn add(&mut self, source: Source) -> SourceId { self.sources.alloc(source) }
+  pub fn get(&self, id: SourceId) -> &Source { &self.sources[id] }
 }
 
 impl Index<SourceId> for Sources {

@@ -1,6 +1,10 @@
-use std::path::{Path, PathBuf};
+use std::{
+  path::{Path, PathBuf},
+  sync::Arc,
+};
 
 use rb_diagnostic::{Source, Sources};
+use rb_runtime::Environment;
 
 fn main() {
   let filter = std::env::args().nth(1).unwrap_or_default();
@@ -23,9 +27,10 @@ fn main() {
               let src = std::fs::read_to_string(&path).unwrap();
 
               let mut sources = Sources::new();
-              sources.add(Source::new(stringified.clone(), src.clone()));
+              let id = sources.add(Source::new(stringified.clone(), src.clone()));
+              let sources = Arc::new(sources);
 
-              match rb_runtime::run(&src) {
+              match rb_runtime::run(Environment::std(), sources.clone(), id) {
                 Ok(_) => println!("{}... \x1b[32mok\x1b[0m", stringified),
                 Err(diagnostics) => {
                   println!("{}... \x1b[31mfail\x1b[0m", stringified);
