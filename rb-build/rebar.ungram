@@ -21,6 +21,7 @@ Name = 'ident'
 BinaryOp = '+' | '-' | '*' | '/' | '%' | '==' | '!=' | '<' | '<=' | '>' | '>=' | '&&' | '||' | '&' | '|'
 PrefixOp = '-' | '!'
 PostfixOp = '-' // TODO
+TypeOp = '|'
 
 Literal = 'integer' | 'float' | 'true' | 'false' | 'nil'
 
@@ -50,7 +51,10 @@ IfExpr = 'if' Expr Block ('else' 'if' Expr Block)* ('else' Block)?
 ParenExpr = '(' Expr ')'
 Block = '{' Stmt* '}'
 
-Type = 'ident'
+Type = NameType | BinaryType
+
+NameType = 'ident'
+BinaryType = Type TypeOp Type
 
 CallExpr = Expr '(' ArgList ')'
 ArgList = Expr (',' Expr)*
