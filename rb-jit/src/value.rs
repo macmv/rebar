@@ -27,6 +27,13 @@ pub enum RValue {
   Dynamic(ir::Value, ir::Value),
 }
 
+mod ty {
+  pub const NIL: i64 = 0;
+  pub const BOOL: i64 = 1;
+  pub const INT: i64 = 2;
+  pub const FUNCTION: i64 = 3;
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum CompactValues<T> {
   None,
@@ -115,10 +122,10 @@ impl RValue {
   /// block arguments).
   fn to_extended_ir(&self, builder: &mut FunctionBuilder) -> CompactValues<ir::Value> {
     let ty = match self {
-      RValue::Nil => builder.ins().iconst(ir::types::I64, 0),
-      RValue::Bool(_) => builder.ins().iconst(ir::types::I64, 1),
-      RValue::Int(_) => builder.ins().iconst(ir::types::I64, 2),
-      RValue::Function(_) => builder.ins().iconst(ir::types::I64, 3),
+      RValue::Nil => builder.ins().iconst(ir::types::I64, ty::NIL),
+      RValue::Bool(_) => builder.ins().iconst(ir::types::I64, ty::BOOL),
+      RValue::Int(_) => builder.ins().iconst(ir::types::I64, ty::INT),
+      RValue::Function(_) => builder.ins().iconst(ir::types::I64, ty::FUNCTION),
       RValue::Dynamic(ty, _) => *ty,
 
       RValue::UserFunction(_) => todo!(),
