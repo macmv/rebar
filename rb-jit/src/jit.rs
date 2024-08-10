@@ -625,21 +625,13 @@ impl FuncBuilder<'_> {
               let res = match op {
                 mir::BinaryOp::Eq => {
                   let ty_eq = self.builder.ins().icmp(IntCC::Equal, lty, rhs.first().unwrap());
-                  if let Some(r_v) = rhs.second() {
-                    let v_eq = self.builder.ins().icmp(IntCC::Equal, l_v, r_v);
-                    self.builder.ins().band(ty_eq, v_eq)
-                  } else {
-                    ty_eq
-                  }
+                  let v_eq = self.builder.ins().icmp(IntCC::Equal, l_v, rhs.second().unwrap());
+                  self.builder.ins().band(ty_eq, v_eq)
                 }
                 mir::BinaryOp::Neq => {
                   let ty_neq = self.builder.ins().icmp(IntCC::NotEqual, lty, rhs.first().unwrap());
-                  if let Some(r_v) = rhs.second() {
-                    let v_neq = self.builder.ins().icmp(IntCC::NotEqual, l_v, r_v);
-                    self.builder.ins().bor(ty_neq, v_neq)
-                  } else {
-                    ty_neq
-                  }
+                  let v_neq = self.builder.ins().icmp(IntCC::NotEqual, l_v, rhs.second().unwrap());
+                  self.builder.ins().bor(ty_neq, v_neq)
                 }
                 _ => unreachable!(),
               };
