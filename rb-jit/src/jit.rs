@@ -88,12 +88,15 @@ impl RebarArgs {
   }
 }
 
+const DEBUG: bool = false;
+
 impl JIT {
   #[allow(clippy::new_without_default)]
   pub fn new(dyn_call_ptr: fn(i64, *const RebarArgs) -> i64) -> Self {
     let mut flag_builder = settings::builder();
     flag_builder.set("use_colocated_libcalls", "false").unwrap();
     flag_builder.set("is_pic", "false").unwrap();
+    flag_builder.set("opt_level", "speed_and_size").unwrap();
     let isa_builder = cranelift_native::builder().unwrap_or_else(|msg| {
       panic!("host machine is not supported: {}", msg);
     });
@@ -191,7 +194,18 @@ impl ThreadCtx<'_> {
   fn translate_function(&mut self, mir: &mir::Function) { self.new_function(mir).translate(); }
 
   fn compile(&mut self) -> &CompiledCode {
-    self.ctx.compile(self.isa, &mut ControlPlane::default()).unwrap()
+    if DEBUG {
+      self.ctx.want_disasm = true;
+    }
+
+    let code = self.ctx.compile(self.isa, &mut ControlPlane::default()).unwrap();
+
+    if DEBUG {
+      println!("debug asm:");
+      println!("{}", code.vcode.as_ref().unwrap());
+    }
+
+    code
   }
 
   fn clear(&mut self) { self.ctx.clear(); }
@@ -272,8 +286,10 @@ impl FuncBuilder<'_> {
     // Emit the return instruction.
     self.builder.ins().return_(&[]);
 
-    // println!("done translating {:?}. cranelift ir:", self.mir.id);
-    // println!("{}", self.builder.func);
+    if DEBUG {
+      println!("done translating {:?}. cranelift ir:", self.mir.id);
+      println!("{}", self.builder.func);
+    }
 
     // Tell the builder we're done with this function.
     self.builder.finalize();
@@ -492,7 +508,18 @@ impl FuncBuilder<'_> {
 
               let v = arg.to_ir(ParamKind::for_type(arg_ty), &mut self.builder);
               v.with_slice(|v| {
-                arg_values.extend(v);
+                // arg_values.push(v);
+                for &v in v {
+                  use cranelift::codegen::ir::InstBuilderBase;
+
+                  match self.builder.ins().data_flow_graph_mut().value_type(v) {
+                    ir::types::I64 => arg_values.push(v),
+                    _ => {
+                      let v2 = self.builder.ins().uextend(ir::types::I64, v);
+                      arg_values.push(v2);
+                    }
+                  }
+                }
               });
             }
 
