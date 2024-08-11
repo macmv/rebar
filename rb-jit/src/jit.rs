@@ -391,7 +391,7 @@ impl FuncBuilder<'_> {
         let ty = self.builder.use_var(ty);
         let value = self.builder.use_var(value);
 
-        RValue::Dynamic(ty, value)
+        RValue::Dynamic(ty.into(), value.into())
       }
     }
   }
@@ -601,6 +601,11 @@ impl FuncBuilder<'_> {
             }
 
             (RValue::Dynamic(lty, l), RValue::Dynamic(rty, r)) => {
+              let lty = lty.to_ir(&mut self.builder);
+              let rty = rty.to_ir(&mut self.builder);
+              let l = l.to_ir(&mut self.builder);
+              let r = r.to_ir(&mut self.builder);
+
               let res = match op {
                 mir::BinaryOp::Eq => {
                   let ty_eq = self.builder.ins().icmp(IntCC::Equal, lty, rty);
@@ -621,6 +626,9 @@ impl FuncBuilder<'_> {
 
             (RValue::Dynamic(lty, l_v), _) => {
               let rhs = rhs.to_ir(ParamKind::Extended, &mut self.builder);
+
+              let lty = lty.to_ir(&mut self.builder);
+              let l_v = l_v.to_ir(&mut self.builder);
 
               let res = match op {
                 mir::BinaryOp::Eq => {

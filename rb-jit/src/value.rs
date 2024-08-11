@@ -24,7 +24,44 @@ pub enum RValue {
   Function(ir::Value),
 
   /// Stores a value that can change type at runtime.
-  Dynamic(ir::Value, ir::Value),
+  Dynamic(Value<i64>, Value<i64>),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Value<T: AsIR> {
+  Const(T),
+  Dyn(ir::Value),
+}
+
+impl<T: AsIR> From<T> for Value<T> {
+  fn from(t: T) -> Self { Value::Const(t) }
+}
+impl<T: AsIR> From<ir::Value> for Value<T> {
+  fn from(t: ir::Value) -> Self { Value::Dyn(t) }
+}
+
+pub trait AsIR {
+  fn ty(&self) -> ir::Type;
+  fn as_i64(&self) -> i64;
+}
+
+impl AsIR for i64 {
+  fn ty(&self) -> ir::Type { ir::types::I64 }
+  fn as_i64(&self) -> i64 { *self }
+}
+
+impl AsIR for i8 {
+  fn ty(&self) -> ir::Type { ir::types::I8 }
+  fn as_i64(&self) -> i64 { (*self).into() }
+}
+
+impl<T: AsIR> Value<T> {
+  pub fn to_ir(&self, builder: &mut FunctionBuilder) -> ir::Value {
+    match self {
+      Value::Const(t) => builder.ins().iconst(t.ty(), t.as_i64()),
+      Value::Dyn(v) => *v,
+    }
+  }
 }
 
 mod ty {
@@ -126,7 +163,7 @@ impl RValue {
       RValue::Bool(_) => builder.ins().iconst(ir::types::I64, ty::BOOL),
       RValue::Int(_) => builder.ins().iconst(ir::types::I64, ty::INT),
       RValue::Function(_) => builder.ins().iconst(ir::types::I64, ty::FUNCTION),
-      RValue::Dynamic(ty, _) => *ty,
+      RValue::Dynamic(ty, _) => ty.to_ir(builder),
 
       RValue::UserFunction(_) => todo!(),
     };
@@ -137,7 +174,7 @@ impl RValue {
       RValue::Bool(v) => *v,
       RValue::Int(v) => *v,
       RValue::Function(v) => *v,
-      RValue::Dynamic(_, v) => *v,
+      RValue::Dynamic(_, v) => v.to_ir(builder),
 
       RValue::UserFunction(_) => todo!(),
     };
@@ -195,7 +232,7 @@ impl RValue {
       ParamKind::Extended => {
         assert_eq!(ir.len(), 2);
 
-        RValue::Dynamic(ir[0], ir[1])
+        RValue::Dynamic(ir[0].into(), ir[1].into())
       }
     }
   }
