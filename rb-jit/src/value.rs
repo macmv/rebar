@@ -3,28 +3,12 @@ use cranelift::{
   frontend::FunctionBuilder,
   prelude::{Block, InstBuilder},
 };
-use rb_mir::ast as mir;
 use rb_typer::{Literal, Type};
 
 #[derive(Debug, Clone, Copy)]
-pub enum RValue {
-  /// Nil stores no value.
-  Nil,
-
-  /// Stores a single i8 value.
-  Bool(ir::Value),
-
-  /// Stores a single i64 value.
-  Int(ir::Value),
-
-  /// Stores a user-defined function.
-  UserFunction(mir::UserFunctionId),
-
-  /// Stores a function pointer.
-  Function(ir::Value),
-
-  /// Stores a value that can change type at runtime.
-  Dynamic(Value<ValueType>, Value<i64>),
+pub struct RValue {
+  pub ty:    Value<ValueType>,
+  pub value: Value<i64>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -33,12 +17,13 @@ pub enum Value<T: AsIR> {
   Dyn(ir::Value),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValueType {
   Nil,
   Bool,
   Int,
   Function,
+  UserFunction, // FIXME: Fix names
 }
 
 impl<T: AsIR> From<T> for Value<T> {
@@ -72,6 +57,7 @@ impl AsIR for ValueType {
       ValueType::Bool => 1,
       ValueType::Int => 2,
       ValueType::Function => 3,
+      ValueType::UserFunction => 4,
     }
   }
 }
@@ -85,12 +71,38 @@ impl<T: AsIR> Value<T> {
   }
 }
 
-// TODO: Remove
-mod ty {
-  pub const NIL: i64 = 0;
-  pub const BOOL: i64 = 1;
-  pub const INT: i64 = 2;
-  pub const FUNCTION: i64 = 3;
+impl<T: AsIR + Copy> Value<T> {
+  pub fn as_const(&self) -> Option<T> {
+    match self {
+      Value::Const(t) => Some(*t),
+      Value::Dyn(_) => None,
+    }
+  }
+}
+
+impl RValue {
+  pub fn nil() -> Self { RValue { ty: Value::Const(ValueType::Nil), value: Value::Const(0) } }
+
+  pub fn bool<T>(v: T) -> Self
+  where
+    Value<i64>: From<T>,
+  {
+    RValue { ty: Value::Const(ValueType::Bool), value: Value::from(v) }
+  }
+
+  pub fn int<T>(v: T) -> Self
+  where
+    Value<i64>: From<T>,
+  {
+    RValue { ty: Value::Const(ValueType::Int), value: Value::from(v) }
+  }
+
+  pub fn function<T>(v: T) -> Self
+  where
+    Value<i64>: From<T>,
+  {
+    RValue { ty: Value::Const(ValueType::Function), value: Value::from(v) }
+  }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -180,44 +192,20 @@ impl RValue {
   /// depending on the type (so this works for function calls, but not for
   /// block arguments).
   fn to_extended_ir(&self, builder: &mut FunctionBuilder) -> CompactValues<ir::Value> {
-    let ty = match self {
-      RValue::Nil => builder.ins().iconst(ir::types::I64, ty::NIL),
-      RValue::Bool(_) => builder.ins().iconst(ir::types::I64, ty::BOOL),
-      RValue::Int(_) => builder.ins().iconst(ir::types::I64, ty::INT),
-      RValue::Function(_) => builder.ins().iconst(ir::types::I64, ty::FUNCTION),
-      RValue::Dynamic(ty, _) => ty.to_ir(builder),
+    let ty = self.ty.to_ir(builder);
+    let val = self.value.to_ir(builder);
 
-      RValue::UserFunction(_) => todo!(),
-    };
-
-    let value = match self {
-      // TODO: Optimize this into an undefined value.
-      RValue::Nil => builder.ins().iconst(ir::types::I64, 0),
-      RValue::Bool(v) => *v,
-      RValue::Int(v) => *v,
-      RValue::Function(v) => *v,
-      RValue::Dynamic(_, v) => v.to_ir(builder),
-
-      RValue::UserFunction(_) => todo!(),
-    };
-
-    CompactValues::Two(ty, value)
+    CompactValues::Two(ty, val)
   }
 
   /// Returns the compact for of this value. This is used wherever the static
   /// type of the value is simple (ie, not a union), and when the number of
   /// values can change depending on the type (so this works for function
   /// arguments, but not for block arguments).
-  fn to_compact_ir(&self) -> CompactValues<ir::Value> {
-    match self {
-      RValue::Nil => panic!("cannot convert nil to compact value"),
-      RValue::Bool(v) => CompactValues::One(*v),
-      RValue::Int(v) => CompactValues::One(*v),
-      RValue::Function(v) => CompactValues::One(*v),
-      RValue::Dynamic(_, _) => panic!("dynamic values cannot be compact"),
+  fn to_compact_ir(&self, builder: &mut FunctionBuilder) -> CompactValues<ir::Value> {
+    let val = self.value.to_ir(builder);
 
-      RValue::UserFunction(_) => todo!(),
-    }
+    CompactValues::One(val)
   }
 
   /// Returns the dynamic IR values for this RValue. This should be used
@@ -227,7 +215,7 @@ impl RValue {
   pub fn to_ir(&self, kind: ParamKind, builder: &mut FunctionBuilder) -> CompactValues<ir::Value> {
     match kind {
       ParamKind::Zero => CompactValues::None,
-      ParamKind::Compact => self.to_compact_ir(),
+      ParamKind::Compact => self.to_compact_ir(builder),
       ParamKind::Extended => self.to_extended_ir(builder),
     }
   }
@@ -237,7 +225,7 @@ impl RValue {
     match ParamKind::for_type(ty) {
       ParamKind::Zero => {
         assert_eq!(ir.len(), 0);
-        RValue::Nil
+        RValue::nil()
       }
       ParamKind::Compact => {
         assert_eq!(ir.len(), 1);
@@ -245,36 +233,17 @@ impl RValue {
 
         match ty {
           Type::Literal(Literal::Unit) => panic!("zero sized type shouldn't take up space"),
-          Type::Literal(Literal::Bool) => RValue::Bool(v),
-          Type::Literal(Literal::Int) => RValue::Int(v),
-          Type::Function(_, _) => RValue::Function(v),
+          Type::Literal(Literal::Bool) => RValue::bool(v),
+          Type::Literal(Literal::Int) => RValue::int(v),
+          Type::Function(_, _) => RValue::function(v),
           _ => panic!("invalid type"),
         }
       }
       ParamKind::Extended => {
         assert_eq!(ir.len(), 2);
 
-        RValue::Dynamic(ir[0].into(), ir[1].into())
+        RValue { ty: ir[0].into(), value: ir[1].into() }
       }
-    }
-  }
-
-  pub fn as_bool(&self) -> Option<ir::Value> {
-    match self {
-      RValue::Bool(v) => Some(*v),
-      _ => None,
-    }
-  }
-  pub fn as_int(&self) -> Option<ir::Value> {
-    match self {
-      RValue::Int(v) => Some(*v),
-      _ => None,
-    }
-  }
-  pub fn as_function(&self) -> Option<ir::Value> {
-    match self {
-      RValue::Function(v) => Some(*v),
-      _ => None,
     }
   }
 }
