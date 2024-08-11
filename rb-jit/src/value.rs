@@ -24,13 +24,21 @@ pub enum RValue {
   Function(ir::Value),
 
   /// Stores a value that can change type at runtime.
-  Dynamic(Value<i64>, Value<i64>),
+  Dynamic(Value<ValueType>, Value<i64>),
 }
 
 #[derive(Debug, Clone, Copy)]
 pub enum Value<T: AsIR> {
   Const(T),
   Dyn(ir::Value),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ValueType {
+  Nil,
+  Bool,
+  Int,
+  Function,
 }
 
 impl<T: AsIR> From<T> for Value<T> {
@@ -55,6 +63,19 @@ impl AsIR for i8 {
   fn as_i64(&self) -> i64 { (*self).into() }
 }
 
+impl AsIR for ValueType {
+  fn ty(&self) -> ir::Type { ir::types::I64 }
+
+  fn as_i64(&self) -> i64 {
+    match self {
+      ValueType::Nil => 0,
+      ValueType::Bool => 1,
+      ValueType::Int => 2,
+      ValueType::Function => 3,
+    }
+  }
+}
+
 impl<T: AsIR> Value<T> {
   pub fn to_ir(&self, builder: &mut FunctionBuilder) -> ir::Value {
     match self {
@@ -64,6 +85,7 @@ impl<T: AsIR> Value<T> {
   }
 }
 
+// TODO: Remove
 mod ty {
   pub const NIL: i64 = 0;
   pub const BOOL: i64 = 1;
