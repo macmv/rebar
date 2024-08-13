@@ -136,9 +136,10 @@ pub trait DynFunction<T> {
 }
 
 enum Value {
+  Nil,
   Int(i64),
   Bool(bool),
-  Nil,
+  String(String),
 }
 
 impl Value {
@@ -230,6 +231,16 @@ impl FunctionArg for bool {
 impl FunctionRet for bool {
   fn static_type() -> Type { Type::Literal(Literal::Bool) }
   fn into_value(self) -> Value { Value::Bool(self) }
+}
+
+impl FunctionArg for String {
+  fn static_type() -> Type { Type::Literal(Literal::String) }
+  fn from_value(v: Value) -> Self {
+    match v {
+      Value::String(s) => s,
+      _ => panic!("expected string"),
+    }
+  }
 }
 
 impl FunctionRet for () {
