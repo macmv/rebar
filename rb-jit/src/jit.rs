@@ -615,6 +615,8 @@ impl FuncBuilder<'_> {
               RValue::bool(res)
             }
 
+            (Some(a), Some(b)) if a != b => RValue::bool(false as i64),
+
             // TODO: Theres a couple more branches we could optimize for here, but the dynamic path
             // is nice to fall back on.
             (_, _) => {
