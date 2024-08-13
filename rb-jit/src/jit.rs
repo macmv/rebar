@@ -417,9 +417,7 @@ impl FuncBuilder<'_> {
     match self.mir.exprs[expr] {
       mir::Expr::Literal(ref lit) => match lit {
         mir::Literal::Nil => RValue::nil(),
-        mir::Literal::Bool(v) => {
-          RValue::bool(self.builder.ins().iconst(ir::types::I8, if *v { 1 } else { 0 }))
-        }
+        mir::Literal::Bool(v) => RValue::bool(self.builder.ins().iconst(ir::types::I8, *v as i64)),
         mir::Literal::Int(i) => RValue::int(self.builder.ins().iconst(ir::types::I64, *i)),
       },
 
