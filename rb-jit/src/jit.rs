@@ -618,8 +618,8 @@ impl FuncBuilder<'_> {
             // TODO: Theres a couple more branches we could optimize for here, but the dynamic path
             // is nice to fall back on.
             (_, _) => {
-              let l_ty = lhs.value.to_ir(&mut self.builder);
-              let r_ty = rhs.value.to_ir(&mut self.builder);
+              let l_ty = lhs.ty.to_ir(&mut self.builder);
+              let r_ty = rhs.ty.to_ir(&mut self.builder);
               let l_val = lhs.value.to_ir(&mut self.builder);
               let r_val = rhs.value.to_ir(&mut self.builder);
 
