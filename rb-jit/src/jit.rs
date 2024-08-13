@@ -11,7 +11,7 @@ use rb_mir::ast::{self as mir, UserFunctionId};
 use rb_typer::{Literal, Type};
 use std::{collections::HashMap, marker::PhantomPinned};
 
-use crate::value::{CompactValues, ParamKind, RValue};
+use crate::value::{CompactValues, ParamKind, RValue, Value, ValueType};
 
 pub struct JIT {
   module: JITModule,
@@ -381,17 +381,17 @@ impl FuncBuilder<'_> {
 
   fn use_var(&mut self, var: CompactValues<Variable>) -> RValue {
     match var {
-      CompactValues::None => RValue::Nil,
+      CompactValues::None => RValue::nil(),
       CompactValues::One(var) => {
         let ir = self.builder.use_var(var);
         // TODO: Need to get the static type in here and use that.
-        RValue::Int(ir)
+        RValue { ty: Value::Const(ValueType::Int), value: Value::Dyn(ir) }
       }
       CompactValues::Two(ty, value) => {
         let ty = self.builder.use_var(ty);
         let value = self.builder.use_var(value);
 
-        RValue::Dynamic(ty.into(), value.into())
+        RValue { ty: Value::Dyn(ty), value: Value::Dyn(value) }
       }
     }
   }
@@ -408,7 +408,7 @@ impl FuncBuilder<'_> {
         self.def_var(variables, ir);
         self.locals.insert(id, variables);
 
-        RValue::Nil
+        RValue::nil()
       }
     }
   }
@@ -416,24 +416,24 @@ impl FuncBuilder<'_> {
   fn compile_expr(&mut self, expr: mir::ExprId) -> RValue {
     match self.mir.exprs[expr] {
       mir::Expr::Literal(ref lit) => match lit {
-        mir::Literal::Nil => RValue::Nil,
-        mir::Literal::Bool(v) => {
-          RValue::Bool(self.builder.ins().iconst(ir::types::I8, if *v { 1 } else { 0 }))
-        }
-        mir::Literal::Int(i) => RValue::Int(self.builder.ins().iconst(ir::types::I64, *i)),
+        mir::Literal::Nil => RValue::nil(),
+        mir::Literal::Bool(v) => RValue::bool(self.builder.ins().iconst(ir::types::I8, *v as i64)),
+        mir::Literal::Int(i) => RValue::int(self.builder.ins().iconst(ir::types::I64, *i)),
       },
 
       mir::Expr::Local(id) => self.use_var(self.locals[&id]),
 
-      mir::Expr::UserFunction(id, _) => RValue::UserFunction(id),
+      mir::Expr::UserFunction(id, _) => {
+        RValue { ty: Value::Const(ValueType::UserFunction), value: Value::Const(id.0 as i64) }
+      }
 
       mir::Expr::Native(ref id, _) => {
-        RValue::Function(self.builder.ins().iconst(ir::types::I64, id.0 as i64))
+        RValue::function(self.builder.ins().iconst(ir::types::I64, id.0 as i64))
       }
 
       mir::Expr::Block(ref stmts) => {
         // FIXME: Make a new scope so that locals don't leak.
-        let mut return_value = RValue::Nil;
+        let mut return_value = RValue::nil();
         for &stmt in stmts {
           return_value = self.compile_stmt(stmt);
         }
@@ -443,8 +443,8 @@ impl FuncBuilder<'_> {
       mir::Expr::Call(lhs, ref sig_ty, ref args) => {
         let lhs = self.compile_expr(lhs);
 
-        match lhs {
-          RValue::Function(native) => {
+        match lhs.ty.as_const() {
+          Some(ValueType::Function) => {
             let arg_types = match sig_ty {
               Type::Function(ref args, _) => args,
               _ => unreachable!(),
@@ -481,19 +481,25 @@ impl FuncBuilder<'_> {
 
             let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, slot, 0);
 
+            let native = lhs.value.to_ir(&mut self.builder);
             let call = self.builder.ins().call(self.funcs.call, &[native, arg_ptr]);
 
             match *sig_ty {
               Type::Function(_, ref ret) => match **ret {
                 // FIXME: Need to create RValues from ir extended form.
-                Type::Literal(Literal::Unit) => RValue::Nil,
-                _ => RValue::Int(self.builder.inst_results(call)[0]),
+                Type::Literal(Literal::Unit) => RValue::nil(),
+                _ => RValue::int(self.builder.inst_results(call)[0]),
               },
               _ => unreachable!(),
             }
           }
 
-          RValue::UserFunction(id) => {
+          Some(ValueType::UserFunction) => {
+            let id = match lhs.value {
+              Value::Const(v) => UserFunctionId(v as u64),
+              _ => todo!(),
+            };
+
             let arg_types = match sig_ty {
               Type::Function(ref args, _) => args,
               _ => unreachable!(),
@@ -529,8 +535,8 @@ impl FuncBuilder<'_> {
             match *sig_ty {
               Type::Function(_, ref ret) => match **ret {
                 // FIXME: Need to create RValues from ir extended form.
-                Type::Literal(Literal::Unit) => RValue::Nil,
-                _ => RValue::Int(self.builder.inst_results(call)[0]),
+                Type::Literal(Literal::Unit) => RValue::nil(),
+                _ => RValue::int(self.builder.inst_results(call)[0]),
               },
               _ => unreachable!(),
             }
@@ -542,10 +548,11 @@ impl FuncBuilder<'_> {
 
       mir::Expr::Unary(lhs, ref op, _) => {
         let lhs = self.compile_expr(lhs);
+        let lhs = lhs.value.to_ir(&mut self.builder);
 
         let res = match op {
-          mir::UnaryOp::Neg => RValue::Int(self.builder.ins().ineg(lhs.as_int().unwrap())),
-          mir::UnaryOp::Not => RValue::Bool(self.builder.ins().bxor_imm(lhs.as_bool().unwrap(), 1)),
+          mir::UnaryOp::Neg => RValue::int(self.builder.ins().ineg(lhs)),
+          mir::UnaryOp::Not => RValue::bool(self.builder.ins().bxor_imm(lhs, 1)),
         };
 
         res
@@ -561,8 +568,8 @@ impl FuncBuilder<'_> {
           | mir::BinaryOp::Mul
           | mir::BinaryOp::Div
           | mir::BinaryOp::Mod => {
-            let lhs = lhs.as_int().unwrap();
-            let rhs = rhs.as_int().unwrap();
+            let lhs = lhs.value.to_ir(&mut self.builder);
+            let rhs = rhs.value.to_ir(&mut self.builder);
 
             let res = match op {
               mir::BinaryOp::Add => self.builder.ins().iadd(lhs, rhs),
@@ -573,86 +580,71 @@ impl FuncBuilder<'_> {
               _ => unreachable!(),
             };
 
-            RValue::Int(res)
+            RValue::int(res)
           }
 
-          mir::BinaryOp::Eq | mir::BinaryOp::Neq => match (lhs, rhs) {
-            (RValue::Nil, RValue::Nil) => {
+          mir::BinaryOp::Eq | mir::BinaryOp::Neq => match (lhs.ty.as_const(), rhs.ty.as_const()) {
+            (Some(ValueType::Nil), Some(ValueType::Nil)) => {
               let tru = self.builder.ins().iconst(ir::types::I8, 1);
-              RValue::Bool(tru)
+              RValue::bool(tru)
             }
-            (RValue::Bool(l), RValue::Bool(r)) => {
+            (Some(ValueType::Bool), Some(ValueType::Bool)) => {
+              let l = lhs.value.to_ir(&mut self.builder);
+              let r = rhs.value.to_ir(&mut self.builder);
+
               let res = match op {
                 mir::BinaryOp::Eq => self.builder.ins().icmp(IntCC::Equal, l, r),
                 mir::BinaryOp::Neq => self.builder.ins().icmp(IntCC::NotEqual, l, r),
                 _ => unreachable!(),
               };
 
-              RValue::Bool(res)
+              RValue::bool(res)
             }
-            (RValue::Int(l), RValue::Int(r)) => {
+            (Some(ValueType::Int), Some(ValueType::Int)) => {
+              let l = lhs.value.to_ir(&mut self.builder);
+              let r = rhs.value.to_ir(&mut self.builder);
+
               let res = match op {
                 mir::BinaryOp::Eq => self.builder.ins().icmp(IntCC::Equal, l, r),
                 mir::BinaryOp::Neq => self.builder.ins().icmp(IntCC::NotEqual, l, r),
                 _ => unreachable!(),
               };
 
-              RValue::Bool(res)
+              RValue::bool(res)
             }
 
-            (RValue::Dynamic(lty, l), RValue::Dynamic(rty, r)) => {
-              let lty = lty.to_ir(&mut self.builder);
-              let rty = rty.to_ir(&mut self.builder);
-              let l = l.to_ir(&mut self.builder);
-              let r = r.to_ir(&mut self.builder);
+            (Some(a), Some(b)) if a != b => RValue::bool(false as i64),
+
+            // TODO: Theres a couple more branches we could optimize for here, but the dynamic path
+            // is nice to fall back on.
+            (_, _) => {
+              let l_ty = lhs.ty.to_ir(&mut self.builder);
+              let r_ty = rhs.ty.to_ir(&mut self.builder);
+              let l_val = lhs.value.to_ir(&mut self.builder);
+              let r_val = rhs.value.to_ir(&mut self.builder);
 
               let res = match op {
                 mir::BinaryOp::Eq => {
-                  let ty_eq = self.builder.ins().icmp(IntCC::Equal, lty, rty);
-                  let v_eq = self.builder.ins().icmp(IntCC::Equal, l, r);
+                  let ty_eq = self.builder.ins().icmp(IntCC::Equal, l_ty, r_ty);
+                  let v_eq = self.builder.ins().icmp(IntCC::Equal, l_val, r_val);
                   self.builder.ins().band(ty_eq, v_eq)
                 }
                 mir::BinaryOp::Neq => {
-                  let ty_neq = self.builder.ins().icmp(IntCC::NotEqual, l, r);
-                  let v_neq = self.builder.ins().icmp(IntCC::NotEqual, l, r);
+                  let ty_neq = self.builder.ins().icmp(IntCC::NotEqual, l_ty, r_ty);
+                  let v_neq = self.builder.ins().icmp(IntCC::NotEqual, l_val, r_val);
 
                   self.builder.ins().bor(ty_neq, v_neq)
                 }
                 _ => unreachable!(),
               };
 
-              RValue::Bool(res)
+              RValue::bool(res)
             }
-
-            (RValue::Dynamic(lty, l_v), _) => {
-              let rhs = rhs.to_ir(ParamKind::Extended, &mut self.builder);
-
-              let lty = lty.to_ir(&mut self.builder);
-              let l_v = l_v.to_ir(&mut self.builder);
-
-              let res = match op {
-                mir::BinaryOp::Eq => {
-                  let ty_eq = self.builder.ins().icmp(IntCC::Equal, lty, rhs.first().unwrap());
-                  let v_eq = self.builder.ins().icmp(IntCC::Equal, l_v, rhs.second().unwrap());
-                  self.builder.ins().band(ty_eq, v_eq)
-                }
-                mir::BinaryOp::Neq => {
-                  let ty_neq = self.builder.ins().icmp(IntCC::NotEqual, lty, rhs.first().unwrap());
-                  let v_neq = self.builder.ins().icmp(IntCC::NotEqual, l_v, rhs.second().unwrap());
-                  self.builder.ins().bor(ty_neq, v_neq)
-                }
-                _ => unreachable!(),
-              };
-
-              RValue::Bool(res)
-            }
-
-            (l, r) => unreachable!("cannot compare values {l:?} and {r:?}"),
           },
 
           _ => {
-            let lhs = lhs.as_int().unwrap();
-            let rhs = rhs.as_int().unwrap();
+            let lhs = lhs.value.to_ir(&mut self.builder);
+            let rhs = rhs.value.to_ir(&mut self.builder);
 
             // All numbers are signed.
             let res = match op {
@@ -666,7 +658,7 @@ impl FuncBuilder<'_> {
               _ => unreachable!(),
             };
 
-            RValue::Bool(res)
+            RValue::bool(res)
           }
         };
 
@@ -675,7 +667,7 @@ impl FuncBuilder<'_> {
 
       mir::Expr::If { cond, then, els: None, ty: _ } => {
         let cond = self.compile_expr(cond);
-        let cond = cond.as_bool().unwrap();
+        let cond = cond.value.to_ir(&mut self.builder);
 
         let then_block = self.builder.create_block();
         let merge_block = self.builder.create_block();
@@ -693,12 +685,12 @@ impl FuncBuilder<'_> {
         self.builder.switch_to_block(merge_block);
         self.builder.seal_block(merge_block);
 
-        RValue::Nil
+        RValue::nil()
       }
 
       mir::Expr::If { cond, then, els: Some(els), ref ty } => {
         let cond = self.compile_expr(cond);
-        let cond = cond.as_bool().unwrap();
+        let cond = cond.value.to_ir(&mut self.builder);
 
         let then_block = self.builder.create_block();
         let else_block = self.builder.create_block();
