@@ -87,6 +87,9 @@ impl Lower<'_> {
       hir::Expr::Literal(hir::Literal::Nil) => mir::Expr::Literal(mir::Literal::Nil),
       hir::Expr::Literal(hir::Literal::Bool(v)) => mir::Expr::Literal(mir::Literal::Bool(v)),
       hir::Expr::Literal(hir::Literal::Int(v)) => mir::Expr::Literal(mir::Literal::Int(v)),
+      hir::Expr::Literal(hir::Literal::String(ref v)) => {
+        mir::Expr::Literal(mir::Literal::String(v.clone()))
+      }
 
       // HIR should have fully qualified names, and the typer should get the type of this name.
       // We should probably convert it to something more useful than a string though.

@@ -1,4 +1,4 @@
-use ::std::{cell::RefCell, collections::HashMap};
+use ::std::{cell::RefCell, collections::HashMap, slice};
 
 mod core;
 mod std;
@@ -59,6 +59,17 @@ impl Environment {
                   // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
                   Type::Literal(Literal::Bool) => Value::Bool(value as u8 != 0),
                   Type::Literal(Literal::Int) => Value::Int(value),
+                  Type::Literal(Literal::String) => {
+                    let ptr = value as *mut u8;
+                    // SAFETY: The first 8 bytes will always be valid.
+                    //
+                    // Also note that `ptr` is aligned to 1 byte, so we can't cast this to a
+                    // `*mut u64`, as that would require 8 byte alignment.
+                    let len = u64::from_le_bytes(*(ptr as *mut [u8; 8])) as usize;
+                    let str = slice::from_raw_parts(ptr.add(8), len);
+
+                    Value::String(String::from_utf8(str.into()).unwrap())
+                  }
                   v => unimplemented!("{v:?}"),
                 }
               }

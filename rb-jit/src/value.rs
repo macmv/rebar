@@ -24,6 +24,7 @@ pub enum ValueType {
   Int,
   Function,
   UserFunction, // FIXME: Fix names
+  String,
 }
 
 impl<T: AsIR> From<T> for Value<T> {
@@ -58,6 +59,7 @@ impl AsIR for ValueType {
       ValueType::Int => 2,
       ValueType::Function => 3,
       ValueType::UserFunction => 4,
+      ValueType::String => 5,
     }
   }
 }
@@ -102,6 +104,13 @@ impl RValue {
     Value<i64>: From<T>,
   {
     RValue { ty: Value::Const(ValueType::Function), value: Value::from(v) }
+  }
+
+  pub fn string<T>(v: T) -> Self
+  where
+    Value<i64>: From<T>,
+  {
+    RValue { ty: Value::Const(ValueType::String), value: Value::from(v) }
   }
 }
 

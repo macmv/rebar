@@ -9,7 +9,7 @@ use cranelift_module::{DataDescription, FuncId, FunctionDeclaration, Linkage, Mo
 use isa::{CallConv, TargetIsa};
 use rb_mir::ast::{self as mir, UserFunctionId};
 use rb_typer::{Literal, Type};
-use std::{collections::HashMap, marker::PhantomPinned};
+use std::{collections::HashMap, marker::PhantomPinned, mem::MaybeUninit};
 
 use crate::value::{CompactValues, ParamKind, RValue, Value, ValueType};
 
@@ -419,6 +419,20 @@ impl FuncBuilder<'_> {
         mir::Literal::Nil => RValue::nil(),
         mir::Literal::Bool(v) => RValue::bool(self.builder.ins().iconst(ir::types::I8, *v as i64)),
         mir::Literal::Int(i) => RValue::int(self.builder.ins().iconst(ir::types::I64, *i)),
+        mir::Literal::String(i) => {
+          // Note that we don't care about alignment here: we handle reading an unaligned
+          // i64.
+          let mut heap_slice = Vec::with_capacity(i.len() + 8);
+          heap_slice.extend_from_slice(u64::try_from(i.len()).unwrap().to_le_bytes().as_ref());
+          heap_slice.extend_from_slice(i.as_bytes());
+
+          let ptr = heap_slice.as_ptr();
+
+          // TODO: Throw this in a GC or something.
+          Vec::leak(heap_slice);
+
+          RValue::string(self.builder.ins().iconst(ir::types::I64, ptr as i64))
+        }
       },
 
       mir::Expr::Local(id) => self.use_var(self.locals[&id]),

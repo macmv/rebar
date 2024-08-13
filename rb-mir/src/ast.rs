@@ -71,6 +71,7 @@ pub enum Literal {
   Nil,
   Bool(bool),
   Int(i64),
+  String(String),
 }
 
 #[derive(Debug)]
