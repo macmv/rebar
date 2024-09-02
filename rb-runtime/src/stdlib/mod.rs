@@ -112,6 +112,15 @@ impl Environment {
           Type::Literal(Literal::Unit) => 0,
           Type::Literal(Literal::Bool) => ret.as_bool() as i64,
           Type::Literal(Literal::Int) => ret.as_int(),
+          Type::Literal(Literal::String) => {
+            let s = ret.as_str();
+
+            let mut bytes = vec![0; s.len() + 8];
+            bytes[0..8].copy_from_slice(&(s.len() as u64).to_le_bytes());
+            bytes[8..].copy_from_slice(s.as_bytes());
+
+            bytes.leak().as_ptr() as i64
+          }
           ref v => unimplemented!("{v:?}"),
         }
       })
@@ -165,6 +174,13 @@ impl Value {
     match self {
       Value::Bool(b) => *b,
       _ => panic!("expected bool"),
+    }
+  }
+
+  pub fn as_str(&self) -> &String {
+    match self {
+      Value::String(s) => s,
+      _ => panic!("expected str"),
     }
   }
 }
@@ -252,6 +268,11 @@ impl FunctionArg for String {
       _ => panic!("expected string"),
     }
   }
+}
+
+impl FunctionRet for String {
+  fn static_type() -> Type { Type::Literal(Literal::String) }
+  fn into_value(self) -> Value { Value::String(self) }
 }
 
 impl FunctionRet for () {
