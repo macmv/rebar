@@ -3,7 +3,10 @@ use ::std::{cell::RefCell, collections::HashMap, slice};
 mod core;
 mod std;
 
-use rb_jit::{jit::RebarArgs, value::ParamKind};
+use rb_jit::{
+  jit::RebarArgs,
+  value::{ParamKind, ValueType},
+};
 use rb_mir::ast::{self as mir};
 use rb_typer::{Literal, Type};
 
@@ -79,19 +82,21 @@ impl Environment {
                 let dyn_ty = *arg_value.arg(offset);
                 offset += 1;
 
-                match dyn_ty {
-                  0 => Value::Nil,
+                let vt = ValueType::try_from(dyn_ty).unwrap();
+
+                match vt {
+                  ValueType::Nil => Value::Nil,
                   _ => {
                     // `offset` was just incremented, so read the next slot to get the actual
                     // value.
                     let value = *arg_value.arg(offset);
                     offset += 1;
 
-                    match dyn_ty {
+                    match vt {
                       // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
-                      1 => Value::Bool(value as u8 != 0),
-                      2 => Value::Int(value),
-                      v => panic!("unknown value kind {v}"),
+                      ValueType::Bool => Value::Bool(value as u8 != 0),
+                      ValueType::Int => Value::Int(value),
+                      _ => todo!("extended form for value type {vt:?}"),
                     }
                   }
                 }

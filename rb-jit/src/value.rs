@@ -64,6 +64,22 @@ impl AsIR for ValueType {
   }
 }
 
+impl TryFrom<i64> for ValueType {
+  type Error = ();
+
+  fn try_from(value: i64) -> Result<Self, Self::Error> {
+    match value {
+      0 => Ok(ValueType::Nil),
+      1 => Ok(ValueType::Bool),
+      2 => Ok(ValueType::Int),
+      3 => Ok(ValueType::Function),
+      4 => Ok(ValueType::UserFunction),
+      5 => Ok(ValueType::String),
+      _ => Err(()),
+    }
+  }
+}
+
 impl<T: AsIR> Value<T> {
   pub fn to_ir(&self, builder: &mut FunctionBuilder) -> ir::Value {
     match self {
