@@ -88,11 +88,15 @@ impl RebarArgs {
   }
 }
 
+pub struct RuntimeHelpers {
+  pub call: fn(i64, *const RebarArgs) -> i64,
+}
+
 const DEBUG: bool = false;
 
 impl JIT {
   #[allow(clippy::new_without_default)]
-  pub fn new(dyn_call_ptr: fn(i64, *const RebarArgs) -> i64) -> Self {
+  pub fn new(helpers: RuntimeHelpers) -> Self {
     let mut flag_builder = settings::builder();
     flag_builder.set("use_colocated_libcalls", "false").unwrap();
     flag_builder.set("is_pic", "false").unwrap();
@@ -103,7 +107,7 @@ impl JIT {
     let isa = isa_builder.finish(settings::Flags::new(flag_builder)).unwrap();
     let mut builder = JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
 
-    builder.symbol("__call", dyn_call_ptr as *const _);
+    builder.symbol("__call", helpers.call as *const _);
 
     let mut module = JITModule::new(builder);
 

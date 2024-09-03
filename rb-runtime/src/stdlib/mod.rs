@@ -4,7 +4,7 @@ mod core;
 mod std;
 
 use rb_jit::{
-  jit::RebarArgs,
+  jit::{RebarArgs, RuntimeHelpers},
   value::{ParamKind, ValueType},
 };
 use rb_mir::ast::{self as mir};
@@ -25,7 +25,9 @@ pub struct Function {
 impl Environment {
   fn empty() -> Self { Environment { static_functions: HashMap::new(), ids: vec![] } }
 
-  pub(crate) fn dyn_call_ptr(self) -> fn(i64, *const RebarArgs) -> i64 {
+  pub(crate) fn helpers(self) -> RuntimeHelpers { RuntimeHelpers { call: self.dyn_call_ptr() } }
+
+  fn dyn_call_ptr(self) -> fn(i64, *const RebarArgs) -> i64 {
     // This works pretty well, but it would be nice to support multithreading, and
     // multiple environments on one thread. Probably something for later though.
     thread_local! {
