@@ -9,7 +9,7 @@ use cranelift_module::{DataDescription, FuncId, FunctionDeclaration, Linkage, Mo
 use isa::{CallConv, TargetIsa};
 use rb_mir::ast::{self as mir, UserFunctionId};
 use rb_typer::{Literal, Type};
-use std::{collections::HashMap, marker::PhantomPinned, mem::MaybeUninit};
+use std::{collections::HashMap, marker::PhantomPinned};
 
 use crate::value::{CompactValues, ParamKind, RValue, Value, ValueType};
 
@@ -41,12 +41,18 @@ struct NativeFuncDecl<'a> {
 }
 
 struct NativeFuncs<T> {
-  call: T,
+  call:       T,
+  push_frame: T,
+  pop_frame:  T,
 }
 
 impl<T: Copy> NativeFuncs<T> {
   fn map<U>(&self, mut f: impl FnMut(T) -> U) -> NativeFuncs<U> {
-    NativeFuncs { call: f(self.call) }
+    NativeFuncs {
+      call:       f(self.call),
+      push_frame: f(self.push_frame),
+      pop_frame:  f(self.pop_frame),
+    }
   }
 }
 
@@ -111,6 +117,8 @@ impl JIT {
     let mut builder = JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
 
     builder.symbol("__call", helpers.call as *const _);
+    builder.symbol("__push_frame", helpers.push_frame as *const _);
+    builder.symbol("__pop_frame", helpers.pop_frame as *const _);
 
     let mut module = JITModule::new(builder);
 
@@ -119,12 +127,21 @@ impl JIT {
     call_sig.params.push(AbiParam::new(ir::types::I64));
     call_sig.returns.push(AbiParam::new(ir::types::I64));
 
-    let call_func = module.declare_function("__call", Linkage::Import, &call_sig).unwrap();
+    let push_frame_sig = module.make_signature();
+    let pop_frame_sig = module.make_signature();
 
     JIT {
       data_description: DataDescription::new(),
+      funcs: NativeFuncs {
+        call:       module.declare_function("__call", Linkage::Import, &call_sig).unwrap(),
+        push_frame: module
+          .declare_function("__push_frame", Linkage::Import, &push_frame_sig)
+          .unwrap(),
+        pop_frame:  module
+          .declare_function("__pop_frame", Linkage::Import, &pop_frame_sig)
+          .unwrap(),
+      },
       module,
-      funcs: NativeFuncs { call: call_func },
       user_funcs: HashMap::new(),
     }
   }
@@ -278,6 +295,8 @@ impl FuncBuilder<'_> {
     self.builder.switch_to_block(entry_block);
     self.builder.seal_block(entry_block);
 
+    self.builder.ins().call(self.funcs.push_frame, &[]);
+
     for (id, param) in param_values.into_iter().enumerate() {
       let variables = param.map(|_| self.new_variable());
 
@@ -289,6 +308,8 @@ impl FuncBuilder<'_> {
       let _res = self.compile_stmt(stmt);
       // self.def_var(return_variable, res.to_ir());
     }
+
+    self.builder.ins().call(self.funcs.pop_frame, &[]);
 
     // Emit the return instruction.
     self.builder.ins().return_(&[]);
