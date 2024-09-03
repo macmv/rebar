@@ -3,6 +3,7 @@ use ::std::{cell::RefCell, collections::HashMap, slice};
 mod core;
 mod std;
 
+use gc_arena::{lock::RefLock, Gc};
 use rb_jit::{
   jit::{RebarArgs, RuntimeHelpers},
   value::{ParamKind, ValueType},
@@ -10,7 +11,7 @@ use rb_jit::{
 use rb_mir::ast::{self as mir};
 use rb_typer::{Literal, Type};
 
-use crate::gc::{GcArena, GcRoot};
+use crate::gc::{GcArena, GcRoot, GcValue, RString};
 
 pub struct Environment {
   pub static_functions: HashMap<String, Function>,
@@ -136,13 +137,19 @@ impl Environment {
           Type::Literal(Literal::Bool) => ret.as_bool() as i64,
           Type::Literal(Literal::Int) => ret.as_int(),
           Type::Literal(Literal::String) => {
-            let s = ret.as_str();
+            let str = RString::new(ret.as_str());
+            let ret = str.as_ptr() as i64;
 
-            let mut bytes = vec![0; s.len() + 8];
-            bytes[0..8].copy_from_slice(&(s.len() as u64).to_le_bytes());
-            bytes[8..].copy_from_slice(s.as_bytes());
+            env.gc.mutate(|m, root| {
+              let tid = 3; // FIXME: Use ThreadId.
 
-            bytes.leak().as_ptr() as i64
+              let thread = root.threads.get(&tid).unwrap();
+              let frame = thread.frames.last().unwrap();
+
+              frame.borrow_mut(m).values.push(Gc::new(&m, GcValue::String(str)));
+            });
+
+            ret
           }
           ref v => unimplemented!("{v:?}"),
         }
@@ -154,12 +161,12 @@ impl Environment {
     || {
       ENV.with(|env| {
         let mut env = env.borrow_mut();
-        env.as_mut().unwrap().gc.mutate_root(|_, root| {
+        env.as_mut().unwrap().gc.mutate_root(|m, root| {
           let tid = 3; // FIXME: Use ThreadId.
 
           let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
 
-          thread.frames.push(crate::gc::Frame::default());
+          thread.frames.push(Gc::new(m, RefLock::new(crate::gc::Frame::default())));
         });
       });
     }
