@@ -12,19 +12,21 @@ pub struct GcRoot<'gc> {
   /// Stores all the GC'able objects on each thread's stack.
   ///
   /// JIT compiled functions will push/pop to this stack
-  threads: HashMap<u64, Stack<'gc>>,
+  pub threads: HashMap<u64, Stack<'gc>>,
+}
+
+pub type GcArena = Arena<Rootable![GcRoot<'_>]>;
+
+#[derive(Default, Collect)]
+#[collect(no_drop)]
+pub struct Stack<'gc> {
+  pub frames: Vec<Frame<'gc>>,
 }
 
 #[derive(Default, Collect)]
 #[collect(no_drop)]
-struct Stack<'gc> {
-  frames: Vec<Frame<'gc>>,
-}
-
-#[derive(Default, Collect)]
-#[collect(no_drop)]
-struct Frame<'gc> {
-  values: Vec<Gc<'gc, GcValue>>,
+pub struct Frame<'gc> {
+  pub values: Vec<Gc<'gc, GcValue>>,
 }
 
 #[test]

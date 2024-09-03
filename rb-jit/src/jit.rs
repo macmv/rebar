@@ -90,6 +90,9 @@ impl RebarArgs {
 
 pub struct RuntimeHelpers {
   pub call: fn(i64, *const RebarArgs) -> i64,
+
+  pub push_frame: fn(),
+  pub pop_frame:  fn(),
 }
 
 const DEBUG: bool = false;

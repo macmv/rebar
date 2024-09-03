@@ -10,9 +10,13 @@ use rb_jit::{
 use rb_mir::ast::{self as mir};
 use rb_typer::{Literal, Type};
 
+use crate::gc::{GcArena, GcRoot};
+
 pub struct Environment {
   pub static_functions: HashMap<String, Function>,
   ids:                  Vec<String>,
+
+  gc: GcArena,
 }
 
 pub struct Function {
@@ -22,22 +26,34 @@ pub struct Function {
   imp: Box<dyn Fn(Vec<Value>) -> Value>,
 }
 
+// This works pretty well, but it would be nice to support multithreading, and
+// multiple environments on one thread. Probably something for later though.
+thread_local! {
+  static ENV: RefCell<Option<Environment>> = RefCell::new(None);
+}
+
 impl Environment {
-  fn empty() -> Self { Environment { static_functions: HashMap::new(), ids: vec![] } }
-
-  pub(crate) fn helpers(self) -> RuntimeHelpers { RuntimeHelpers { call: self.dyn_call_ptr() } }
-
-  fn dyn_call_ptr(self) -> fn(i64, *const RebarArgs) -> i64 {
-    // This works pretty well, but it would be nice to support multithreading, and
-    // multiple environments on one thread. Probably something for later though.
-    thread_local! {
-      static ENV: RefCell<Option<Environment>> = RefCell::new(None);
+  fn empty() -> Self {
+    Environment {
+      static_functions: HashMap::new(),
+      ids:              vec![],
+      gc:               GcArena::new(|_| GcRoot { threads: HashMap::new() }),
     }
+  }
 
+  pub(crate) fn helpers(self) -> RuntimeHelpers {
     ENV.with(|env| {
       *env.borrow_mut() = Some(self);
     });
 
+    RuntimeHelpers {
+      call:       Self::dyn_call_ptr(),
+      push_frame: Self::push_frame(),
+      pop_frame:  Self::pop_frame(),
+    }
+  }
+
+  fn dyn_call_ptr() -> fn(i64, *const RebarArgs) -> i64 {
     |func, arg| {
       ENV.with(|env| {
         let env = env.borrow();
@@ -131,6 +147,36 @@ impl Environment {
           ref v => unimplemented!("{v:?}"),
         }
       })
+    }
+  }
+
+  fn push_frame() -> fn() {
+    || {
+      ENV.with(|env| {
+        let mut env = env.borrow_mut();
+        env.as_mut().unwrap().gc.mutate_root(|_, root| {
+          let tid = 3; // FIXME: Use ThreadId.
+
+          let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
+
+          thread.frames.push(crate::gc::Frame::default());
+        });
+      });
+    }
+  }
+
+  fn pop_frame() -> fn() {
+    || {
+      ENV.with(|env| {
+        let mut env = env.borrow_mut();
+        env.as_mut().unwrap().gc.mutate_root(|_, root| {
+          let tid = 3; // FIXME: Use ThreadId.
+
+          let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
+
+          thread.frames.pop().unwrap();
+        });
+      });
     }
   }
 
