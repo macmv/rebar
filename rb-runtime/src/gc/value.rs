@@ -21,6 +21,14 @@ impl From<&str> for RString {
   fn from(s: &str) -> Self { RString::new(s) }
 }
 
+impl GcValue {
+  pub fn as_ptr(&self) -> *const u8 {
+    match self {
+      GcValue::String(s) => s.as_ptr(),
+    }
+  }
+}
+
 impl RString {
   pub fn new(content: &str) -> Self {
     let mut bytes = vec![0; content.len() + 8];

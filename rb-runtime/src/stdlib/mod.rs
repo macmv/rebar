@@ -54,6 +54,21 @@ impl Environment {
     }
   }
 
+  fn gc_pointer(&self, value: GcValue) -> i64 {
+    let ret = value.as_ptr() as i64;
+
+    self.gc.mutate(|m, root| {
+      let tid = 3; // FIXME: Use ThreadId.
+
+      let thread = root.threads.get(&tid).unwrap();
+      let frame = thread.frames.last().unwrap();
+
+      frame.borrow_mut(m).values.push(Gc::new(&m, value));
+    });
+
+    ret
+  }
+
   fn dyn_call_ptr() -> fn(i64, *const RebarArgs) -> i64 {
     |func, arg| {
       ENV.with(|env| {
@@ -138,18 +153,8 @@ impl Environment {
           Type::Literal(Literal::Int) => ret.as_int(),
           Type::Literal(Literal::String) => {
             let str = RString::new(ret.as_str());
-            let ret = str.as_ptr() as i64;
 
-            env.gc.mutate(|m, root| {
-              let tid = 3; // FIXME: Use ThreadId.
-
-              let thread = root.threads.get(&tid).unwrap();
-              let frame = thread.frames.last().unwrap();
-
-              frame.borrow_mut(m).values.push(Gc::new(&m, GcValue::String(str)));
-            });
-
-            ret
+            env.gc_pointer(GcValue::String(str))
           }
           ref v => unimplemented!("{v:?}"),
         }
