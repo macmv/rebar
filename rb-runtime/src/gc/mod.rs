@@ -1,13 +1,10 @@
-use std::{collections::HashMap, thread::ThreadId};
+use std::collections::HashMap;
 
-use gc_arena::{
-  lock::{GcRefLock, RefLock},
-  Arena, Collect, Gc, Rootable,
-};
+use gc_arena::{lock::GcRefLock, Arena, Collect, Gc, Rootable};
 
 mod value;
 
-pub use value::{GcValue, RString};
+pub use value::{GcValue, RStr, RString};
 
 #[derive(Collect)]
 #[collect(no_drop)]
@@ -34,6 +31,8 @@ pub struct Frame<'gc> {
 
 #[test]
 fn gc_works() {
+  use gc_arena::lock::RefLock;
+
   type MyArena = Arena<Rootable![GcRoot<'_>]>;
 
   let mut arena = MyArena::new(|_| GcRoot { threads: HashMap::new() });
