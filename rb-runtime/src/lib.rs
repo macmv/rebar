@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+mod gc;
 mod stdlib;
 
 pub use stdlib::*;
