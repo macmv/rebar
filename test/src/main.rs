@@ -1,4 +1,5 @@
 use std::{
+  panic::catch_unwind,
   path::{Path, PathBuf},
   sync::Arc,
 };
@@ -30,12 +31,28 @@ fn main() {
               let id = sources.add(Source::new(stringified.clone(), src.clone()));
               let sources = Arc::new(sources);
 
-              match rb_runtime::run(Environment::std(), sources.clone(), id) {
-                Ok(_) => println!("{}... \x1b[32mok\x1b[0m", stringified),
-                Err(diagnostics) => {
-                  println!("{}... \x1b[31mfail\x1b[0m", stringified);
-                  for d in diagnostics {
-                    println!("{}", d.render(&sources));
+              let res =
+                catch_unwind(|| match rb_runtime::run(Environment::std(), sources.clone(), id) {
+                  Ok(_) => println!("{}... \x1b[32mok\x1b[0m", stringified),
+                  Err(diagnostics) => {
+                    println!("{}... \x1b[31mfail\x1b[0m", stringified);
+                    for d in diagnostics {
+                      println!("{}", d.render(&sources));
+                    }
+                  }
+                });
+
+              match res {
+                Ok(_) => {}
+                Err(e) => {
+                  println!("{}... \x1b[31mpanic\x1b[0m", stringified);
+
+                  if let Some(s) = e.downcast_ref::<String>() {
+                    println!("{}", s);
+                  } else if let Some(s) = e.downcast_ref::<&str>() {
+                    println!("{}", s);
+                  } else {
+                    println!("{:?}", e);
                   }
                 }
               }
