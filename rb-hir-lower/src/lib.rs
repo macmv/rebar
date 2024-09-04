@@ -141,7 +141,11 @@ impl FunctionLower<'_, '_> {
       }
 
       cst::Expr::String(ref lit) => {
-        hir::Expr::Literal(hir::Literal::String(lit.syntax().text().to_string()))
+        let text = lit.syntax().text();
+        // Chop of the double quotes.
+        let str = text.to_string()[1..u32::from(text.len()) as usize - 1].to_string();
+
+        hir::Expr::Literal(hir::Literal::String(str))
       }
 
       cst::Expr::Name(ref name) => {
