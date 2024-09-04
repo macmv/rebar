@@ -108,7 +108,7 @@ pub struct RuntimeHelpers {
   pub pop_frame:  fn(),
 }
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 impl JIT {
   #[allow(clippy::new_without_default)]
@@ -509,36 +509,54 @@ impl FuncBuilder<'_> {
               arg_values.push(v);
             }
 
-            let slot = self.builder.create_sized_stack_slot(StackSlotData {
+            // FIXME: This needs to be more generic.
+            let ret_len = match *sig_ty {
+              Type::Function(_, ref ret) => match **ret {
+                Type::Literal(Literal::Unit) => 0,
+                Type::Literal(Literal::Int) => 1,
+                Type::Literal(Literal::String) => 3,
+                _ => unimplemented!("return type {ret:?}"),
+              },
+              _ => unreachable!(),
+            };
+
+            let arg_slot = self.builder.create_sized_stack_slot(StackSlotData {
               kind: StackSlotKind::ExplicitSlot,
               // Each argument is 8 bytes wide.
               size: arg_len as u32 * 8,
+            });
+            let ret_slot = self.builder.create_sized_stack_slot(StackSlotData {
+              kind: StackSlotKind::ExplicitSlot,
+              // Each return value is 8 bytes wide.
+              size: ret_len as u32 * 8,
             });
 
             let mut slot_index = 0;
             for v in arg_values {
               for &v in v.iter() {
-                self.builder.ins().stack_store(v, slot, slot_index * 8);
+                self.builder.ins().stack_store(v, arg_slot, slot_index * 8);
                 slot_index += 1;
               }
             }
 
-            let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, slot, 0);
+            let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, arg_slot, 0);
+            let ret_ptr = self.builder.ins().stack_addr(ir::types::I64, ret_slot, 0);
 
             let native = lhs.values[0].to_ir(&mut self.builder);
-            let call = self.builder.ins().call(self.funcs.call, &[native, arg_ptr]);
+            self.builder.ins().call(self.funcs.call, &[native, arg_ptr, ret_ptr]);
 
             match *sig_ty {
               Type::Function(_, ref ret) => match **ret {
-                // FIXME: Need to create RValues from ir extended form.
                 Type::Literal(Literal::Unit) => RValue::nil(),
-                Type::Literal(Literal::Int) => RValue::int(self.builder.inst_results(call)[0]),
+                Type::Literal(Literal::Int) => {
+                  RValue::int(self.builder.ins().stack_load(ir::types::I64, ret_slot, 0))
+                }
                 Type::Literal(Literal::String) => RValue {
-                  ty:     Value::Const(ValueType::Int),
+                  ty:     Value::Const(ValueType::String),
                   values: vec![
-                    Value::from(self.builder.inst_results(call)[0]),
-                    Value::from(self.builder.inst_results(call)[1]),
-                    Value::from(self.builder.inst_results(call)[2]),
+                    Value::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, 0)),
+                    Value::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, 8)),
+                    Value::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, 16)),
                   ],
                 },
                 _ => unimplemented!("return type {ret:?}"),
