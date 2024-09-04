@@ -11,7 +11,7 @@ use rb_jit::{
 use rb_mir::ast::{self as mir};
 use rb_typer::{Literal, Type};
 
-use crate::gc::{GcArena, GcRoot, GcValue, RStr, RString};
+use crate::gc::{GcArena, GcRoot, GcValue, RString};
 
 pub struct Environment {
   pub static_functions: HashMap<String, Function>,
@@ -69,7 +69,7 @@ impl Environment {
     ret
   }
 
-  fn dyn_call_ptr() -> fn(i64, *const RebarArgs) -> i64 {
+  fn dyn_call_ptr() -> fn(i64, *const RebarArgs) -> [i64; 3] {
     |func, arg| {
       ENV.with(|env| {
         let env = env.borrow();
@@ -151,13 +151,16 @@ impl Environment {
         // going to assume that. Need to figure out a way to return something
         // sane here.
         match f.ret {
-          Type::Literal(Literal::Unit) => 0,
-          Type::Literal(Literal::Bool) => ret.as_bool() as i64,
-          Type::Literal(Literal::Int) => ret.as_int(),
+          Type::Literal(Literal::Unit) => [0, 0, 0],
+          Type::Literal(Literal::Bool) => [ret.as_bool() as i64, 0, 0],
+          Type::Literal(Literal::Int) => [ret.as_int(), 0, 0],
           Type::Literal(Literal::String) => {
-            let str = RString::new(ret.as_str());
+            let str = String::from(ret.as_str());
 
-            env.gc_pointer(GcValue::String(str))
+            let len = str.len();
+            let cap = str.capacity();
+
+            [len as i64, cap as i64, env.gc_pointer(GcValue::String(str))]
           }
           ref v => unimplemented!("{v:?}"),
         }

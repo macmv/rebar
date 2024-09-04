@@ -3,7 +3,7 @@ use gc_arena::Collect;
 #[derive(Collect)]
 #[collect(no_drop)]
 pub enum GcValue {
-  String(RString),
+  String(String),
 }
 
 /// Stores a string in a single pointer. This pointer is used by the rebar

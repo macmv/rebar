@@ -95,13 +95,13 @@ impl RebarArgs {
 }
 
 pub struct RuntimeHelpers {
-  pub call: fn(i64, *const RebarArgs) -> i64,
+  pub call: fn(i64, *const RebarArgs) -> [i64; 3],
 
   pub push_frame: fn(),
   pub pop_frame:  fn(),
 }
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 impl JIT {
   #[allow(clippy::new_without_default)]
@@ -125,6 +125,8 @@ impl JIT {
     let mut call_sig = module.make_signature();
     call_sig.params.push(AbiParam::new(ir::types::I64));
     call_sig.params.push(AbiParam::new(ir::types::I64));
+    call_sig.returns.push(AbiParam::new(ir::types::I64));
+    call_sig.returns.push(AbiParam::new(ir::types::I64));
     call_sig.returns.push(AbiParam::new(ir::types::I64));
 
     let push_frame_sig = module.make_signature();
@@ -443,16 +445,14 @@ impl FuncBuilder<'_> {
         mir::Literal::String(i) => {
           // Note that we don't care about alignment here: we handle reading an unaligned
           // i64.
-          let mut heap_slice = Vec::with_capacity(i.len() + 8);
-          heap_slice.extend_from_slice(u64::try_from(i.len()).unwrap().to_le_bytes().as_ref());
-          heap_slice.extend_from_slice(i.as_bytes());
+          let to_leak = i.clone();
 
-          let len = heap_slice.len();
-          let cap = heap_slice.capacity();
-          let ptr = heap_slice.as_ptr();
+          let len = to_leak.len();
+          let cap = to_leak.capacity();
+          let ptr = to_leak.as_ptr();
 
           // TODO: Throw this in a GC or something.
-          Vec::leak(heap_slice);
+          String::leak(to_leak);
 
           RValue {
             ty:     Value::Const(ValueType::String),
@@ -529,12 +529,11 @@ impl FuncBuilder<'_> {
                 Type::Literal(Literal::Unit) => RValue::nil(),
                 Type::Literal(Literal::Int) => RValue::int(self.builder.inst_results(call)[0]),
                 Type::Literal(Literal::String) => RValue {
-                  ty:     Value::Const(ValueType::String),
+                  ty:     Value::Const(ValueType::Int),
                   values: vec![
                     Value::from(self.builder.inst_results(call)[0]),
-                    // FIXME
-                    // Value::from(self.builder.inst_results(call)[1]),
-                    // Value::from(self.builder.inst_results(call)[2]),
+                    Value::from(self.builder.inst_results(call)[1]),
+                    Value::from(self.builder.inst_results(call)[2]),
                   ],
                 },
                 _ => unimplemented!("return type {ret:?}"),
