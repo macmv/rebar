@@ -1,1 +1,1 @@
-println(replace("hello!", "e", "a"))
+assert(replace("hello!", "e", "a") == "hallo!")

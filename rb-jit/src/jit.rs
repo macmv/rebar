@@ -530,7 +530,11 @@ impl FuncBuilder<'_> {
               Type::Function(_, ref ret) => match **ret {
                 // FIXME: Need to create RValues from ir extended form.
                 Type::Literal(Literal::Unit) => RValue::nil(),
-                _ => RValue::int(self.builder.inst_results(call)[0]),
+                Type::Literal(Literal::Int) => RValue::int(self.builder.inst_results(call)[0]),
+                Type::Literal(Literal::String) => {
+                  RValue::string(self.builder.inst_results(call)[0])
+                }
+                _ => unimplemented!("return type {ret:?}"),
               },
               _ => unreachable!(),
             }
@@ -648,6 +652,25 @@ impl FuncBuilder<'_> {
 
               let res = match op {
                 mir::BinaryOp::Eq => self.builder.ins().icmp(IntCC::Equal, l, r),
+                mir::BinaryOp::Neq => self.builder.ins().icmp(IntCC::NotEqual, l, r),
+                _ => unreachable!(),
+              };
+
+              RValue::bool(res)
+            }
+            (Some(ValueType::String), Some(ValueType::String)) => {
+              let l = lhs.value.to_ir(&mut self.builder);
+              let r = rhs.value.to_ir(&mut self.builder);
+
+              let res = match op {
+                mir::BinaryOp::Eq => {
+                  // NB: These are both unaligned pointers, so pass in `MemFlags` without the
+                  // aligned flag set.
+                  let len_l = self.builder.ins().load(ir::types::I64, MemFlags::new(), l, 0);
+                  let len_r = self.builder.ins().load(ir::types::I64, MemFlags::new(), r, 0);
+
+                  self.builder.ins().icmp(IntCC::Equal, len_l, len_r)
+                }
                 mir::BinaryOp::Neq => self.builder.ins().icmp(IntCC::NotEqual, l, r),
                 _ => unreachable!(),
               };
