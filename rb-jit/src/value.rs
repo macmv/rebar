@@ -228,6 +228,12 @@ impl RValue {
       ret.push(v.to_ir(builder));
     }
 
+    while ret.len() < 2 {
+      ret.push(builder.ins().iconst(ir::types::I64, 0));
+    }
+
+    assert_eq!(ret.len(), 2);
+
     ret
   }
 
