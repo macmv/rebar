@@ -140,6 +140,10 @@ impl FunctionLower<'_, '_> {
         }
       }
 
+      cst::Expr::String(ref lit) => {
+        hir::Expr::Literal(hir::Literal::String(lit.syntax().text().to_string()))
+      }
+
       cst::Expr::Name(ref name) => {
         let name = name.ident_token().unwrap().to_string();
 

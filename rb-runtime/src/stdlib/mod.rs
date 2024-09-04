@@ -1,15 +1,23 @@
-use ::std::{cell::RefCell, collections::HashMap};
+use ::std::{cell::RefCell, collections::HashMap, slice};
 
 mod core;
 mod std;
 
-use rb_jit::{jit::RebarArgs, value::ParamKind};
+use gc_arena::{lock::RefLock, Gc};
+use rb_jit::{
+  jit::{RebarArgs, RuntimeHelpers},
+  value::{ParamKind, ValueType},
+};
 use rb_mir::ast::{self as mir};
 use rb_typer::{Literal, Type};
+
+use crate::gc::{GcArena, GcRoot, GcValue, RStr, RString};
 
 pub struct Environment {
   pub static_functions: HashMap<String, Function>,
   ids:                  Vec<String>,
+
+  gc: GcArena,
 }
 
 pub struct Function {
@@ -19,20 +27,49 @@ pub struct Function {
   imp: Box<dyn Fn(Vec<Value>) -> Value>,
 }
 
+// This works pretty well, but it would be nice to support multithreading, and
+// multiple environments on one thread. Probably something for later though.
+thread_local! {
+  static ENV: RefCell<Option<Environment>> = RefCell::new(None);
+}
+
 impl Environment {
-  fn empty() -> Self { Environment { static_functions: HashMap::new(), ids: vec![] } }
-
-  pub(crate) fn dyn_call_ptr(self) -> fn(i64, *const RebarArgs) -> i64 {
-    // This works pretty well, but it would be nice to support multithreading, and
-    // multiple environments on one thread. Probably something for later though.
-    thread_local! {
-      static ENV: RefCell<Option<Environment>> = RefCell::new(None);
+  fn empty() -> Self {
+    Environment {
+      static_functions: HashMap::new(),
+      ids:              vec![],
+      gc:               GcArena::new(|_| GcRoot { threads: HashMap::new() }),
     }
+  }
 
+  pub(crate) fn helpers(self) -> RuntimeHelpers {
     ENV.with(|env| {
       *env.borrow_mut() = Some(self);
     });
 
+    RuntimeHelpers {
+      call:       Self::dyn_call_ptr(),
+      push_frame: Self::push_frame(),
+      pop_frame:  Self::pop_frame(),
+    }
+  }
+
+  fn gc_pointer(&self, value: GcValue) -> i64 {
+    let ret = value.as_ptr() as i64;
+
+    self.gc.mutate(|m, root| {
+      let tid = 3; // FIXME: Use ThreadId.
+
+      let thread = root.threads.get(&tid).unwrap();
+      let frame = thread.frames.last().unwrap();
+
+      frame.borrow_mut(m).values.push(Gc::new(&m, value));
+    });
+
+    ret
+  }
+
+  fn dyn_call_ptr() -> fn(i64, *const RebarArgs) -> i64 {
     |func, arg| {
       ENV.with(|env| {
         let env = env.borrow();
@@ -59,6 +96,12 @@ impl Environment {
                   // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
                   Type::Literal(Literal::Bool) => Value::Bool(value as u8 != 0),
                   Type::Literal(Literal::Int) => Value::Int(value),
+                  Type::Literal(Literal::String) => {
+                    // SAFETY: `value` came from rebar, so we assume its a valid pointer.
+                    let str = RStr::from_ptr(value as *const u8);
+
+                    Value::String(str.as_str().into())
+                  }
                   v => unimplemented!("{v:?}"),
                 }
               }
@@ -68,19 +111,21 @@ impl Environment {
                 let dyn_ty = *arg_value.arg(offset);
                 offset += 1;
 
-                match dyn_ty {
-                  0 => Value::Nil,
+                let vt = ValueType::try_from(dyn_ty).unwrap();
+
+                match vt {
+                  ValueType::Nil => Value::Nil,
                   _ => {
                     // `offset` was just incremented, so read the next slot to get the actual
                     // value.
                     let value = *arg_value.arg(offset);
                     offset += 1;
 
-                    match dyn_ty {
+                    match vt {
                       // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
-                      1 => Value::Bool(value as u8 != 0),
-                      2 => Value::Int(value),
-                      v => panic!("unknown value kind {v}"),
+                      ValueType::Bool => Value::Bool(value as u8 != 0),
+                      ValueType::Int => Value::Int(value),
+                      _ => todo!("extended form for value type {vt:?}"),
                     }
                   }
                 }
@@ -101,9 +146,44 @@ impl Environment {
           Type::Literal(Literal::Unit) => 0,
           Type::Literal(Literal::Bool) => ret.as_bool() as i64,
           Type::Literal(Literal::Int) => ret.as_int(),
+          Type::Literal(Literal::String) => {
+            let str = RString::new(ret.as_str());
+
+            env.gc_pointer(GcValue::String(str))
+          }
           ref v => unimplemented!("{v:?}"),
         }
       })
+    }
+  }
+
+  fn push_frame() -> fn() {
+    || {
+      ENV.with(|env| {
+        let mut env = env.borrow_mut();
+        env.as_mut().unwrap().gc.mutate_root(|m, root| {
+          let tid = 3; // FIXME: Use ThreadId.
+
+          let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
+
+          thread.frames.push(Gc::new(m, RefLock::new(crate::gc::Frame::default())));
+        });
+      });
+    }
+  }
+
+  fn pop_frame() -> fn() {
+    || {
+      ENV.with(|env| {
+        let mut env = env.borrow_mut();
+        env.as_mut().unwrap().gc.mutate_root(|_, root| {
+          let tid = 3; // FIXME: Use ThreadId.
+
+          let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
+
+          thread.frames.pop().unwrap();
+        });
+      });
     }
   }
 
@@ -136,9 +216,10 @@ pub trait DynFunction<T> {
 }
 
 enum Value {
+  Nil,
   Int(i64),
   Bool(bool),
-  Nil,
+  String(String),
 }
 
 impl Value {
@@ -153,6 +234,13 @@ impl Value {
     match self {
       Value::Bool(b) => *b,
       _ => panic!("expected bool"),
+    }
+  }
+
+  pub fn as_str(&self) -> &String {
+    match self {
+      Value::String(s) => s,
+      _ => panic!("expected str"),
     }
   }
 }
@@ -230,6 +318,21 @@ impl FunctionArg for bool {
 impl FunctionRet for bool {
   fn static_type() -> Type { Type::Literal(Literal::Bool) }
   fn into_value(self) -> Value { Value::Bool(self) }
+}
+
+impl FunctionArg for String {
+  fn static_type() -> Type { Type::Literal(Literal::String) }
+  fn from_value(v: Value) -> Self {
+    match v {
+      Value::String(s) => s,
+      _ => panic!("expected string"),
+    }
+  }
+}
+
+impl FunctionRet for String {
+  fn static_type() -> Type { Type::Literal(Literal::String) }
+  fn into_value(self) -> Value { Value::String(self) }
 }
 
 impl FunctionRet for () {

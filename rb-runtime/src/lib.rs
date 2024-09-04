@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+mod gc;
 mod stdlib;
 
 pub use stdlib::*;
@@ -116,7 +117,7 @@ pub fn run(env: Environment, sources: Arc<Sources>, id: SourceId) -> Result<(), 
 }
 
 fn eval_mir(env: Environment, functions: Vec<rb_mir::ast::Function>) {
-  let mut jit = rb_jit::jit::JIT::new(env.dyn_call_ptr());
+  let mut jit = rb_jit::jit::JIT::new(env.helpers());
 
   for func in &functions {
     jit.declare_function(func);

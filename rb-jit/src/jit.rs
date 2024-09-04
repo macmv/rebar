@@ -41,12 +41,18 @@ struct NativeFuncDecl<'a> {
 }
 
 struct NativeFuncs<T> {
-  call: T,
+  call:       T,
+  push_frame: T,
+  pop_frame:  T,
 }
 
 impl<T: Copy> NativeFuncs<T> {
   fn map<U>(&self, mut f: impl FnMut(T) -> U) -> NativeFuncs<U> {
-    NativeFuncs { call: f(self.call) }
+    NativeFuncs {
+      call:       f(self.call),
+      push_frame: f(self.push_frame),
+      pop_frame:  f(self.pop_frame),
+    }
   }
 }
 
@@ -88,11 +94,18 @@ impl RebarArgs {
   }
 }
 
+pub struct RuntimeHelpers {
+  pub call: fn(i64, *const RebarArgs) -> i64,
+
+  pub push_frame: fn(),
+  pub pop_frame:  fn(),
+}
+
 const DEBUG: bool = false;
 
 impl JIT {
   #[allow(clippy::new_without_default)]
-  pub fn new(dyn_call_ptr: fn(i64, *const RebarArgs) -> i64) -> Self {
+  pub fn new(helpers: RuntimeHelpers) -> Self {
     let mut flag_builder = settings::builder();
     flag_builder.set("use_colocated_libcalls", "false").unwrap();
     flag_builder.set("is_pic", "false").unwrap();
@@ -103,7 +116,9 @@ impl JIT {
     let isa = isa_builder.finish(settings::Flags::new(flag_builder)).unwrap();
     let mut builder = JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
 
-    builder.symbol("__call", dyn_call_ptr as *const _);
+    builder.symbol("__call", helpers.call as *const _);
+    builder.symbol("__push_frame", helpers.push_frame as *const _);
+    builder.symbol("__pop_frame", helpers.pop_frame as *const _);
 
     let mut module = JITModule::new(builder);
 
@@ -112,12 +127,21 @@ impl JIT {
     call_sig.params.push(AbiParam::new(ir::types::I64));
     call_sig.returns.push(AbiParam::new(ir::types::I64));
 
-    let call_func = module.declare_function("__call", Linkage::Import, &call_sig).unwrap();
+    let push_frame_sig = module.make_signature();
+    let pop_frame_sig = module.make_signature();
 
     JIT {
       data_description: DataDescription::new(),
+      funcs: NativeFuncs {
+        call:       module.declare_function("__call", Linkage::Import, &call_sig).unwrap(),
+        push_frame: module
+          .declare_function("__push_frame", Linkage::Import, &push_frame_sig)
+          .unwrap(),
+        pop_frame:  module
+          .declare_function("__pop_frame", Linkage::Import, &pop_frame_sig)
+          .unwrap(),
+      },
       module,
-      funcs: NativeFuncs { call: call_func },
       user_funcs: HashMap::new(),
     }
   }
@@ -271,6 +295,8 @@ impl FuncBuilder<'_> {
     self.builder.switch_to_block(entry_block);
     self.builder.seal_block(entry_block);
 
+    self.builder.ins().call(self.funcs.push_frame, &[]);
+
     for (id, param) in param_values.into_iter().enumerate() {
       let variables = param.map(|_| self.new_variable());
 
@@ -282,6 +308,8 @@ impl FuncBuilder<'_> {
       let _res = self.compile_stmt(stmt);
       // self.def_var(return_variable, res.to_ir());
     }
+
+    self.builder.ins().call(self.funcs.pop_frame, &[]);
 
     // Emit the return instruction.
     self.builder.ins().return_(&[]);
@@ -419,6 +447,20 @@ impl FuncBuilder<'_> {
         mir::Literal::Nil => RValue::nil(),
         mir::Literal::Bool(v) => RValue::bool(self.builder.ins().iconst(ir::types::I8, *v as i64)),
         mir::Literal::Int(i) => RValue::int(self.builder.ins().iconst(ir::types::I64, *i)),
+        mir::Literal::String(i) => {
+          // Note that we don't care about alignment here: we handle reading an unaligned
+          // i64.
+          let mut heap_slice = Vec::with_capacity(i.len() + 8);
+          heap_slice.extend_from_slice(u64::try_from(i.len()).unwrap().to_le_bytes().as_ref());
+          heap_slice.extend_from_slice(i.as_bytes());
+
+          let ptr = heap_slice.as_ptr();
+
+          // TODO: Throw this in a GC or something.
+          Vec::leak(heap_slice);
+
+          RValue::string(self.builder.ins().iconst(ir::types::I64, ptr as i64))
+        }
       },
 
       mir::Expr::Local(id) => self.use_var(self.locals[&id]),

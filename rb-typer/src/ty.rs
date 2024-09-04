@@ -46,9 +46,10 @@ impl From<Type> for VType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Literal {
+  Unit,
   Int,
   Bool,
-  Unit,
+  String,
 }
 
 impl From<Literal> for Type {

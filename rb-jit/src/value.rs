@@ -24,6 +24,7 @@ pub enum ValueType {
   Int,
   Function,
   UserFunction, // FIXME: Fix names
+  String,
 }
 
 impl<T: AsIR> From<T> for Value<T> {
@@ -58,6 +59,23 @@ impl AsIR for ValueType {
       ValueType::Int => 2,
       ValueType::Function => 3,
       ValueType::UserFunction => 4,
+      ValueType::String => 5,
+    }
+  }
+}
+
+impl TryFrom<i64> for ValueType {
+  type Error = ();
+
+  fn try_from(value: i64) -> Result<Self, Self::Error> {
+    match value {
+      0 => Ok(ValueType::Nil),
+      1 => Ok(ValueType::Bool),
+      2 => Ok(ValueType::Int),
+      3 => Ok(ValueType::Function),
+      4 => Ok(ValueType::UserFunction),
+      5 => Ok(ValueType::String),
+      _ => Err(()),
     }
   }
 }
@@ -102,6 +120,13 @@ impl RValue {
     Value<i64>: From<T>,
   {
     RValue { ty: Value::Const(ValueType::Function), value: Value::from(v) }
+  }
+
+  pub fn string<T>(v: T) -> Self
+  where
+    Value<i64>: From<T>,
+  {
+    RValue { ty: Value::Const(ValueType::String), value: Value::from(v) }
   }
 }
 
