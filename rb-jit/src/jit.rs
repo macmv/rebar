@@ -702,21 +702,28 @@ impl FuncBuilder<'_> {
             (_, _) => {
               let l_ty = lhs.ty.to_ir(&mut self.builder);
               let r_ty = rhs.ty.to_ir(&mut self.builder);
-              let l_val = lhs.values[0].to_ir(&mut self.builder);
-              let r_val = rhs.values[0].to_ir(&mut self.builder);
+              let l_val = lhs.values.get(0).map(|v| v.to_ir(&mut self.builder));
+              let r_val = rhs.values.get(0).map(|v| v.to_ir(&mut self.builder));
 
               let res = match op {
-                mir::BinaryOp::Eq => {
-                  let ty_eq = self.builder.ins().icmp(IntCC::Equal, l_ty, r_ty);
-                  let v_eq = self.builder.ins().icmp(IntCC::Equal, l_val, r_val);
-                  self.builder.ins().band(ty_eq, v_eq)
-                }
-                mir::BinaryOp::Neq => {
-                  let ty_neq = self.builder.ins().icmp(IntCC::NotEqual, l_ty, r_ty);
-                  let v_neq = self.builder.ins().icmp(IntCC::NotEqual, l_val, r_val);
-
-                  self.builder.ins().bor(ty_neq, v_neq)
-                }
+                mir::BinaryOp::Eq => match (l_val, r_val) {
+                  (Some(l), Some(r)) => {
+                    let ty_eq = self.builder.ins().icmp(IntCC::Equal, l_ty, r_ty);
+                    let v_eq = self.builder.ins().icmp(IntCC::Equal, l, r);
+                    self.builder.ins().band(ty_eq, v_eq)
+                  }
+                  // This is handles the union case. For example the left could be `int | nil`, and
+                  // the right could be `nil`. In this case, we can just compare types.
+                  _ => self.builder.ins().icmp(IntCC::Equal, l_ty, r_ty),
+                },
+                mir::BinaryOp::Neq => match (l_val, r_val) {
+                  (Some(l), Some(r)) => {
+                    let ty_eq = self.builder.ins().icmp(IntCC::NotEqual, l_ty, r_ty);
+                    let v_eq = self.builder.ins().icmp(IntCC::NotEqual, l, r);
+                    self.builder.ins().bor(ty_eq, v_eq)
+                  }
+                  _ => self.builder.ins().icmp(IntCC::NotEqual, l_ty, r_ty),
+                },
                 _ => unreachable!(),
               };
 
