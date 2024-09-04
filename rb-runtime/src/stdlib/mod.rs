@@ -69,13 +69,15 @@ impl Environment {
     ret
   }
 
-  fn dyn_call_ptr() -> fn(i64, *const RebarArgs) -> [i64; 3] {
-    |func, arg| {
+  fn dyn_call_ptr() -> fn(i64, *const RebarArgs, *mut RebarArgs) {
+    |func, arg, ret| {
       ENV.with(|env| {
         let env = env.borrow();
         let env = env.as_ref().unwrap();
 
         let f = &env.static_functions[&env.ids[func as usize]];
+
+        let ret = unsafe { &mut *ret };
 
         let args = unsafe {
           let arg_value = &*arg;
@@ -145,24 +147,25 @@ impl Environment {
           args
         };
 
-        let ret = (f.imp)(args);
+        let ret_value = (f.imp)(args);
 
-        // TODO: Native functions must always return a value, but the runtime isn't
-        // going to assume that. Need to figure out a way to return something
-        // sane here.
-        match f.ret {
-          Type::Literal(Literal::Unit) => [0, 0, 0],
-          Type::Literal(Literal::Bool) => [ret.as_bool() as i64, 0, 0],
-          Type::Literal(Literal::Int) => [ret.as_int(), 0, 0],
-          Type::Literal(Literal::String) => {
-            let str = String::from(ret.as_str());
+        unsafe {
+          // TODO: Native functions must always return a value, but the runtime isn't
+          // going to assume that. Need to figure out a way to return something
+          // sane here.
+          match f.ret {
+            Type::Literal(Literal::Unit) => {}
+            Type::Literal(Literal::Bool) => ret.ret(0, ret_value.as_bool() as i64),
+            Type::Literal(Literal::Int) => ret.ret(0, ret_value.as_int() as i64),
+            Type::Literal(Literal::String) => {
+              let str = String::from(ret_value.as_str());
 
-            let len = str.len();
-            let cap = str.capacity();
-
-            [len as i64, cap as i64, env.gc_pointer(GcValue::String(str))]
+              ret.ret(0, str.len() as i64);
+              ret.ret(1, str.capacity() as i64);
+              ret.ret(2, env.gc_pointer(GcValue::String(str)));
+            }
+            ref v => unimplemented!("{v:?}"),
           }
-          ref v => unimplemented!("{v:?}"),
         }
       })
     }

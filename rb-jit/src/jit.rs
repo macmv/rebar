@@ -92,10 +92,17 @@ impl RebarArgs {
       (ptr as *const i64).offset(offset as isize)
     }
   }
+
+  pub unsafe fn ret(&mut self, offset: usize, value: i64) {
+    unsafe {
+      let ptr = self as *mut _;
+      *(ptr as *mut i64).offset(offset as isize) = value
+    }
+  }
 }
 
 pub struct RuntimeHelpers {
-  pub call: fn(i64, *const RebarArgs) -> [i64; 3],
+  pub call: fn(i64, *const RebarArgs, *mut RebarArgs),
 
   pub push_frame: fn(),
   pub pop_frame:  fn(),
@@ -125,9 +132,7 @@ impl JIT {
     let mut call_sig = module.make_signature();
     call_sig.params.push(AbiParam::new(ir::types::I64));
     call_sig.params.push(AbiParam::new(ir::types::I64));
-    call_sig.returns.push(AbiParam::new(ir::types::I64));
-    call_sig.returns.push(AbiParam::new(ir::types::I64));
-    call_sig.returns.push(AbiParam::new(ir::types::I64));
+    call_sig.params.push(AbiParam::new(ir::types::I64));
 
     let push_frame_sig = module.make_signature();
     let pop_frame_sig = module.make_signature();
