@@ -98,9 +98,17 @@ impl Environment {
                   Type::Literal(Literal::Int) => Value::Int(value),
                   Type::Literal(Literal::String) => {
                     // SAFETY: `value` came from rebar, so we assume its a valid pointer.
-                    let str = RStr::from_ptr(value as *const u8);
+                    let len = value;
+                    let _cap = *arg_value.arg(offset);
+                    offset += 1;
+                    let ptr = *arg_value.arg(offset);
+                    offset += 1;
+                    let str = ::std::str::from_utf8_unchecked(slice::from_raw_parts(
+                      ptr as *const u8,
+                      len as usize,
+                    ));
 
-                    Value::String(str.as_str().into())
+                    Value::String(str.into())
                   }
                   v => unimplemented!("{v:?}"),
                 }

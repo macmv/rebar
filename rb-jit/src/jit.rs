@@ -65,7 +65,7 @@ pub struct FuncBuilder<'a> {
   //
   // `VarId` is an opaque identifier for a local variable in the AST, whereas `Variable` is a
   // cranelift IR variable. There will usually be more cranelift variables than local variables.
-  locals:        HashMap<mir::VarId, CompactValues<Variable>>,
+  locals:        HashMap<mir::VarId, Vec<Variable>>,
   next_variable: usize,
 
   // A map of user-defined function calls to function refs.
@@ -298,10 +298,12 @@ impl FuncBuilder<'_> {
     self.builder.ins().call(self.funcs.push_frame, &[]);
 
     for (id, param) in param_values.into_iter().enumerate() {
-      let variables = param.map(|_| self.new_variable());
+      let len = param.len();
+      let variables = (0..len).map(|_| self.new_variable()).collect::<Vec<_>>();
+      let values = param.with_slice(|s| s.to_vec());
 
-      self.locals.insert(mir::VarId(id as u32), variables);
-      self.def_var(variables, param);
+      self.locals.insert(mir::VarId(id as u32), variables.clone());
+      self.def_var(&variables, &values);
     }
 
     for &stmt in &self.mir.items {
@@ -369,6 +371,30 @@ pub enum Error {
   MissingExpr,
 }
 
+// FIXME: Wrap `InstBuilder` so this is easier.
+fn use_var(builder: &mut FunctionBuilder, var: &[Variable]) -> RValue {
+  match var {
+    [] => RValue::nil(),
+
+    // TODO: Need to get the static type in here and use that.
+    [var] => {
+      let ir = builder.use_var(*var);
+      RValue { ty: Value::Const(ValueType::Int), values: vec![Value::Dyn(ir)] }
+    }
+
+    [ty, value @ ..] => {
+      if value.len() != 1 {
+        todo!("multiple value variables");
+      }
+
+      let ty = builder.use_var(*ty);
+      let value = builder.use_var(value[0]);
+
+      RValue { ty: Value::Dyn(ty), values: vec![Value::Dyn(value)] }
+    }
+  }
+}
+
 impl FuncBuilder<'_> {
   fn new_variable(&mut self) -> Variable {
     let var = Variable::new(self.next_variable);
@@ -377,50 +403,17 @@ impl FuncBuilder<'_> {
     var
   }
 
-  fn def_var(&mut self, var: CompactValues<Variable>, ir: CompactValues<ir::Value>) {
-    match (var, ir) {
-      (CompactValues::None, CompactValues::None) => {}
-      (CompactValues::None, _) => panic!("cannot assign a value to a nil"),
-
-      // This is effectively setting a value to `nil`. Shouldn't ever happen.
-      (CompactValues::One(_), CompactValues::None) => panic!("cannot assign nil to a variable"),
-      (CompactValues::One(var), CompactValues::One(value)) => {
-        self.builder.def_var(var, value);
-      }
-      // This is effectively assigning a union to a single variable. Definition doesn't make sense.
-      (CompactValues::One(_), CompactValues::Two(_, _)) => {
-        panic!("cannot assign a union to a variable")
-      }
-
-      // Any value can be assigned to a union.
-      (CompactValues::Two(var0, var1), _) => {
-        assert_eq!(ir.len(), 2, "ir must be in extended form, got {ir:?}");
-
-        // The first value is the only one that must be set. For example, if a value is
-        // set to `nil`, the second variable is undefined.
-        ir.with_slice(|slice| {
-          for (var, &value) in [var0, var1].into_iter().zip(slice.iter()) {
-            self.builder.def_var(var, value);
-          }
-        });
-      }
+  fn def_var(&mut self, var: &[Variable], ir: &[ir::Value]) {
+    if var.is_empty() && ir.is_empty() {
+      return;
     }
-  }
 
-  fn use_var(&mut self, var: CompactValues<Variable>) -> RValue {
-    match var {
-      CompactValues::None => RValue::nil(),
-      CompactValues::One(var) => {
-        let ir = self.builder.use_var(var);
-        // TODO: Need to get the static type in here and use that.
-        RValue { ty: Value::Const(ValueType::Int), value: Value::Dyn(ir) }
-      }
-      CompactValues::Two(ty, value) => {
-        let ty = self.builder.use_var(ty);
-        let value = self.builder.use_var(value);
+    assert!(!ir.is_empty(), "ir must have at least one element, got {ir:?}");
 
-        RValue { ty: Value::Dyn(ty), value: Value::Dyn(value) }
-      }
+    // The first value is the only one that must be set. For example, if a value is
+    // set to `nil`, the second variable is undefined.
+    for (&var, &value) in var.iter().zip(ir.iter()) {
+      self.builder.def_var(var, value);
     }
   }
 
@@ -431,9 +424,9 @@ impl FuncBuilder<'_> {
         let value = self.compile_expr(expr);
         let ir = value.to_ir(ParamKind::for_type(&ty), &mut self.builder);
 
-        let variables = ir.map(|_| self.new_variable());
+        let variables = ir.iter().map(|_| self.new_variable()).collect::<Vec<_>>();
 
-        self.def_var(variables, ir);
+        self.def_var(&variables, &ir);
         self.locals.insert(id, variables);
 
         RValue::nil()
@@ -454,20 +447,26 @@ impl FuncBuilder<'_> {
           heap_slice.extend_from_slice(u64::try_from(i.len()).unwrap().to_le_bytes().as_ref());
           heap_slice.extend_from_slice(i.as_bytes());
 
+          let len = heap_slice.len();
+          let cap = heap_slice.capacity();
           let ptr = heap_slice.as_ptr();
 
           // TODO: Throw this in a GC or something.
           Vec::leak(heap_slice);
 
-          RValue::string(self.builder.ins().iconst(ir::types::I64, ptr as i64))
+          RValue {
+            ty:     Value::Const(ValueType::String),
+            values: vec![Value::from(len as i64), Value::from(cap as i64), Value::from(ptr as i64)],
+          }
         }
       },
 
-      mir::Expr::Local(id) => self.use_var(self.locals[&id]),
+      mir::Expr::Local(id) => use_var(&mut self.builder, &self.locals[&id]),
 
-      mir::Expr::UserFunction(id, _) => {
-        RValue { ty: Value::Const(ValueType::UserFunction), value: Value::Const(id.0 as i64) }
-      }
+      mir::Expr::UserFunction(id, _) => RValue {
+        ty:     Value::Const(ValueType::UserFunction),
+        values: vec![Value::Const(id.0 as i64)],
+      },
 
       mir::Expr::Native(ref id, _) => {
         RValue::function(self.builder.ins().iconst(ir::types::I64, id.0 as i64))
@@ -508,22 +507,20 @@ impl FuncBuilder<'_> {
             let slot = self.builder.create_sized_stack_slot(StackSlotData {
               kind: StackSlotKind::ExplicitSlot,
               // Each argument is 8 bytes wide.
-              size: arg_len * 8,
+              size: arg_len as u32 * 8,
             });
 
             let mut slot_index = 0;
             for v in arg_values {
-              v.with_slice(|slice| {
-                for &v in slice.iter() {
-                  self.builder.ins().stack_store(v, slot, slot_index * 8);
-                  slot_index += 1;
-                }
-              });
+              for &v in v.iter() {
+                self.builder.ins().stack_store(v, slot, slot_index * 8);
+                slot_index += 1;
+              }
             }
 
             let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, slot, 0);
 
-            let native = lhs.value.to_ir(&mut self.builder);
+            let native = lhs.values[0].to_ir(&mut self.builder);
             let call = self.builder.ins().call(self.funcs.call, &[native, arg_ptr]);
 
             match *sig_ty {
@@ -531,9 +528,15 @@ impl FuncBuilder<'_> {
                 // FIXME: Need to create RValues from ir extended form.
                 Type::Literal(Literal::Unit) => RValue::nil(),
                 Type::Literal(Literal::Int) => RValue::int(self.builder.inst_results(call)[0]),
-                Type::Literal(Literal::String) => {
-                  RValue::string(self.builder.inst_results(call)[0])
-                }
+                Type::Literal(Literal::String) => RValue {
+                  ty:     Value::Const(ValueType::String),
+                  values: vec![
+                    Value::from(self.builder.inst_results(call)[0]),
+                    // FIXME
+                    // Value::from(self.builder.inst_results(call)[1]),
+                    // Value::from(self.builder.inst_results(call)[2]),
+                  ],
+                },
                 _ => unimplemented!("return type {ret:?}"),
               },
               _ => unreachable!(),
@@ -541,7 +544,7 @@ impl FuncBuilder<'_> {
           }
 
           Some(ValueType::UserFunction) => {
-            let id = match lhs.value {
+            let id = match lhs.values[0] {
               Value::Const(v) => UserFunctionId(v as u64),
               _ => todo!(),
             };
@@ -559,20 +562,17 @@ impl FuncBuilder<'_> {
               let arg = self.compile_expr(arg);
 
               let v = arg.to_ir(ParamKind::for_type(arg_ty), &mut self.builder);
-              v.with_slice(|v| {
-                // arg_values.push(v);
-                for &v in v {
-                  use cranelift::codegen::ir::InstBuilderBase;
+              for v in v {
+                use cranelift::codegen::ir::InstBuilderBase;
 
-                  match self.builder.ins().data_flow_graph_mut().value_type(v) {
-                    ir::types::I64 => arg_values.push(v),
-                    _ => {
-                      let v2 = self.builder.ins().uextend(ir::types::I64, v);
-                      arg_values.push(v2);
-                    }
+                match self.builder.ins().data_flow_graph_mut().value_type(v) {
+                  ir::types::I64 => arg_values.push(v),
+                  _ => {
+                    let v2 = self.builder.ins().uextend(ir::types::I64, v);
+                    arg_values.push(v2);
                   }
                 }
-              });
+              }
             }
 
             let func_ref = self.user_funcs[&id];
@@ -594,7 +594,7 @@ impl FuncBuilder<'_> {
 
       mir::Expr::Unary(lhs, ref op, _) => {
         let lhs = self.compile_expr(lhs);
-        let lhs = lhs.value.to_ir(&mut self.builder);
+        let lhs = lhs.values[0].to_ir(&mut self.builder); // FIXME: Don't just grab index 0.
 
         let res = match op {
           mir::UnaryOp::Neg => RValue::int(self.builder.ins().ineg(lhs)),
@@ -614,8 +614,8 @@ impl FuncBuilder<'_> {
           | mir::BinaryOp::Mul
           | mir::BinaryOp::Div
           | mir::BinaryOp::Mod => {
-            let lhs = lhs.value.to_ir(&mut self.builder);
-            let rhs = rhs.value.to_ir(&mut self.builder);
+            let lhs = lhs.values[0].to_ir(&mut self.builder);
+            let rhs = rhs.values[0].to_ir(&mut self.builder);
 
             let res = match op {
               mir::BinaryOp::Add => self.builder.ins().iadd(lhs, rhs),
@@ -635,8 +635,8 @@ impl FuncBuilder<'_> {
               RValue::bool(tru)
             }
             (Some(ValueType::Bool), Some(ValueType::Bool)) => {
-              let l = lhs.value.to_ir(&mut self.builder);
-              let r = rhs.value.to_ir(&mut self.builder);
+              let l = lhs.values[0].to_ir(&mut self.builder);
+              let r = rhs.values[0].to_ir(&mut self.builder);
 
               let res = match op {
                 mir::BinaryOp::Eq => self.builder.ins().icmp(IntCC::Equal, l, r),
@@ -647,8 +647,8 @@ impl FuncBuilder<'_> {
               RValue::bool(res)
             }
             (Some(ValueType::Int), Some(ValueType::Int)) => {
-              let l = lhs.value.to_ir(&mut self.builder);
-              let r = rhs.value.to_ir(&mut self.builder);
+              let l = lhs.values[0].to_ir(&mut self.builder);
+              let r = rhs.values[0].to_ir(&mut self.builder);
 
               let res = match op {
                 mir::BinaryOp::Eq => self.builder.ins().icmp(IntCC::Equal, l, r),
@@ -659,19 +659,14 @@ impl FuncBuilder<'_> {
               RValue::bool(res)
             }
             (Some(ValueType::String), Some(ValueType::String)) => {
-              let l = lhs.value.to_ir(&mut self.builder);
-              let r = rhs.value.to_ir(&mut self.builder);
+              let l_len = lhs.values[0].to_ir(&mut self.builder);
+              // let _l_ptr = rhs.values[2].to_ir(&mut self.builder);
+              let r_len = rhs.values[0].to_ir(&mut self.builder);
+              // let _r_ptr = rhs.values[2].to_ir(&mut self.builder);
 
               let res = match op {
-                mir::BinaryOp::Eq => {
-                  // NB: These are both unaligned pointers, so pass in `MemFlags` without the
-                  // aligned flag set.
-                  let len_l = self.builder.ins().load(ir::types::I64, MemFlags::new(), l, 0);
-                  let len_r = self.builder.ins().load(ir::types::I64, MemFlags::new(), r, 0);
-
-                  self.builder.ins().icmp(IntCC::Equal, len_l, len_r)
-                }
-                mir::BinaryOp::Neq => self.builder.ins().icmp(IntCC::NotEqual, l, r),
+                mir::BinaryOp::Eq => self.builder.ins().icmp(IntCC::Equal, l_len, r_len),
+                mir::BinaryOp::Neq => self.builder.ins().icmp(IntCC::NotEqual, l_len, r_len),
                 _ => unreachable!(),
               };
 
@@ -685,8 +680,8 @@ impl FuncBuilder<'_> {
             (_, _) => {
               let l_ty = lhs.ty.to_ir(&mut self.builder);
               let r_ty = rhs.ty.to_ir(&mut self.builder);
-              let l_val = lhs.value.to_ir(&mut self.builder);
-              let r_val = rhs.value.to_ir(&mut self.builder);
+              let l_val = lhs.values[0].to_ir(&mut self.builder);
+              let r_val = rhs.values[0].to_ir(&mut self.builder);
 
               let res = match op {
                 mir::BinaryOp::Eq => {
@@ -708,8 +703,8 @@ impl FuncBuilder<'_> {
           },
 
           _ => {
-            let lhs = lhs.value.to_ir(&mut self.builder);
-            let rhs = rhs.value.to_ir(&mut self.builder);
+            let lhs = lhs.values[0].to_ir(&mut self.builder);
+            let rhs = rhs.values[0].to_ir(&mut self.builder);
 
             // All numbers are signed.
             let res = match op {
@@ -732,7 +727,7 @@ impl FuncBuilder<'_> {
 
       mir::Expr::If { cond, then, els: None, ty: _ } => {
         let cond = self.compile_expr(cond);
-        let cond = cond.value.to_ir(&mut self.builder);
+        let cond = cond.values[0].to_ir(&mut self.builder);
 
         let then_block = self.builder.create_block();
         let merge_block = self.builder.create_block();
@@ -755,7 +750,7 @@ impl FuncBuilder<'_> {
 
       mir::Expr::If { cond, then, els: Some(els), ref ty } => {
         let cond = self.compile_expr(cond);
-        let cond = cond.value.to_ir(&mut self.builder);
+        let cond = cond.values[0].to_ir(&mut self.builder);
 
         let then_block = self.builder.create_block();
         let else_block = self.builder.create_block();
@@ -772,18 +767,14 @@ impl FuncBuilder<'_> {
         let then_return = self.compile_expr(then).to_ir(param_kind, &mut self.builder);
 
         // Jump to the merge block, passing it the block return value.
-        then_return.with_slice(|slice| {
-          self.builder.ins().jump(merge_block, slice);
-        });
+        self.builder.ins().jump(merge_block, &then_return);
 
         self.builder.switch_to_block(else_block);
         self.builder.seal_block(else_block);
         let else_return = self.compile_expr(els).to_ir(param_kind, &mut self.builder);
 
         // Jump to the merge block, passing it the block return value.
-        else_return.with_slice(|slice| {
-          self.builder.ins().jump(merge_block, slice);
-        });
+        self.builder.ins().jump(merge_block, &else_return);
 
         // Switch to the merge block for subsequent statements.
         self.builder.switch_to_block(merge_block);
