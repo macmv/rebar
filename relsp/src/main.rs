@@ -2,6 +2,7 @@
 
 use std::{fs, path::PathBuf};
 
+mod analysis;
 mod files;
 mod global;
 mod handler;

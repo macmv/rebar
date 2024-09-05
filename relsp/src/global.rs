@@ -130,13 +130,13 @@ impl GlobalState {
 
   fn handle_request(&mut self, req: lsp_server::Request) {
     let mut dispatcher = RequestDispatcher { global: self, req };
-    // use crate::handler::request;
+    use crate::handler::request;
     use lsp_types::request as lsp_request;
 
     dispatcher
       // Not sure if we really need to do anything about a shutdown.
-      .on_sync::<lsp_request::Shutdown>(|_, ()| Ok(()));
-    // .on::<lsp_request::SemanticTokensFullRequest>(request::handle_semantic_tokens_full)
+      .on_sync::<lsp_request::Shutdown>(|_, ()| Ok(()))
+      .on::<lsp_request::SemanticTokensFullRequest>(request::handle_semantic_tokens_full);
     // .on::<lsp_request::GotoDefinition>(request::handle_goto_definition)
     // .on::<lsp_request::DocumentHighlightRequest>(request::handle_document_highlight)
     // .on::<lsp_request::HoverRequest>(request::handle_hover)
