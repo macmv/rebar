@@ -152,6 +152,15 @@ impl FormatterContext<'_> {
     for node in node.children_with_tokens() {
       match node {
         NodeOrToken::Node(ref n) => {
+          match n.kind() {
+            // Leave strings alone.
+            STRING => {
+              self.out += &n.text().to_string().trim();
+              continue;
+            }
+            _ => {}
+          }
+
           let retry = match n.kind() {
             CALL_EXPR | BINARY_EXPR | IF_EXPR => Some(self.clone()),
             _ => None,
@@ -711,6 +720,18 @@ mod tests {
           let x = 2 + 3
           let y = 4
         }
+      "#],
+    );
+  }
+
+  #[test]
+  fn strings() {
+    check(
+      r#"
+        assert_eq (  "  h  "  ,  "  h  "  )
+      "#,
+      expect![@r#"
+        assert_eq("  h  ", "  h  ")
       "#],
     );
   }
