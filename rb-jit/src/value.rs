@@ -5,10 +5,10 @@ use cranelift::{
 };
 use rb_typer::{Literal, Type};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct RValue {
-  pub ty:    Value<ValueType>,
-  pub value: Value<i64>,
+  pub ty:     Value<ValueType>,
+  pub values: Vec<Value<i64>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -99,34 +99,38 @@ impl<T: AsIR + Copy> Value<T> {
 }
 
 impl RValue {
-  pub fn nil() -> Self { RValue { ty: Value::Const(ValueType::Nil), value: Value::Const(0) } }
+  pub fn nil() -> Self { RValue { ty: Value::Const(ValueType::Nil), values: vec![] } }
 
   pub fn bool<T>(v: T) -> Self
   where
     Value<i64>: From<T>,
   {
-    RValue { ty: Value::Const(ValueType::Bool), value: Value::from(v) }
+    RValue { ty: Value::Const(ValueType::Bool), values: vec![Value::from(v)] }
   }
 
   pub fn int<T>(v: T) -> Self
   where
     Value<i64>: From<T>,
   {
-    RValue { ty: Value::Const(ValueType::Int), value: Value::from(v) }
+    RValue { ty: Value::Const(ValueType::Int), values: vec![Value::from(v)] }
   }
 
   pub fn function<T>(v: T) -> Self
   where
     Value<i64>: From<T>,
   {
-    RValue { ty: Value::Const(ValueType::Function), value: Value::from(v) }
+    RValue { ty: Value::Const(ValueType::Function), values: vec![Value::from(v)] }
   }
 
-  pub fn string<T>(v: T) -> Self
-  where
-    Value<i64>: From<T>,
-  {
-    RValue { ty: Value::Const(ValueType::String), value: Value::from(v) }
+  pub fn string(v: String) -> Self {
+    RValue {
+      ty:     Value::Const(ValueType::String),
+      values: vec![
+        Value::from(v.len() as i64),
+        Value::from(v.capacity() as i64),
+        Value::from(v.as_ptr() as i64),
+      ],
+    }
   }
 }
 
@@ -216,30 +220,44 @@ impl RValue {
   /// into a union slot, or back to native code. The number of values may change
   /// depending on the type (so this works for function calls, but not for
   /// block arguments).
-  fn to_extended_ir(&self, builder: &mut FunctionBuilder) -> CompactValues<ir::Value> {
-    let ty = self.ty.to_ir(builder);
-    let val = self.value.to_ir(builder);
+  fn to_extended_ir(&self, builder: &mut FunctionBuilder) -> Vec<ir::Value> {
+    let mut ret = vec![];
 
-    CompactValues::Two(ty, val)
+    ret.push(self.ty.to_ir(builder));
+    for v in &self.values {
+      ret.push(v.to_ir(builder));
+    }
+
+    while ret.len() < 2 {
+      ret.push(builder.ins().iconst(ir::types::I64, 0));
+    }
+
+    assert_eq!(ret.len(), 2);
+
+    ret
   }
 
   /// Returns the compact for of this value. This is used wherever the static
   /// type of the value is simple (ie, not a union), and when the number of
   /// values can change depending on the type (so this works for function
   /// arguments, but not for block arguments).
-  fn to_compact_ir(&self, builder: &mut FunctionBuilder) -> CompactValues<ir::Value> {
-    let val = self.value.to_ir(builder);
+  fn to_compact_ir(&self, builder: &mut FunctionBuilder) -> Vec<ir::Value> {
+    let mut ret = vec![];
 
-    CompactValues::One(val)
+    for v in &self.values {
+      ret.push(v.to_ir(builder));
+    }
+
+    ret
   }
 
   /// Returns the dynamic IR values for this RValue. This should be used
   /// whenever the length of arguments can change (for example in a function
   /// call). For block arguments, which must have a consistent size, use
   /// `to_sized_ir`.
-  pub fn to_ir(&self, kind: ParamKind, builder: &mut FunctionBuilder) -> CompactValues<ir::Value> {
+  pub fn to_ir(&self, kind: ParamKind, builder: &mut FunctionBuilder) -> Vec<ir::Value> {
     match kind {
-      ParamKind::Zero => CompactValues::None,
+      ParamKind::Zero => vec![],
       ParamKind::Compact => self.to_compact_ir(builder),
       ParamKind::Extended => self.to_extended_ir(builder),
     }
@@ -253,7 +271,6 @@ impl RValue {
         RValue::nil()
       }
       ParamKind::Compact => {
-        assert_eq!(ir.len(), 1);
         let v = ir[0];
 
         match ty {
@@ -265,9 +282,7 @@ impl RValue {
         }
       }
       ParamKind::Extended => {
-        assert_eq!(ir.len(), 2);
-
-        RValue { ty: ir[0].into(), value: ir[1].into() }
+        RValue { ty: ir[0].into(), values: ir[1..].iter().map(|&v| v.into()).collect() }
       }
     }
   }
