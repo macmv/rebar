@@ -25,7 +25,10 @@ pub enum HighlightKind {
   /// Number literals.
   Number,
 
-  // String literals.
+  /// Operators like `+` or `==`.
+  Operator,
+
+  /// String literals.
   String,
 
   /// Parameters in function definitions, like the `x` in `def foo(x: int)`.
@@ -86,7 +89,7 @@ impl Highlighter<'_> {
         let span = self.span_map.binary_ops[&expr];
         self.hl.tokens.push(HighlightToken {
           range:      span.range,
-          kind:       HighlightKind::Function,
+          kind:       HighlightKind::Operator,
           modifierst: 0,
         });
 
@@ -97,7 +100,7 @@ impl Highlighter<'_> {
         let span = self.span_map.unary_ops[&expr];
         self.hl.tokens.push(HighlightToken {
           range:      span.range,
-          kind:       HighlightKind::Function,
+          kind:       HighlightKind::Operator,
           modifierst: 0,
         });
 
