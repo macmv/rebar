@@ -787,6 +787,28 @@ dependencies = [
  "rb-runtime",
  "rb-syntax",
  "rb-typer",
+ "rl-analysis",
+ "serde_json",
+ "simple-logging",
+]
+
+[[package]]
+name = "rl-analysis"
+version = "0.1.0"
+dependencies = [
+ "crossbeam-channel",
+ "la-arena",
+ "line-index",
+ "log",
+ "lsp-server",
+ "lsp-types",
+ "parking_lot",
+ "rb-diagnostic",
+ "rb-hir",
+ "rb-hir-lower",
+ "rb-runtime",
+ "rb-syntax",
+ "rb-typer",
  "serde_json",
  "simple-logging",
 ]

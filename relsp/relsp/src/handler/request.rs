@@ -6,11 +6,9 @@ use line_index::LineIndex;
 use lsp_types::{SemanticTokenType, SemanticTokensParams, SemanticTokensResult};
 use rb_diagnostic::{Source, Sources};
 use rb_syntax::cst;
+use rl_analysis::highlight::{Highlight, HighlightKind};
 
-use crate::{
-  analysis::highlight::{Highlight, HighlightKind},
-  global::GlobalStateSnapshot,
-};
+use crate::global::GlobalStateSnapshot;
 
 pub fn handle_semantic_tokens_full(
   snap: GlobalStateSnapshot,
