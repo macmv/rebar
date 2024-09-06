@@ -1,17 +1,10 @@
 //! A virtual filesystem that tracks all the changes from the LSP client.
 
+use rl_analysis::FileId;
 use std::{
   collections::HashMap,
   path::{Path, PathBuf},
 };
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct FileId(u32);
-
-impl FileId {
-  /// DO NOT USE THIS! Its just for unit tests.
-  pub fn new_raw(id: u32) -> Self { FileId(id) }
-}
 
 pub struct Files {
   files:       HashMap<PathBuf, String>,

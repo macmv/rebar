@@ -2,14 +2,14 @@ use line_index::LineIndex;
 use parking_lot::RwLock;
 use rb_diagnostic::{emit, Diagnostic, Source, Sources, Span};
 use rb_syntax::{cst, TextSize};
-use rl_analysis::{Analysis, AnalysisHost};
+use rl_analysis::{Analysis, AnalysisHost, FileId};
 use std::{collections::HashMap, error::Error, path::PathBuf, sync::Arc};
 
 use crossbeam_channel::{Receiver, Select, Sender};
 use lsp_server::ErrorCode;
 use lsp_types::{notification::Notification, Url};
 
-use crate::files::{FileId, Files};
+use crate::files::Files;
 
 // TODO: Store a salsa state in here. For now, I'm lazy and re-do everything on
 // every character press.
@@ -175,11 +175,7 @@ impl GlobalState {
         // self.analysis_host.add_file(file_id);
       }
 
-      // TODO
-      // self
-      //   .analysis_host
-      //   .change(rb_analysis::Change { file: file_id, text:
-      // files.read(file_id) });
+      self.host.change_file(file_id, files.read(file_id));
     }
 
     // let snap = self.analysis_host.snapshot();

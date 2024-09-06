@@ -4,6 +4,7 @@ pub mod highlight;
 
 mod file;
 pub use file::FileId;
+
 use line_index::LineIndex;
 use salsa::ParallelDatabase;
 
@@ -19,6 +20,10 @@ pub struct Analysis {
 impl AnalysisHost {
   pub fn new() -> AnalysisHost { AnalysisHost { db: RootDatabase::default() } }
   pub fn snapshot(&self) -> Analysis { Analysis { db: self.db.snapshot() } }
+
+  pub fn change_file(&mut self, file_id: FileId, new_text: String) {
+    self.db.set_file_text(file_id, new_text.into());
+  }
 }
 
 #[salsa::database(SourceDatabaseStorage, LineIndexDatabaseStorage)]
