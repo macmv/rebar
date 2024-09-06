@@ -2,6 +2,7 @@ use line_index::LineIndex;
 use parking_lot::RwLock;
 use rb_diagnostic::{emit, Diagnostic, Source, Sources, Span};
 use rb_syntax::{cst, TextSize};
+use rl_analysis::{Analysis, AnalysisHost};
 use std::{collections::HashMap, error::Error, path::PathBuf, sync::Arc};
 
 use crossbeam_channel::{Receiver, Select, Sender};
@@ -18,6 +19,7 @@ pub struct GlobalState {
   pub files:               Arc<RwLock<Files>>,
   pub file_to_source_root: HashMap<FileId, Option<()>>,
 
+  pub host:               AnalysisHost,
   pub diagnostics:        HashMap<FileId, Vec<lsp_types::Diagnostic>>,
   pub diagnostic_changes: Vec<FileId>,
 
@@ -32,7 +34,8 @@ pub struct GlobalState {
 }
 
 pub(crate) struct GlobalStateSnapshot {
-  pub files: Arc<RwLock<Files>>,
+  pub analysis: Analysis,
+  pub files:    Arc<RwLock<Files>>,
 }
 
 enum Event {
@@ -63,6 +66,7 @@ impl GlobalState {
       files: Arc::new(RwLock::new(Files::new())),
       file_to_source_root: HashMap::new(),
 
+      host: AnalysisHost::new(),
       diagnostics: HashMap::new(),
       diagnostic_changes: vec![],
 
@@ -98,7 +102,7 @@ impl GlobalState {
   }
 
   pub fn snapshot(&self) -> GlobalStateSnapshot {
-    GlobalStateSnapshot { files: self.files.clone() }
+    GlobalStateSnapshot { analysis: self.host.snapshot(), files: self.files.clone() }
   }
 
   fn next_event(&self, receiver: &Receiver<lsp_server::Message>) -> Option<Event> {

@@ -5,13 +5,34 @@ pub mod highlight;
 mod file;
 pub use file::FileId;
 use line_index::LineIndex;
+use salsa::ParallelDatabase;
+
+pub struct AnalysisHost {
+  db: RootDatabase,
+}
+
+/// A snapshot of analysis at a point in time.
+pub struct Analysis {
+  db: salsa::Snapshot<RootDatabase>,
+}
+
+impl AnalysisHost {
+  pub fn new() -> AnalysisHost { AnalysisHost { db: RootDatabase::default() } }
+  pub fn snapshot(&self) -> Analysis { Analysis { db: self.db.snapshot() } }
+}
 
 #[salsa::database(SourceDatabaseStorage, LineIndexDatabaseStorage)]
 #[derive(Default)]
 pub struct RootDatabase {
   pub(crate) storage: salsa::Storage<Self>,
 }
+
 impl salsa::Database for RootDatabase {}
+impl salsa::ParallelDatabase for RootDatabase {
+  fn snapshot(&self) -> salsa::Snapshot<Self> {
+    salsa::Snapshot::new(RootDatabase { storage: self.storage.snapshot() })
+  }
+}
 
 impl fmt::Debug for RootDatabase {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
