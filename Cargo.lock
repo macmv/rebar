@@ -800,17 +800,13 @@ dependencies = [
  "la-arena",
  "line-index",
  "log",
- "lsp-server",
- "lsp-types",
  "parking_lot",
  "rb-diagnostic",
  "rb-hir",
  "rb-hir-lower",
- "rb-runtime",
  "rb-syntax",
  "rb-typer",
  "serde_json",
- "simple-logging",
 ]
 
 [[package]]
