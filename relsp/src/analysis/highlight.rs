@@ -1,4 +1,4 @@
-use crate::files::FileId;
+use rb_hir::ast as hir;
 use rb_syntax::TextRange;
 
 #[derive(Debug, Clone)]
@@ -39,24 +39,43 @@ pub enum HighlightKind {
   Variable,
 }
 
-struct Highlighter {
-  file: FileId,
+struct Highlighter<'a> {
+  func: &'a hir::Function,
 
-  hl: Highlight,
+  hl: &'a mut Highlight,
 }
 
 impl Highlight {
-  pub fn from_ast(file: FileId) -> Highlight {
-    let hl = Highlighter::new(file);
+  pub fn from_ast(file: hir::SourceFile) -> Highlight {
+    let mut hl = Highlight { tokens: vec![] };
 
-    // TODO: Walk the AST and collect highlights.
+    for (_, func) in file.functions {
+      let mut hl = Highlighter { func: &func, hl: &mut hl };
+      for stmt in &func.items {
+        hl.visit_stmt(*stmt);
+      }
+    }
 
-    hl.hl
+    hl
   }
 }
 
-impl Highlighter {
-  pub fn new(file: FileId) -> Self { Highlighter { file, hl: Highlight { tokens: vec![] } } }
+impl Highlighter<'_> {
+  fn visit_stmt(&mut self, stmt: hir::StmtId) {
+    match self.func.stmts[stmt] {
+      hir::Stmt::Expr(expr) => self.visit_expr(expr),
+      hir::Stmt::Let(_, expr) => self.visit_expr(expr),
+      hir::Stmt::Def(_, _, _) => {}
+    }
+  }
+
+  fn visit_expr(&mut self, expr: hir::ExprId) {
+    let expr = &self.func.exprs[expr];
+
+    match expr {
+      _ => {}
+    }
+  }
 }
 
 impl HighlightKind {

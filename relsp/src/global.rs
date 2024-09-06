@@ -239,6 +239,18 @@ impl GlobalState {
   }
 }
 
+// FIXME: Dedupe from `GlobalState`.
+impl GlobalStateSnapshot {
+  pub fn workspace_path(&self, uri: &Url) -> Option<PathBuf> {
+    if uri.scheme() != "file" {
+      return None;
+    }
+
+    let path = uri.to_file_path().ok()?;
+    path.canonicalize().ok()
+  }
+}
+
 struct RequestDispatcher<'a> {
   global: &'a mut GlobalState,
   req:    lsp_server::Request,
