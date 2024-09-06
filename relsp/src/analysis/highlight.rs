@@ -1,4 +1,4 @@
-use rb_hir::ast as hir;
+use rb_hir::{ast as hir, SpanMap};
 use rb_syntax::TextRange;
 
 #[derive(Debug, Clone)]
@@ -40,17 +40,18 @@ pub enum HighlightKind {
 }
 
 struct Highlighter<'a> {
-  func: &'a hir::Function,
+  func:     &'a hir::Function,
+  span_map: &'a SpanMap,
 
   hl: &'a mut Highlight,
 }
 
 impl Highlight {
-  pub fn from_ast(file: hir::SourceFile) -> Highlight {
+  pub fn from_ast(file: hir::SourceFile, span_map: &SpanMap) -> Highlight {
     let mut hl = Highlight { tokens: vec![] };
 
     for (_, func) in file.functions {
-      let mut hl = Highlighter { func: &func, hl: &mut hl };
+      let mut hl = Highlighter { func: &func, span_map, hl: &mut hl };
       for stmt in &func.items {
         hl.visit_stmt(*stmt);
       }
@@ -70,11 +71,34 @@ impl Highlighter<'_> {
   }
 
   fn visit_expr(&mut self, expr: hir::ExprId) {
-    let expr = &self.func.exprs[expr];
+    match self.func.exprs[expr] {
+      hir::Expr::Call(lhs, ref args) => {
+        self.token(lhs, HighlightKind::Function);
 
-    match expr {
+        for &arg in args {
+          self.visit_expr(arg);
+        }
+      }
+
+      hir::Expr::BinaryOp(lhs, _, rhs) => {
+        self.visit_expr(lhs);
+        self.visit_expr(rhs);
+      }
+      hir::Expr::UnaryOp(expr, _) => self.visit_expr(expr),
+      hir::Expr::Paren(expr) => self.visit_expr(expr),
+
+      hir::Expr::Literal(hir::Literal::Nil) => self.token(expr, HighlightKind::Number),
+      hir::Expr::Literal(hir::Literal::Int(_)) => self.token(expr, HighlightKind::Number),
+      hir::Expr::Literal(hir::Literal::Bool(_)) => self.token(expr, HighlightKind::Number),
+      hir::Expr::Literal(hir::Literal::String(_)) => self.token(expr, HighlightKind::String),
+
       _ => {}
     }
+  }
+
+  fn token(&mut self, id: hir::ExprId, kind: HighlightKind) {
+    let span = self.span_map.exprs[u32::from(id.into_raw()) as usize];
+    self.hl.tokens.push(HighlightToken { range: span.range, kind, modifierst: 0 });
   }
 }
 

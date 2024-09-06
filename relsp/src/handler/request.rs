@@ -34,12 +34,12 @@ pub fn handle_semantic_tokens_full(
       }
     });
 
-    let (hir, _span_map) = match res {
+    let (hir, span_maps) = match res {
       Ok(hir) => hir,
       Err(_) => return Ok(None),
     };
 
-    let highlight = Highlight::from_ast(hir);
+    let highlight = Highlight::from_ast(hir, &span_maps[0]);
 
     let tokens = to_semantic_tokens(snap, &file, &highlight)?;
     info!("tokens: {:?}", tokens);
