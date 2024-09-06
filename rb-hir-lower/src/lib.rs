@@ -209,7 +209,30 @@ impl FunctionLower<'_, '_> {
     };
 
     self.span_map.exprs.push(Span { file: self.source.source, range: cst.syntax().text_range() });
-    self.f.exprs.alloc(expr)
+    let id = self.f.exprs.alloc(expr);
+
+    match cst {
+      cst::Expr::BinaryExpr(ref expr) => {
+        let span = Span {
+          file:  self.source.source,
+          range: expr.binary_op().unwrap().syntax().text_range(),
+        };
+
+        self.span_map.binary_ops.insert(id, span);
+      }
+      cst::Expr::PrefixExpr(ref expr) => {
+        let span = Span {
+          file:  self.source.source,
+          range: expr.prefix_op().unwrap().syntax().text_range(),
+        };
+
+        self.span_map.unary_ops.insert(id, span);
+      }
+
+      _ => {}
+    }
+
+    id
   }
   fn type_expr(&self, cst: &cst::Type) -> hir::TypeExpr {
     match cst {

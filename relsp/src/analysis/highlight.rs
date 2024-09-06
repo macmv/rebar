@@ -82,9 +82,27 @@ impl Highlighter<'_> {
 
       hir::Expr::BinaryOp(lhs, _, rhs) => {
         self.visit_expr(lhs);
+
+        let span = self.span_map.binary_ops[&expr];
+        self.hl.tokens.push(HighlightToken {
+          range:      span.range,
+          kind:       HighlightKind::Function,
+          modifierst: 0,
+        });
+
         self.visit_expr(rhs);
       }
-      hir::Expr::UnaryOp(expr, _) => self.visit_expr(expr),
+      hir::Expr::UnaryOp(inner, _) => {
+        // TODO: Figure out if this is a prefix or postfix operator.
+        let span = self.span_map.unary_ops[&expr];
+        self.hl.tokens.push(HighlightToken {
+          range:      span.range,
+          kind:       HighlightKind::Function,
+          modifierst: 0,
+        });
+
+        self.visit_expr(inner);
+      }
       hir::Expr::Paren(expr) => self.visit_expr(expr),
 
       hir::Expr::Literal(hir::Literal::Nil) => self.token(expr, HighlightKind::Number),
