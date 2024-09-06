@@ -31,7 +31,9 @@ pub struct GlobalState {
   pool:        Vec<std::thread::JoinHandle<()>>,
 }
 
-pub(crate) struct GlobalStateSnapshot {}
+pub(crate) struct GlobalStateSnapshot {
+  pub files: Arc<RwLock<Files>>,
+}
 
 enum Event {
   Message(lsp_server::Message),
@@ -95,9 +97,9 @@ impl GlobalState {
     Ok(())
   }
 
-  // TODO: Add other LSP stuff like auto-completions.
-  #[allow(dead_code)]
-  pub fn snapshot(&self) -> GlobalStateSnapshot { GlobalStateSnapshot {} }
+  pub fn snapshot(&self) -> GlobalStateSnapshot {
+    GlobalStateSnapshot { files: self.files.clone() }
+  }
 
   fn next_event(&self, receiver: &Receiver<lsp_server::Message>) -> Option<Event> {
     let mut sel = Select::new();
