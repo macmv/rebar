@@ -2,11 +2,13 @@
 
 use std::{error::Error, sync::Arc};
 
-use line_index::LineIndex;
 use lsp_types::{SemanticTokenType, SemanticTokensParams, SemanticTokensResult};
 use rb_diagnostic::{Source, Sources};
 use rb_syntax::cst;
-use rl_analysis::highlight::{Highlight, HighlightKind};
+use rl_analysis::{
+  highlight::{Highlight, HighlightKind},
+  FileId,
+};
 
 use crate::global::GlobalStateSnapshot;
 
@@ -39,7 +41,7 @@ pub fn handle_semantic_tokens_full(
 
     let highlight = Highlight::from_ast(hir, &span_maps[0]);
 
-    let tokens = to_semantic_tokens(snap, &file, &highlight)?;
+    let tokens = to_semantic_tokens(snap, file_id, &highlight)?;
     info!("tokens: {:?}", tokens);
 
     Ok(Some(lsp_types::SemanticTokensResult::Tokens(lsp_types::SemanticTokens {
@@ -72,12 +74,11 @@ pub fn semantic_tokens_legend() -> lsp_types::SemanticTokensLegend {
 }
 
 fn to_semantic_tokens(
-  _snap: GlobalStateSnapshot,
-  src: &str,
+  snap: GlobalStateSnapshot,
+  file: FileId,
   highlight: &Highlight,
 ) -> Result<Vec<lsp_types::SemanticToken>, Box<dyn Error>> {
-  // TODO: Grab this off the `GlobalStateSnapshot`.
-  let line_index = LineIndex::new(&src);
+  let line_index = snap.analysis.line_index(file)?;
 
   let mut tokens = Vec::new();
 

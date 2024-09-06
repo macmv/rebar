@@ -1,4 +1,4 @@
-use std::{fmt, sync::Arc};
+use std::{fmt, panic::UnwindSafe, sync::Arc};
 
 pub mod highlight;
 
@@ -6,7 +6,7 @@ mod file;
 pub use file::FileId;
 
 use line_index::LineIndex;
-use salsa::ParallelDatabase;
+use salsa::{Cancelled, ParallelDatabase};
 
 pub struct AnalysisHost {
   db: RootDatabase,
@@ -17,12 +17,24 @@ pub struct Analysis {
   db: salsa::Snapshot<RootDatabase>,
 }
 
+pub type Cancellable<T> = Result<T, Cancelled>;
+
 impl AnalysisHost {
   pub fn new() -> AnalysisHost { AnalysisHost { db: RootDatabase::default() } }
   pub fn snapshot(&self) -> Analysis { Analysis { db: self.db.snapshot() } }
 
   pub fn change_file(&mut self, file_id: FileId, new_text: String) {
     self.db.set_file_text(file_id, new_text.into());
+  }
+}
+
+impl Analysis {
+  pub fn line_index(&self, file: FileId) -> Cancellable<Arc<LineIndex>> {
+    self.with_db(|db| db.line_index(file))
+  }
+
+  fn with_db<T>(&self, f: impl FnOnce(&RootDatabase) -> T + UnwindSafe) -> Cancellable<T> {
+    Cancelled::catch(|| f(&self.db))
   }
 }
 

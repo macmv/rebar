@@ -1,4 +1,3 @@
-use line_index::LineIndex;
 use parking_lot::RwLock;
 use rb_diagnostic::{emit, Diagnostic, Source, Sources, Span};
 use rb_syntax::{cst, TextSize};
@@ -178,15 +177,14 @@ impl GlobalState {
       self.host.change_file(file_id, files.read(file_id));
     }
 
-    // let snap = self.analysis_host.snapshot();
+    let snap = self.host.snapshot();
 
     for file_id in changes.iter().copied().chain(self.diagnostic_changes.drain(..)) {
       let source = files.read(file_id);
-      let line_index = LineIndex::new(&source);
       let diagnostics = check(&source);
 
       // TODO
-      // let line_index = snap.line_index(file_id).unwrap();
+      let line_index = snap.line_index(file_id).unwrap();
       // let diagnostics = snap.diagnostics(file_id).unwrap();
 
       self
