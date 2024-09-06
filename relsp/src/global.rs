@@ -31,7 +31,9 @@ pub struct GlobalState {
   pool:        Vec<std::thread::JoinHandle<()>>,
 }
 
-pub(crate) struct GlobalStateSnapshot {}
+pub(crate) struct GlobalStateSnapshot {
+  pub files: Arc<RwLock<Files>>,
+}
 
 enum Event {
   Message(lsp_server::Message),
@@ -95,9 +97,9 @@ impl GlobalState {
     Ok(())
   }
 
-  // TODO: Add other LSP stuff like auto-completions.
-  #[allow(dead_code)]
-  pub fn snapshot(&self) -> GlobalStateSnapshot { GlobalStateSnapshot {} }
+  pub fn snapshot(&self) -> GlobalStateSnapshot {
+    GlobalStateSnapshot { files: self.files.clone() }
+  }
 
   fn next_event(&self, receiver: &Receiver<lsp_server::Message>) -> Option<Event> {
     let mut sel = Select::new();
@@ -130,13 +132,13 @@ impl GlobalState {
 
   fn handle_request(&mut self, req: lsp_server::Request) {
     let mut dispatcher = RequestDispatcher { global: self, req };
-    // use crate::handler::request;
+    use crate::handler::request;
     use lsp_types::request as lsp_request;
 
     dispatcher
       // Not sure if we really need to do anything about a shutdown.
-      .on_sync::<lsp_request::Shutdown>(|_, ()| Ok(()));
-    // .on::<lsp_request::SemanticTokensFullRequest>(request::handle_semantic_tokens_full)
+      .on_sync::<lsp_request::Shutdown>(|_, ()| Ok(()))
+      .on::<lsp_request::SemanticTokensFullRequest>(request::handle_semantic_tokens_full);
     // .on::<lsp_request::GotoDefinition>(request::handle_goto_definition)
     // .on::<lsp_request::DocumentHighlightRequest>(request::handle_document_highlight)
     // .on::<lsp_request::HoverRequest>(request::handle_hover)
@@ -227,6 +229,18 @@ impl GlobalState {
 
 impl GlobalState {
   // TODO: There are multiple workspaces! This concept doesn't really work.
+  pub fn workspace_path(&self, uri: &Url) -> Option<PathBuf> {
+    if uri.scheme() != "file" {
+      return None;
+    }
+
+    let path = uri.to_file_path().ok()?;
+    path.canonicalize().ok()
+  }
+}
+
+// FIXME: Dedupe from `GlobalState`.
+impl GlobalStateSnapshot {
   pub fn workspace_path(&self, uri: &Url) -> Option<PathBuf> {
     if uri.scheme() != "file" {
       return None;
