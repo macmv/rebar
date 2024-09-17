@@ -310,7 +310,7 @@ impl FuncBuilder<'_> {
       let values = param.with_slice(|s| s.to_vec());
 
       self.locals.insert(mir::VarId(id as u32), variables.clone());
-      self.def_var(&variables, &values);
+      self.set_var(&variables, &values);
     }
 
     for &stmt in &self.mir.items {
@@ -410,7 +410,7 @@ impl FuncBuilder<'_> {
     var
   }
 
-  fn def_var(&mut self, var: &[Variable], ir: &[ir::Value]) {
+  fn set_var(&mut self, var: &[Variable], ir: &[ir::Value]) {
     if var.is_empty() && ir.is_empty() {
       return;
     }
@@ -433,7 +433,7 @@ impl FuncBuilder<'_> {
 
         let variables = ir.iter().map(|_| self.new_variable()).collect::<Vec<_>>();
 
-        self.def_var(&variables, &ir);
+        self.set_var(&variables, &ir);
         self.locals.insert(id, variables);
 
         RValue::nil()
