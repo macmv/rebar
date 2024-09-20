@@ -520,73 +520,23 @@ impl FuncBuilder<'_> {
               _ => unreachable!(),
             };
 
-            assert_eq!(args.len(), arg_types.len());
-
             // Argument length in 8 byte increments.
-            let mut arg_len = 0;
             let mut arg_values = vec![];
             for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
               let arg = self.compile_expr(arg);
 
               let v = arg.to_ir(ParamKind::for_type(arg_ty), &mut self.builder);
-              arg_len += v.len();
               arg_values.push(v);
             }
 
-            // FIXME: This needs to be more generic.
-            let ret_len = match *sig_ty {
-              Type::Function(_, ref ret) => match **ret {
-                Type::Literal(Literal::Unit) => 0,
-                Type::Literal(Literal::Int) => 1,
-                Type::Literal(Literal::String) => 3,
-                _ => unimplemented!("return type {ret:?}"),
-              },
+            let native = lhs.values[0].to_ir(&mut self.builder);
+
+            let ret_ty = match *sig_ty {
+              Type::Function(_, ref ret) => ret,
               _ => unreachable!(),
             };
 
-            let arg_slot = self.builder.create_sized_stack_slot(StackSlotData {
-              kind: StackSlotKind::ExplicitSlot,
-              // Each argument is 8 bytes wide.
-              size: arg_len as u32 * 8,
-            });
-            let ret_slot = self.builder.create_sized_stack_slot(StackSlotData {
-              kind: StackSlotKind::ExplicitSlot,
-              // Each return value is 8 bytes wide.
-              size: ret_len as u32 * 8,
-            });
-
-            let mut slot_index = 0;
-            for v in arg_values {
-              for &v in v.iter() {
-                self.builder.ins().stack_store(v, arg_slot, slot_index * 8);
-                slot_index += 1;
-              }
-            }
-
-            let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, arg_slot, 0);
-            let ret_ptr = self.builder.ins().stack_addr(ir::types::I64, ret_slot, 0);
-
-            let native = lhs.values[0].to_ir(&mut self.builder);
-            self.builder.ins().call(self.funcs.call, &[native, arg_ptr, ret_ptr]);
-
-            match *sig_ty {
-              Type::Function(_, ref ret) => match **ret {
-                Type::Literal(Literal::Unit) => RValue::nil(),
-                Type::Literal(Literal::Int) => {
-                  RValue::int(self.builder.ins().stack_load(ir::types::I64, ret_slot, 0))
-                }
-                Type::Literal(Literal::String) => RValue {
-                  ty:     Value::Const(ValueType::String),
-                  values: vec![
-                    Value::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, 0)),
-                    Value::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, 8)),
-                    Value::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, 16)),
-                  ],
-                },
-                _ => unimplemented!("return type {ret:?}"),
-              },
-              _ => unreachable!(),
-            }
+            self.call_native(native, &arg_values, arg_types, &**ret_ty)
           }
 
           Some(ValueType::UserFunction) => {
@@ -841,6 +791,66 @@ impl FuncBuilder<'_> {
       }
 
       ref v => unimplemented!("expr: {v:?}"),
+    }
+  }
+
+  fn call_native(
+    &mut self,
+    native: ir::Value,
+    args: &[Vec<ir::Value>],
+    arg_types: &[Type],
+    ret_ty: &Type,
+  ) -> RValue {
+    assert_eq!(args.len(), arg_types.len());
+
+    // FIXME: This needs to be more generic.
+    let ret_len = match ret_ty {
+      Type::Literal(Literal::Unit) => 0,
+      Type::Literal(Literal::Int) => 1,
+      Type::Literal(Literal::String) => 3,
+      _ => unimplemented!("return type {ret_ty:?}"),
+    };
+
+    let arg_len = args.iter().map(|v| v.len()).sum::<usize>();
+
+    let arg_slot = self.builder.create_sized_stack_slot(StackSlotData {
+      kind: StackSlotKind::ExplicitSlot,
+      // Each argument is 8 bytes wide.
+      size: arg_len as u32 * 8,
+    });
+    let ret_slot = self.builder.create_sized_stack_slot(StackSlotData {
+      kind: StackSlotKind::ExplicitSlot,
+      // Each return value is 8 bytes wide.
+      size: ret_len as u32 * 8,
+    });
+
+    let mut slot_index = 0;
+    for v in args {
+      for &v in v.iter() {
+        self.builder.ins().stack_store(v, arg_slot, slot_index * 8);
+        slot_index += 1;
+      }
+    }
+
+    let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, arg_slot, 0);
+    let ret_ptr = self.builder.ins().stack_addr(ir::types::I64, ret_slot, 0);
+
+    self.builder.ins().call(self.funcs.call, &[native, arg_ptr, ret_ptr]);
+
+    match ret_ty {
+      Type::Literal(Literal::Unit) => RValue::nil(),
+      Type::Literal(Literal::Int) => {
+        RValue::int(self.builder.ins().stack_load(ir::types::I64, ret_slot, 0))
+      }
+      Type::Literal(Literal::String) => RValue {
+        ty:     Value::Const(ValueType::String),
+        values: vec![
+          Value::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, 0)),
+          Value::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, 8)),
+          Value::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, 16)),
+        ],
+      },
+      _ => unimplemented!("return type {ret_ty:?}"),
     }
   }
 }
