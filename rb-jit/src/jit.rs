@@ -511,7 +511,7 @@ impl FuncBuilder<'_> {
         }
       },
 
-      mir::Expr::Local(id) => use_var(&mut self.builder, &self.locals[&id]),
+      mir::Expr::Local(id, _) => use_var(&mut self.builder, &self.locals[&id]),
 
       mir::Expr::UserFunction(id, _) => RValue {
         ty:     Value::Const(ValueType::UserFunction),

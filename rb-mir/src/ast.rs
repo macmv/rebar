@@ -48,7 +48,7 @@ pub enum Expr {
   Unary(ExprId, UnaryOp, Type),
   Binary(ExprId, BinaryOp, ExprId, Type),
 
-  Local(VarId),
+  Local(VarId, Type),
   UserFunction(UserFunctionId, Type),
   Native(NativeFunctionId, Type),
 

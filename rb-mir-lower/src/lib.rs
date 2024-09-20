@@ -94,7 +94,7 @@ impl Lower<'_> {
       // HIR should have fully qualified names, and the typer should get the type of this name.
       // We should probably convert it to something more useful than a string though.
       hir::Expr::Name(ref v) => match self.locals.get(v) {
-        Some(local) => mir::Expr::Local(*local),
+        Some(local) => mir::Expr::Local(*local, self.ty.type_of_expr(expr)),
         None => match self.env.items[v] {
           Item::UserFunction(id) => {
             self.mir.deps.insert(id);
