@@ -56,7 +56,7 @@ macro_rules! native_funcs {
   };
 }
 
-native_funcs!(call, push_frame, pop_frame);
+native_funcs!(call, push_frame, pop_frame, track);
 
 pub struct FuncBuilder<'a> {
   builder: FunctionBuilder<'a>,
@@ -108,6 +108,7 @@ pub struct RuntimeHelpers {
 
   pub push_frame: fn(),
   pub pop_frame:  fn(),
+  pub track:      fn(*const RebarArgs),
 }
 
 const DEBUG: bool = false;
@@ -128,6 +129,7 @@ impl JIT {
     builder.symbol("__call", helpers.call as *const _);
     builder.symbol("__push_frame", helpers.push_frame as *const _);
     builder.symbol("__pop_frame", helpers.pop_frame as *const _);
+    builder.symbol("__track", helpers.track as *const _);
 
     let mut module = JITModule::new(builder);
 
@@ -139,6 +141,9 @@ impl JIT {
     let push_frame_sig = module.make_signature();
     let pop_frame_sig = module.make_signature();
 
+    let mut track_sig = module.make_signature();
+    track_sig.params.push(AbiParam::new(ir::types::I64));
+
     JIT {
       data_description: DataDescription::new(),
       funcs: NativeFuncs {
@@ -149,6 +154,7 @@ impl JIT {
         pop_frame:  module
           .declare_function("__pop_frame", Linkage::Import, &pop_frame_sig)
           .unwrap(),
+        track:      module.declare_function("__track", Linkage::Import, &track_sig).unwrap(),
       },
       module,
       user_funcs: HashMap::new(),
@@ -449,8 +455,21 @@ impl FuncBuilder<'_> {
   /// value will be untracked.
   fn track_value(&mut self, value: RValue, ty: &Type) {
     if self.type_needs_gc(ty) {
-      // let native = value.to_ir(&mut self.builder);
-      // self.builder.ins().call(self.funcs.track, &[native, arg_ptr, ret_ptr]);
+      let values = value.to_ir(ParamKind::Extended, &mut self.builder);
+
+      let arg_slot = self.builder.create_sized_stack_slot(StackSlotData {
+        kind: StackSlotKind::ExplicitSlot,
+        // Each argument is 8 bytes wide.
+        size: values.len() as u32 * 8,
+      });
+
+      for (slot_index, &v) in values.iter().enumerate() {
+        self.builder.ins().stack_store(v, arg_slot, slot_index as i32 * 8);
+      }
+
+      let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, arg_slot, 0);
+
+      self.builder.ins().call(self.funcs.track, &[arg_ptr]);
     }
   }
 

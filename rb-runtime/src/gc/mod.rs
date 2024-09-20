@@ -4,7 +4,9 @@ use gc_arena::{lock::GcRefLock, Arena, Collect, Gc, Rootable};
 
 mod value;
 
-pub use value::{GcValue, RStr, RString};
+pub use value::GcValue;
+
+use crate::Value;
 
 #[derive(Collect)]
 #[collect(no_drop)]
@@ -26,7 +28,7 @@ pub struct Stack<'gc> {
 #[derive(Default, Collect)]
 #[collect(no_drop)]
 pub struct Frame<'gc> {
-  pub values: Vec<Gc<'gc, GcValue>>,
+  pub values: Vec<Gc<'gc, Value>>,
 }
 
 #[test]
@@ -53,7 +55,7 @@ fn gc_works() {
       .unwrap()
       .borrow_mut(m)
       .values
-      .push(Gc::new(m, GcValue::String("hello".into())));
+      .push(Gc::new(m, Value::String("hello".into())));
 
     // When a function returns, this is called.
     thread.frames.pop().unwrap();

@@ -3,7 +3,7 @@ use ::std::{cell::RefCell, collections::HashMap, slice};
 mod core;
 mod std;
 
-use gc_arena::{lock::RefLock, Gc};
+use gc_arena::{lock::RefLock, Collect, Gc};
 use rb_jit::{
   jit::{RebarArgs, RuntimeHelpers},
   value::{ParamKind, ValueType},
@@ -11,7 +11,7 @@ use rb_jit::{
 use rb_mir::ast::{self as mir};
 use rb_typer::{Literal, Type};
 
-use crate::gc::{GcArena, GcRoot, GcValue, RString};
+use crate::gc::{GcArena, GcRoot, GcValue};
 
 pub struct Environment {
   pub static_functions: HashMap<String, Function>,
@@ -51,12 +51,11 @@ impl Environment {
       call:       Self::dyn_call_ptr(),
       push_frame: Self::push_frame(),
       pop_frame:  Self::pop_frame(),
+      track:      Self::track,
     }
   }
 
-  fn gc_pointer(&self, value: GcValue) -> i64 {
-    let ret = value.as_ptr() as i64;
-
+  fn track_value(&self, value: Value) {
     self.gc.mutate(|m, root| {
       let tid = 3; // FIXME: Use ThreadId.
 
@@ -65,8 +64,6 @@ impl Environment {
 
       frame.borrow_mut(m).values.push(Gc::new(&m, value));
     });
-
-    ret
   }
 
   fn dyn_call_ptr() -> fn(i64, *const RebarArgs, *mut RebarArgs) {
@@ -159,10 +156,13 @@ impl Environment {
             Type::Literal(Literal::Int) => ret.ret(0, ret_value.as_int() as i64),
             Type::Literal(Literal::String) => {
               let str = String::from(ret_value.as_str());
+              let ptr = str.as_ptr() as i64;
 
               ret.ret(0, str.len() as i64);
               ret.ret(1, str.capacity() as i64);
-              ret.ret(2, env.gc_pointer(GcValue::String(str)));
+              ret.ret(2, ptr);
+
+              env.track_value(Value::String(str));
             }
             ref v => unimplemented!("{v:?}"),
           }
@@ -201,6 +201,63 @@ impl Environment {
     }
   }
 
+  fn track(args: *const RebarArgs) {
+    ENV.with(|env| {
+      let value = unsafe {
+        let args = &*args;
+        let mut offset = 0;
+
+        // A nil will only take up one slot, so we must check for that to avoid reading
+        // out of bounds.
+        let dyn_ty = *args.arg(offset);
+        offset += 1;
+
+        let vt = ValueType::try_from(dyn_ty).unwrap();
+
+        match vt {
+          ValueType::Nil => Value::Nil,
+          _ => {
+            // `offset` was just incremented, so read the next slot to get the actual
+            // value.
+            let value = *args.arg(offset);
+            offset += 1;
+
+            match vt {
+              // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
+              ValueType::Bool => Value::Bool(value as u8 != 0),
+              ValueType::Int => Value::Int(value),
+              ValueType::String => {
+                // SAFETY: `value` came from rebar, so we assume its a valid pointer.
+                let len = value;
+                let _cap = *args.arg(offset);
+                offset += 1;
+                let ptr = *args.arg(offset);
+                // offset += 1;
+                let str = ::std::str::from_utf8_unchecked(slice::from_raw_parts(
+                  ptr as *const u8,
+                  len as usize,
+                ));
+
+                Value::String(str.into())
+              }
+              _ => todo!("extended form for value type {vt:?}"),
+            }
+          }
+        }
+      };
+
+      let mut env = env.borrow_mut();
+      env.as_mut().unwrap().gc.mutate_root(|m, root| {
+        let tid = 3; // FIXME: Use ThreadId.
+
+        let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
+
+        let gc_value = Gc::new(m, value);
+        thread.frames.last_mut().unwrap().borrow_mut(m).values.push(gc_value);
+      });
+    });
+  }
+
   pub fn static_env(&self) -> rb_typer::Environment {
     rb_typer::Environment {
       names: self
@@ -229,7 +286,9 @@ pub trait DynFunction<T> {
   fn into_function(self) -> Function;
 }
 
-enum Value {
+#[derive(Collect)]
+#[collect(no_drop)]
+pub enum Value {
   Nil,
   Int(i64),
   Bool(bool),
