@@ -11,7 +11,7 @@ use rb_mir::ast::{self as mir, UserFunctionId};
 use rb_typer::{Literal, Type};
 use std::{collections::HashMap, marker::PhantomPinned};
 
-use crate::value::{CompactValues, ParamKind, RValue, Value, ValueType};
+use crate::value::{CompactValues, DynamicValueType, ParamKind, RValue, Value, ValueType};
 
 pub struct JIT {
   module: JITModule,
@@ -280,12 +280,12 @@ impl FuncBuilder<'_> {
     let mut param_values = vec![];
 
     for ty in self.mir.params.iter() {
-      match ValueType::for_type(ty) {
-        Some(_) => {
+      match DynamicValueType::for_type(ty) {
+        DynamicValueType::Const(_) => {
           let value = self.builder.append_block_param(entry_block, ir::types::I64);
           param_values.push(CompactValues::One(value));
         }
-        None => {
+        DynamicValueType::Union(_) => {
           let v0 = self.builder.append_block_param(entry_block, ir::types::I64);
           let v1 = self.builder.append_block_param(entry_block, ir::types::I64);
           param_values.push(CompactValues::Two(v0, v1));
@@ -294,8 +294,8 @@ impl FuncBuilder<'_> {
     }
 
     if let Some(ref ty) = self.mir.ret {
-      match ValueType::for_type(ty) {
-        None => todo!("Extended variables not supported for parameters yet"),
+      match DynamicValueType::for_type(ty) {
+        DynamicValueType::Union(_) => todo!("Extended variables not supported for parameters yet"),
         _ => {}
       }
 
@@ -344,8 +344,8 @@ impl JIT {
 
     sig.call_conv = CallConv::Fast;
     for ty in func.params.iter() {
-      let vt = ValueType::for_type(ty).unwrap();
-      for _ in 0..vt.len() {
+      let dvt = DynamicValueType::for_type(ty);
+      for _ in 0..dvt.len() {
         sig.params.push(AbiParam::new(ir::types::I64));
       }
     }
@@ -381,35 +381,19 @@ pub enum Error {
 
 // FIXME: Wrap `InstBuilder` so this is easier.
 fn use_var(builder: &mut FunctionBuilder, var: &[Variable], ty: &Type) -> RValue {
-  let vt = ValueType::for_type(ty);
+  let dvt = DynamicValueType::for_type(ty);
+  assert_eq!(var.len() as u32, dvt.len(), "variable length mismatch for type {ty:?}");
 
-  match vt {
-    Some(ty) => {
-      assert_eq!(var.len() as u32, ty.len(), "variable length mismatch");
-      RValue {
-        ty:     Value::Const(ty),
-        values: var.iter().map(|v| Value::Dyn(builder.use_var(*v))).collect::<Vec<_>>(),
-      }
-    }
+  match dvt {
+    DynamicValueType::Const(ty) => RValue {
+      ty:     Value::Const(ty),
+      values: var.iter().map(|v| Value::Dyn(builder.use_var(*v))).collect::<Vec<_>>(),
+    },
 
-    None => RValue {
+    DynamicValueType::Union(_) => RValue {
       ty:     Value::Dyn(builder.use_var(var[0])),
       values: var[1..].iter().map(|v| Value::Dyn(builder.use_var(*v))).collect::<Vec<_>>(),
     },
-  }
-}
-
-impl ValueType {
-  pub fn len(&self) -> u32 {
-    match self {
-      ValueType::Nil => 0,
-      ValueType::Int => 1,
-      ValueType::Bool => 3,
-      ValueType::String => 3,
-
-      ValueType::Function => 1,
-      ValueType::UserFunction => 1,
-    }
   }
 }
 
@@ -440,13 +424,7 @@ impl FuncBuilder<'_> {
       mir::Stmt::Expr(expr) => self.compile_expr(expr),
       mir::Stmt::Let(id, ref ty, expr) => {
         let value = self.compile_expr(expr);
-        let ir = value.to_ir(
-          match ValueType::for_type(&ty) {
-            Some(_) => ParamKind::Compact,
-            None => ParamKind::Extended,
-          },
-          &mut self.builder,
-        );
+        let ir = value.to_ir(DynamicValueType::for_type(&ty).param_kind(), &mut self.builder);
 
         let variables = ir.iter().map(|_| self.new_variable()).collect::<Vec<_>>();
 
@@ -555,13 +533,8 @@ impl FuncBuilder<'_> {
             for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
               let arg = self.compile_expr(arg);
 
-              let v = arg.to_ir(
-                match ValueType::for_type(&arg_ty) {
-                  Some(_) => ParamKind::Compact,
-                  None => ParamKind::Extended,
-                },
-                &mut self.builder,
-              );
+              let v =
+                arg.to_ir(DynamicValueType::for_type(&arg_ty).param_kind(), &mut self.builder);
               arg_values.push(v);
             }
 
@@ -593,13 +566,8 @@ impl FuncBuilder<'_> {
             for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
               let arg = self.compile_expr(arg);
 
-              let v = arg.to_ir(
-                match ValueType::for_type(&arg_ty) {
-                  Some(_) => ParamKind::Compact,
-                  None => ParamKind::Extended,
-                },
-                &mut self.builder,
-              );
+              let v =
+                arg.to_ir(DynamicValueType::for_type(&arg_ty).param_kind(), &mut self.builder);
               for v in v {
                 use cranelift::codegen::ir::InstBuilderBase;
 
@@ -801,9 +769,9 @@ impl FuncBuilder<'_> {
         let else_block = self.builder.create_block();
         let merge_block = self.builder.create_block();
 
-        let vt = ValueType::for_type(&ty).unwrap();
-        vt.append_block_params(&mut self.builder, merge_block);
-        let param_kind = ParamKind::Compact;
+        let dvt = DynamicValueType::for_type(&ty);
+        dvt.append_block_params(&mut self.builder, merge_block);
+        let param_kind = dvt.param_kind();
 
         // Test the if condition and conditionally branch.
         self.builder.ins().brif(cond, then_block, &[], else_block, &[]);

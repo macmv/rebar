@@ -27,6 +27,11 @@ pub enum ValueType {
   String,
 }
 
+pub enum DynamicValueType {
+  Const(ValueType),
+  Union(Vec<ValueType>),
+}
+
 impl<T: AsIR> From<T> for Value<T> {
   fn from(t: T) -> Self { Value::Const(t) }
 }
@@ -256,16 +261,16 @@ impl RValue {
 
   // TODO: Need to actually use this with a function return.
   pub fn from_ir(ir: &[ir::Value], ty: &Type) -> RValue {
-    match ValueType::for_type(ty) {
-      Some(ty) => {
-        assert_eq!(ir.len() as u32, ty.len(), "variable length mismatch");
-        RValue {
-          ty:     Value::Const(ty),
-          values: ir.iter().map(|v| Value::Dyn(*v)).collect::<Vec<_>>(),
-        }
-      }
+    let dty = DynamicValueType::for_type(ty);
+    assert_eq!(ir.len() as u32, dty.len(), "variable length mismatch");
 
-      None => RValue {
+    match dty {
+      DynamicValueType::Const(ty) => RValue {
+        ty:     Value::Const(ty),
+        values: ir.iter().map(|v| Value::Dyn(*v)).collect::<Vec<_>>(),
+      },
+
+      DynamicValueType::Union(_) => RValue {
         ty:     Value::Dyn(ir[0]),
         values: ir[1..].iter().map(|v| Value::Dyn(*v)).collect::<Vec<_>>(),
       },
@@ -274,19 +279,58 @@ impl RValue {
 }
 
 impl ValueType {
+  pub fn len(&self) -> u32 {
+    match self {
+      ValueType::Nil => 0,
+      ValueType::Int => 1,
+      ValueType::Bool => 1,
+      ValueType::String => 3,
+
+      ValueType::Function => 1,
+      ValueType::UserFunction => 1,
+    }
+  }
+}
+
+impl DynamicValueType {
+  pub fn len(&self) -> u32 {
+    match self {
+      DynamicValueType::Const(ty) => ty.len(),
+      DynamicValueType::Union(tys) => {
+        let max = tys.iter().map(ValueType::len).max().unwrap();
+        max + 1 // Add in the type tag
+      }
+    }
+  }
+
   pub fn append_block_params(&self, builder: &mut FunctionBuilder, block: Block) {
     for _ in 0..self.len() {
       builder.append_block_param(block, ir::types::I64);
     }
   }
 
-  pub fn for_type(ty: &Type) -> Option<Self> {
+  pub fn param_kind(&self) -> ParamKind {
+    match self {
+      DynamicValueType::Const(_) => ParamKind::Compact,
+      DynamicValueType::Union(_) => ParamKind::Extended,
+    }
+  }
+
+  pub fn for_type(ty: &Type) -> Self {
     match ty {
-      Type::Literal(Literal::Unit) => Some(ValueType::Nil),
-      Type::Literal(Literal::Int) => Some(ValueType::Int),
-      Type::Literal(Literal::Bool) => Some(ValueType::Bool),
-      Type::Literal(Literal::String) => Some(ValueType::String),
-      Type::Union(_) => None,
+      Type::Literal(Literal::Unit) => DynamicValueType::Const(ValueType::Nil),
+      Type::Literal(Literal::Int) => DynamicValueType::Const(ValueType::Int),
+      Type::Literal(Literal::Bool) => DynamicValueType::Const(ValueType::Bool),
+      Type::Literal(Literal::String) => DynamicValueType::Const(ValueType::String),
+      Type::Union(tys) => DynamicValueType::Union(
+        tys
+          .iter()
+          .flat_map(|ty| match DynamicValueType::for_type(ty) {
+            DynamicValueType::Const(ty) => vec![ty],
+            DynamicValueType::Union(tys) => tys,
+          })
+          .collect(),
+      ),
       Type::Function(..) => todo!("function types to values"),
     }
   }

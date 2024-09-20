@@ -6,12 +6,12 @@ mod std;
 use gc_arena::{lock::RefLock, Collect, Gc};
 use rb_jit::{
   jit::{RebarArgs, RuntimeHelpers},
-  value::{ParamKind, ValueType},
+  value::{DynamicValueType, ValueType},
 };
 use rb_mir::ast::{self as mir};
 use rb_typer::{Literal, Type};
 
-use crate::gc::{GcArena, GcRoot, GcValue};
+use crate::gc::{GcArena, GcRoot};
 
 pub struct Environment {
   pub static_functions: HashMap<String, Function>,
@@ -82,10 +82,10 @@ impl Environment {
           let mut args = vec![];
           let mut offset = 0;
           for ty in f.args.iter() {
-            let vt = ValueType::for_type(ty);
+            let dvt = DynamicValueType::for_type(ty);
 
-            let value = match vt {
-              Some(vt) => {
+            let value = match dvt {
+              DynamicValueType::Const(vt) => {
                 match ty {
                   Type::Literal(Literal::Unit) => Value::Nil,
                   // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
@@ -120,7 +120,7 @@ impl Environment {
                   v => unimplemented!("{v:?}"),
                 }
               }
-              None => {
+              DynamicValueType::Union(_) => {
                 // A nil will only take up one slot, so we must check for that to avoid reading
                 // out of bounds.
                 let dyn_ty = *arg_value.arg(offset);
