@@ -387,26 +387,30 @@ pub enum Error {
 }
 
 // FIXME: Wrap `InstBuilder` so this is easier.
-fn use_var(builder: &mut FunctionBuilder, var: &[Variable]) -> RValue {
-  match var {
-    [] => RValue::nil(),
+fn use_var(builder: &mut FunctionBuilder, var: &[Variable], ty: &Type) -> RValue {
+  let vt = value_type_of(ty);
 
-    // TODO: Need to get the static type in here and use that.
-    [var] => {
-      let ir = builder.use_var(*var);
-      RValue { ty: Value::Const(ValueType::Int), values: vec![Value::Dyn(ir)] }
-    }
+  match vt {
+    Some(ty) => RValue {
+      ty:     Value::Const(ty),
+      values: var.iter().map(|v| Value::Dyn(builder.use_var(*v))).collect::<Vec<_>>(),
+    },
 
-    [ty, value @ ..] => {
-      if value.len() != 1 {
-        todo!("multiple value variables");
-      }
+    None => RValue {
+      ty:     Value::Dyn(builder.use_var(var[0])),
+      values: var[1..].iter().map(|v| Value::Dyn(builder.use_var(*v))).collect::<Vec<_>>(),
+    },
+  }
+}
 
-      let ty = builder.use_var(*ty);
-      let value = builder.use_var(value[0]);
-
-      RValue { ty: Value::Dyn(ty), values: vec![Value::Dyn(value)] }
-    }
+fn value_type_of(ty: &Type) -> Option<ValueType> {
+  match ty {
+    Type::Literal(Literal::Unit) => Some(ValueType::Nil),
+    Type::Literal(Literal::Int) => Some(ValueType::Int),
+    Type::Literal(Literal::Bool) => Some(ValueType::Bool),
+    Type::Literal(Literal::String) => Some(ValueType::String),
+    Type::Union(_) => None,
+    Type::Function(..) => todo!("function types to values"),
   }
 }
 
@@ -511,7 +515,7 @@ impl FuncBuilder<'_> {
         }
       },
 
-      mir::Expr::Local(id, _) => use_var(&mut self.builder, &self.locals[&id]),
+      mir::Expr::Local(id, ref ty) => use_var(&mut self.builder, &self.locals[&id], ty),
 
       mir::Expr::UserFunction(id, _) => RValue {
         ty:     Value::Const(ValueType::UserFunction),

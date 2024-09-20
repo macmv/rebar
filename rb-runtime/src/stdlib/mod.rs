@@ -286,7 +286,7 @@ pub trait DynFunction<T> {
   fn into_function(self) -> Function;
 }
 
-#[derive(Collect)]
+#[derive(Debug, Collect)]
 #[collect(no_drop)]
 pub enum Value {
   Nil,

@@ -1,1 +1,3 @@
-assert(replace("hello!", "e", "a") == "hallo!")
+let s = replace("hello!", "e", "a")
+
+assert(s == "hallo!")
