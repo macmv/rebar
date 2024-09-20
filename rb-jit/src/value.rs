@@ -1,3 +1,5 @@
+use std::num::NonZero;
+
 use cranelift::{
   codegen::ir,
   frontend::FunctionBuilder,
@@ -155,10 +157,15 @@ pub enum ParamKind {
   /// value.
   Compact,
 
-  /// The extended format. This will always return one or two `CompactValues`.
-  /// Nil will produce a single value, and everything else will produce two
-  /// values.
-  Extended,
+  /// The extended format of a value. This includes an i64 at the start for the
+  /// type, and then some number of values after that. Given the type, the
+  /// number of following values is constant.
+  ///
+  /// The length given is the expected length of the value. When set (for direct
+  /// rebar calls), an RValue must produce exactly that number of values. When
+  /// unset (for dynamic rust calls), the RValue must produce exactly the
+  /// number of values for the current value.
+  Extended(Option<NonZero<u32>>),
 }
 
 impl<T> CompactValues<T> {
@@ -219,7 +226,11 @@ impl RValue {
   /// into a union slot, or back to native code. The number of values may change
   /// depending on the type (so this works for function calls, but not for
   /// block arguments).
-  fn to_extended_ir(&self, builder: &mut FunctionBuilder) -> Vec<ir::Value> {
+  fn to_extended_ir(
+    &self,
+    builder: &mut FunctionBuilder,
+    len: Option<NonZero<u32>>,
+  ) -> Vec<ir::Value> {
     let mut ret = vec![];
 
     ret.push(self.ty.to_ir(builder));
@@ -227,8 +238,16 @@ impl RValue {
       ret.push(v.to_ir(builder));
     }
 
-    while ret.len() < 2 {
-      ret.push(builder.ins().iconst(ir::types::I64, 0));
+    if let Some(l) = len {
+      while ret.len() < l.get() as usize {
+        ret.push(builder.ins().iconst(ir::types::I64, 0));
+      }
+
+      assert_eq!(
+        ret.len(),
+        l.get() as usize,
+        "value {self:?} cannot fit into slot of length {len:?}"
+      );
     }
 
     ret
@@ -255,7 +274,7 @@ impl RValue {
   pub fn to_ir(&self, kind: ParamKind, builder: &mut FunctionBuilder) -> Vec<ir::Value> {
     match kind {
       ParamKind::Compact => self.to_compact_ir(builder),
-      ParamKind::Extended => self.to_extended_ir(builder),
+      ParamKind::Extended(len) => self.to_extended_ir(builder, len),
     }
   }
 
@@ -312,7 +331,7 @@ impl DynamicValueType {
   pub fn param_kind(&self) -> ParamKind {
     match self {
       DynamicValueType::Const(_) => ParamKind::Compact,
-      DynamicValueType::Union(_) => ParamKind::Extended,
+      DynamicValueType::Union(_) => ParamKind::Extended(Some(NonZero::new(self.len()).unwrap())),
     }
   }
 

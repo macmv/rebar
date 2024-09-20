@@ -442,7 +442,7 @@ impl FuncBuilder<'_> {
   /// value will be untracked.
   fn track_value(&mut self, value: RValue, ty: &Type) {
     if self.type_needs_gc(ty) {
-      let values = value.to_ir(ParamKind::Extended, &mut self.builder);
+      let values = value.to_ir(ParamKind::Extended(None), &mut self.builder);
 
       let arg_slot = self.builder.create_sized_stack_slot(StackSlotData {
         kind: StackSlotKind::ExplicitSlot,
