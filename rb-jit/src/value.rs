@@ -256,38 +256,38 @@ impl RValue {
 
   // TODO: Need to actually use this with a function return.
   pub fn from_ir(ir: &[ir::Value], ty: &Type) -> RValue {
-    match ParamKind::for_type(ty) {
-      ParamKind::Compact => match ty {
-        Type::Literal(Literal::Unit) => RValue::nil(),
-        Type::Literal(Literal::Bool) => RValue::bool(ir[0]),
-        Type::Literal(Literal::Int) => RValue::int(ir[0]),
-        Type::Function(_, _) => RValue::function(ir[0]),
-        _ => panic!("invalid type"),
-      },
-      ParamKind::Extended => {
-        RValue { ty: ir[0].into(), values: ir[1..].iter().map(|&v| v.into()).collect() }
+    match ValueType::for_type(ty) {
+      Some(ty) => {
+        assert_eq!(ir.len() as u32, ty.len(), "variable length mismatch");
+        RValue {
+          ty:     Value::Const(ty),
+          values: ir.iter().map(|v| Value::Dyn(*v)).collect::<Vec<_>>(),
+        }
       }
+
+      None => RValue {
+        ty:     Value::Dyn(ir[0]),
+        values: ir[1..].iter().map(|v| Value::Dyn(*v)).collect::<Vec<_>>(),
+      },
     }
   }
 }
 
-impl ParamKind {
+impl ValueType {
   pub fn append_block_params(&self, builder: &mut FunctionBuilder, block: Block) {
-    match self {
-      ParamKind::Compact => {
-        builder.append_block_param(block, ir::types::I64);
-      }
-      ParamKind::Extended => {
-        builder.append_block_param(block, ir::types::I64);
-        builder.append_block_param(block, ir::types::I64);
-      }
+    for _ in 0..self.len() {
+      builder.append_block_param(block, ir::types::I64);
     }
   }
 
-  pub fn for_type(ty: &Type) -> Self {
+  pub fn for_type(ty: &Type) -> Option<Self> {
     match ty {
-      Type::Union(_) => ParamKind::Extended,
-      _ => ParamKind::Compact,
+      Type::Literal(Literal::Unit) => Some(ValueType::Nil),
+      Type::Literal(Literal::Int) => Some(ValueType::Int),
+      Type::Literal(Literal::Bool) => Some(ValueType::Bool),
+      Type::Literal(Literal::String) => Some(ValueType::String),
+      Type::Union(_) => None,
+      Type::Function(..) => todo!("function types to values"),
     }
   }
 }

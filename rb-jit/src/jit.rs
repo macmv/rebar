@@ -280,12 +280,12 @@ impl FuncBuilder<'_> {
     let mut param_values = vec![];
 
     for ty in self.mir.params.iter() {
-      match ParamKind::for_type(ty) {
-        ParamKind::Compact => {
+      match ValueType::for_type(ty) {
+        Some(_) => {
           let value = self.builder.append_block_param(entry_block, ir::types::I64);
           param_values.push(CompactValues::One(value));
         }
-        ParamKind::Extended => {
+        None => {
           let v0 = self.builder.append_block_param(entry_block, ir::types::I64);
           let v1 = self.builder.append_block_param(entry_block, ir::types::I64);
           param_values.push(CompactValues::Two(v0, v1));
@@ -294,8 +294,8 @@ impl FuncBuilder<'_> {
     }
 
     if let Some(ref ty) = self.mir.ret {
-      match ParamKind::for_type(ty) {
-        ParamKind::Extended => todo!("Extended variables not supported for parameters yet"),
+      match ValueType::for_type(ty) {
+        None => todo!("Extended variables not supported for parameters yet"),
         _ => {}
       }
 
@@ -344,12 +344,9 @@ impl JIT {
 
     sig.call_conv = CallConv::Fast;
     for ty in func.params.iter() {
-      match ParamKind::for_type(ty) {
-        ParamKind::Compact => sig.params.push(AbiParam::new(ir::types::I64)),
-        ParamKind::Extended => {
-          sig.params.push(AbiParam::new(ir::types::I64));
-          sig.params.push(AbiParam::new(ir::types::I64));
-        }
+      let vt = ValueType::for_type(ty).unwrap();
+      for _ in 0..vt.len() {
+        sig.params.push(AbiParam::new(ir::types::I64));
       }
     }
 
@@ -384,7 +381,7 @@ pub enum Error {
 
 // FIXME: Wrap `InstBuilder` so this is easier.
 fn use_var(builder: &mut FunctionBuilder, var: &[Variable], ty: &Type) -> RValue {
-  let vt = value_type_of(ty);
+  let vt = ValueType::for_type(ty);
 
   match vt {
     Some(ty) => {
@@ -399,17 +396,6 @@ fn use_var(builder: &mut FunctionBuilder, var: &[Variable], ty: &Type) -> RValue
       ty:     Value::Dyn(builder.use_var(var[0])),
       values: var[1..].iter().map(|v| Value::Dyn(builder.use_var(*v))).collect::<Vec<_>>(),
     },
-  }
-}
-
-fn value_type_of(ty: &Type) -> Option<ValueType> {
-  match ty {
-    Type::Literal(Literal::Unit) => Some(ValueType::Nil),
-    Type::Literal(Literal::Int) => Some(ValueType::Int),
-    Type::Literal(Literal::Bool) => Some(ValueType::Bool),
-    Type::Literal(Literal::String) => Some(ValueType::String),
-    Type::Union(_) => None,
-    Type::Function(..) => todo!("function types to values"),
   }
 }
 
@@ -454,7 +440,13 @@ impl FuncBuilder<'_> {
       mir::Stmt::Expr(expr) => self.compile_expr(expr),
       mir::Stmt::Let(id, ref ty, expr) => {
         let value = self.compile_expr(expr);
-        let ir = value.to_ir(ParamKind::for_type(&ty), &mut self.builder);
+        let ir = value.to_ir(
+          match ValueType::for_type(&ty) {
+            Some(_) => ParamKind::Compact,
+            None => ParamKind::Extended,
+          },
+          &mut self.builder,
+        );
 
         let variables = ir.iter().map(|_| self.new_variable()).collect::<Vec<_>>();
 
@@ -563,7 +555,13 @@ impl FuncBuilder<'_> {
             for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
               let arg = self.compile_expr(arg);
 
-              let v = arg.to_ir(ParamKind::for_type(arg_ty), &mut self.builder);
+              let v = arg.to_ir(
+                match ValueType::for_type(&arg_ty) {
+                  Some(_) => ParamKind::Compact,
+                  None => ParamKind::Extended,
+                },
+                &mut self.builder,
+              );
               arg_values.push(v);
             }
 
@@ -595,7 +593,13 @@ impl FuncBuilder<'_> {
             for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
               let arg = self.compile_expr(arg);
 
-              let v = arg.to_ir(ParamKind::for_type(arg_ty), &mut self.builder);
+              let v = arg.to_ir(
+                match ValueType::for_type(&arg_ty) {
+                  Some(_) => ParamKind::Compact,
+                  None => ParamKind::Extended,
+                },
+                &mut self.builder,
+              );
               for v in v {
                 use cranelift::codegen::ir::InstBuilderBase;
 
@@ -797,8 +801,9 @@ impl FuncBuilder<'_> {
         let else_block = self.builder.create_block();
         let merge_block = self.builder.create_block();
 
-        let param_kind = ParamKind::for_type(ty);
-        param_kind.append_block_params(&mut self.builder, merge_block);
+        let vt = ValueType::for_type(&ty).unwrap();
+        vt.append_block_params(&mut self.builder, merge_block);
+        let param_kind = ParamKind::Compact;
 
         // Test the if condition and conditionally branch.
         self.builder.ins().brif(cond, then_block, &[], else_block, &[]);
