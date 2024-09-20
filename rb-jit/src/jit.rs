@@ -436,8 +436,32 @@ impl FuncBuilder<'_> {
         self.set_var(&variables, &ir);
         self.locals.insert(id, variables);
 
+        self.track_value(value, ty);
+
         RValue::nil()
       }
+    }
+  }
+
+  /// Track a value in the GC stack. When the current function returns, the
+  /// value will be untracked.
+  fn track_value(&mut self, value: RValue, ty: &Type) {
+    if self.type_needs_gc(ty) {
+      // let native = value.to_ir(&mut self.builder);
+      // self.builder.ins().call(self.funcs.track, &[native, arg_ptr, ret_ptr]);
+    }
+  }
+
+  fn type_needs_gc(&self, ty: &Type) -> bool {
+    match ty {
+      Type::Literal(Literal::Unit) => false,
+      Type::Literal(Literal::Int) => false,
+      Type::Literal(Literal::Bool) => false,
+      Type::Literal(Literal::String) => true,
+      Type::Union(vs) => vs.iter().any(|v| self.type_needs_gc(v)),
+
+      // TODO: uhhhhhhhhhh
+      Type::Function(..) => false,
     }
   }
 
