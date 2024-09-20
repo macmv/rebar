@@ -40,21 +40,23 @@ struct NativeFuncDecl<'a> {
   decl: &'a FunctionDeclaration,
 }
 
-struct NativeFuncs<T> {
-  call:       T,
-  push_frame: T,
-  pop_frame:  T,
+macro_rules! native_funcs {
+  ($($name:ident),*) => {
+    pub struct NativeFuncs<T> {
+      $($name: T),*
+    }
+
+    impl<T: Copy> NativeFuncs<T> {
+      fn map<U>(&self, mut f: impl FnMut(T) -> U) -> NativeFuncs<U> {
+        NativeFuncs {
+          $($name: f(self.$name)),*
+        }
+      }
+    }
+  };
 }
 
-impl<T: Copy> NativeFuncs<T> {
-  fn map<U>(&self, mut f: impl FnMut(T) -> U) -> NativeFuncs<U> {
-    NativeFuncs {
-      call:       f(self.call),
-      push_frame: f(self.push_frame),
-      pop_frame:  f(self.pop_frame),
-    }
-  }
-}
+native_funcs!(call, push_frame, pop_frame);
 
 pub struct FuncBuilder<'a> {
   builder: FunctionBuilder<'a>,
