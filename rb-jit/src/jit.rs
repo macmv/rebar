@@ -391,10 +391,13 @@ fn use_var(builder: &mut FunctionBuilder, var: &[Variable], ty: &Type) -> RValue
   let vt = value_type_of(ty);
 
   match vt {
-    Some(ty) => RValue {
-      ty:     Value::Const(ty),
-      values: var.iter().map(|v| Value::Dyn(builder.use_var(*v))).collect::<Vec<_>>(),
-    },
+    Some(ty) => {
+      assert_eq!(var.len() as u32, ty.len(), "variable length mismatch");
+      RValue {
+        ty:     Value::Const(ty),
+        values: var.iter().map(|v| Value::Dyn(builder.use_var(*v))).collect::<Vec<_>>(),
+      }
+    }
 
     None => RValue {
       ty:     Value::Dyn(builder.use_var(var[0])),
@@ -411,6 +414,20 @@ fn value_type_of(ty: &Type) -> Option<ValueType> {
     Type::Literal(Literal::String) => Some(ValueType::String),
     Type::Union(_) => None,
     Type::Function(..) => todo!("function types to values"),
+  }
+}
+
+impl ValueType {
+  pub fn len(&self) -> u32 {
+    match self {
+      ValueType::Nil => 0,
+      ValueType::Int => 1,
+      ValueType::Bool => 3,
+      ValueType::String => 3,
+
+      ValueType::Function => 1,
+      ValueType::UserFunction => 1,
+    }
   }
 }
 
