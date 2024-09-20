@@ -85,19 +85,27 @@ impl Environment {
             let param_kind = ParamKind::for_type(ty);
 
             let value = match param_kind {
-              ParamKind::Zero => Value::Nil,
               ParamKind::Compact => {
-                // The value will always take up 8 bytes, even if less bytes are used.
-                let value = *arg_value.arg(offset);
-                offset += 1;
-
                 match ty {
+                  Type::Literal(Literal::Unit) => Value::Nil,
                   // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
-                  Type::Literal(Literal::Bool) => Value::Bool(value as u8 != 0),
-                  Type::Literal(Literal::Int) => Value::Int(value),
+                  Type::Literal(Literal::Bool) => {
+                    // The value will always take up 8 bytes, even if less bytes are used.
+                    let value = *arg_value.arg(offset);
+                    offset += 1;
+                    Value::Bool(value as u8 != 0)
+                  }
+                  Type::Literal(Literal::Int) => {
+                    // The value will always take up 8 bytes, even if less bytes are used.
+                    let value = *arg_value.arg(offset);
+                    offset += 1;
+                    Value::Int(value)
+                  }
                   Type::Literal(Literal::String) => {
                     // SAFETY: `value` came from rebar, so we assume its a valid pointer.
-                    let len = value;
+                    // The value will always take up 8 bytes, even if less bytes are used.
+                    let len = *arg_value.arg(offset);
+                    offset += 1;
                     let _cap = *arg_value.arg(offset);
                     offset += 1;
                     let ptr = *arg_value.arg(offset);

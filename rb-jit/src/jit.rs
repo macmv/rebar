@@ -281,9 +281,6 @@ impl FuncBuilder<'_> {
 
     for ty in self.mir.params.iter() {
       match ParamKind::for_type(ty) {
-        ParamKind::Zero => {
-          param_values.push(CompactValues::None);
-        }
         ParamKind::Compact => {
           let value = self.builder.append_block_param(entry_block, ir::types::I64);
           param_values.push(CompactValues::One(value));
@@ -348,7 +345,6 @@ impl JIT {
     sig.call_conv = CallConv::Fast;
     for ty in func.params.iter() {
       match ParamKind::for_type(ty) {
-        ParamKind::Zero => {}
         ParamKind::Compact => sig.params.push(AbiParam::new(ir::types::I64)),
         ParamKind::Extended => {
           sig.params.push(AbiParam::new(ir::types::I64));
