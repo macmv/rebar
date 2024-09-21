@@ -1,5 +1,4 @@
-let interpolated = "hello #{1 + 2}"
-println(interpolated)
+assert("hello #{2 + 3}" == "hello 5")
 
 let s = replace("hello!", "e", "a")
 
