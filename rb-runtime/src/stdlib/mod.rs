@@ -1,4 +1,4 @@
-use ::std::{cell::RefCell, collections::HashMap, fmt::Write, mem::ManuallyDrop, slice};
+use ::std::{cell::RefCell, collections::HashMap, fmt::Write, mem, mem::ManuallyDrop, slice};
 
 mod core;
 mod std;
@@ -11,7 +11,7 @@ use rb_jit::{
 use rb_mir::ast::{self as mir};
 use rb_typer::{Literal, Type};
 
-use crate::gc::{GcArena, GcRoot};
+use crate::gc::{GcArena, GcId, GcRoot};
 
 pub struct Environment {
   pub static_functions: HashMap<String, Function>,
@@ -64,7 +64,8 @@ impl Environment {
       let thread = root.threads.get(&tid).unwrap();
       let frame = thread.frames.last().unwrap();
 
-      frame.borrow_mut(m).values.push(Gc::new(&m, value));
+      let id = value.gc_id();
+      frame.borrow_mut(m).values.insert(id, Gc::new(&m, value));
     });
   }
 
@@ -149,7 +150,7 @@ impl Environment {
     ENV.with(|env| {
       let value = unsafe {
         let mut parser = RebarArgsParser::new(args);
-        parser.value_unsized()
+        parser.value_owned_unsized()
       };
 
       let mut env = env.borrow_mut();
@@ -157,9 +158,26 @@ impl Environment {
         let tid = 3; // FIXME: Use ThreadId.
 
         let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
+        let mut frame = thread.frames.last_mut().unwrap().borrow_mut(m);
 
-        let gc_value = Gc::new(m, value);
-        thread.frames.last_mut().unwrap().borrow_mut(m).values.push(gc_value);
+        let id = value.gc_id();
+        match frame.values.get(&id) {
+          Some(_) => {
+            // Alright, now we've gotten into chaotic territory. Because this
+            // value is already tracked, it means we have just
+            // created an owned value (`parser.value_owned_unsized`)
+            // above, and that same value is already in the GC. That breaks all
+            // the assumptions! So we need to avoid dropping it to
+            // avoid a double free. Strictly speaking, we should
+            // have never created that owned value in the first place, but in
+            // practice it works out fine.
+
+            mem::forget(value);
+          }
+          None => {
+            frame.values.insert(id, Gc::new(&m, value));
+          }
+        }
       });
     });
   }
@@ -271,6 +289,13 @@ impl Value {
     match self {
       Value::String(s) => s,
       _ => panic!("expected str"),
+    }
+  }
+
+  pub fn gc_id(&self) -> GcId {
+    match self {
+      Value::String(s) => GcId(s.as_ptr() as u64),
+      _ => panic!("cannot gc {self:?}"),
     }
   }
 }
@@ -407,6 +432,25 @@ impl RebarArgsParser {
     }
   }
 
+  unsafe fn value_owned(&mut self, vt: ValueType) -> Value {
+    match vt {
+      ValueType::String => {
+        // Rebar always shrinks strings before throwing them on the stack, so the len
+        // and cap will be the same.
+        let len = self.next();
+        let ptr = self.next();
+        let str = String::from_utf8_unchecked(Vec::from_raw_parts(
+          ptr as *mut u8,
+          len as usize,
+          len as usize,
+        ));
+
+        Value::String(str.into())
+      }
+      _ => unreachable!("not an owned value: {vt:?}"),
+    }
+  }
+
   pub unsafe fn value(&mut self, ty: &Type) -> Value {
     let dvt = DynamicValueType::for_type(ty);
 
@@ -442,6 +486,13 @@ impl RebarArgsParser {
     let ty = self.next();
     let vt = ValueType::try_from(ty).unwrap();
     self.value_const(vt)
+  }
+
+  /// Parses a value to get tracked by the GC.
+  pub unsafe fn value_owned_unsized(&mut self) -> Value {
+    let ty = self.next();
+    let vt = ValueType::try_from(ty).unwrap();
+    self.value_owned(vt)
   }
 }
 
