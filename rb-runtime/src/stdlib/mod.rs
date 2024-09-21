@@ -472,7 +472,8 @@ impl RebarArgsParser {
   pub unsafe fn value(&mut self, ty: &Type) -> Value {
     let dvt = DynamicValueType::for_type(ty);
 
-    match dvt {
+    let start = self.offset;
+    let v = match dvt {
       DynamicValueType::Const(vt) => self.value_const(vt),
       DynamicValueType::Union(_) => {
         // A nil will only take up one slot, so we must check for that to avoid reading
@@ -483,7 +484,16 @@ impl RebarArgsParser {
 
         self.value_const(vt)
       }
+    };
+
+    let expected_end = start + dvt.len() as usize;
+    if self.offset < expected_end {
+      self.offset = expected_end;
+    } else if self.offset > expected_end {
+      panic!("read too many slots while parsing argument of type {ty:?}");
     }
+
+    v
   }
 }
 
