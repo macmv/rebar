@@ -9,7 +9,7 @@ use cranelift_module::{DataDescription, FuncId, FunctionDeclaration, Linkage, Mo
 use isa::{CallConv, TargetIsa};
 use rb_mir::ast::{self as mir, UserFunctionId};
 use rb_typer::{Literal, Type};
-use std::{collections::HashMap, marker::PhantomPinned};
+use std::{collections::HashMap, marker::PhantomPinned, mem::ManuallyDrop};
 
 use crate::value::{CompactValues, DynamicValueType, ParamKind, RValue, Value, ValueType};
 
@@ -451,7 +451,9 @@ impl FuncBuilder<'_> {
         self.set_var(&variables, &ir);
         self.locals.insert(id, variables);
 
-        self.track_value(value, ty);
+        if self.type_needs_gc(ty) {
+          self.track_value(&value);
+        }
 
         RValue::nil()
       }
@@ -460,12 +462,10 @@ impl FuncBuilder<'_> {
 
   /// Track a value in the GC stack. When the current function returns, the
   /// value will be untracked.
-  fn track_value(&mut self, value: RValue, ty: &Type) {
-    if self.type_needs_gc(ty) {
-      let arg_ptr = self.stack_slot_unsized(&value);
+  fn track_value(&mut self, value: &RValue) {
+    let arg_ptr = self.stack_slot_unsized(&value);
 
-      self.builder.ins().call(self.funcs.track, &[arg_ptr]);
-    }
+    self.builder.ins().call(self.funcs.track, &[arg_ptr]);
   }
 
   fn type_needs_gc(&self, ty: &Type) -> bool {
@@ -519,17 +519,15 @@ impl FuncBuilder<'_> {
         // - Once we're done, we can throw the resulting string onto the heap, now that
         //   we're done mutating it.
 
-        // Note that we don't care about alignment here: we handle reading an unaligned
-        // i64.
-        let to_leak = String::new();
+        // We track this in the GC later, once we're done mutating it. For now, manually
+        // drop it so we don't double free.
+        let result_str = ManuallyDrop::new(String::new());
 
-        let len = to_leak.len();
-        let cap = to_leak.capacity();
-        let ptr = to_leak.as_ptr();
+        let len = result_str.len();
+        let cap = result_str.capacity();
+        let ptr = result_str.as_ptr();
 
-        // TODO: Throw this in a GC or something.
-        String::leak(to_leak);
-
+        // NB: This slot is mutated! We're using it to append to the string.
         let str_slot = self.builder.create_sized_stack_slot(StackSlotData {
           kind: StackSlotKind::ExplicitSlot,
           // A string is composed of 3 values, each being 8 bytes.
@@ -574,14 +572,19 @@ impl FuncBuilder<'_> {
           self.builder.ins().call(self.funcs.string_append_value, &[str_addr, arg_ptr]);
         }
 
-        RValue {
+        // Now that we're done mutating the slot, we can track the value in the GC.
+        let result = RValue {
           ty:     Value::Const(ValueType::String),
           values: vec![
             Value::Dyn(self.builder.ins().stack_load(ir::types::I64, str_slot, 0)),
             Value::Dyn(self.builder.ins().stack_load(ir::types::I64, str_slot, 8)),
             Value::Dyn(self.builder.ins().stack_load(ir::types::I64, str_slot, 16)),
           ],
-        }
+        };
+
+        self.track_value(&result);
+
+        result
       }
 
       mir::Expr::Local(id, ref ty) => use_var(&mut self.builder, &self.locals[&id], ty),
