@@ -99,12 +99,12 @@ impl Environment {
             Type::Literal(Literal::Bool) => ret.ret(0, ret_value.as_bool() as i64),
             Type::Literal(Literal::Int) => ret.ret(0, ret_value.as_int() as i64),
             Type::Literal(Literal::String) => {
-              let str = String::from(ret_value.as_str());
+              let mut str = String::from(ret_value.as_str());
+              str.shrink_to_fit();
               let ptr = str.as_ptr() as i64;
 
               ret.ret(0, str.len() as i64);
-              ret.ret(1, str.capacity() as i64);
-              ret.ret(2, ptr);
+              ret.ret(1, ptr);
 
               env.track_value(Value::String(str));
             }
@@ -397,7 +397,6 @@ impl RebarArgsParser {
         // SAFETY: `value` came from rebar, so we assume its a valid pointer.
         // The value will always take up 8 bytes, even if less bytes are used.
         let len = self.next();
-        let _cap = self.next();
         let ptr = self.next();
         let str =
           ::std::str::from_utf8_unchecked(slice::from_raw_parts(ptr as *const u8, len as usize));

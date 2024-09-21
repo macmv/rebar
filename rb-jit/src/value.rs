@@ -129,14 +129,10 @@ impl RValue {
     RValue { ty: Value::Const(ValueType::Function), values: vec![Value::from(v)] }
   }
 
-  pub fn string(v: String) -> Self {
+  pub fn string(v: &str) -> Self {
     RValue {
       ty:     Value::Const(ValueType::String),
-      values: vec![
-        Value::from(v.len() as i64),
-        Value::from(v.capacity() as i64),
-        Value::from(v.as_ptr() as i64),
-      ],
+      values: vec![Value::from(v.len() as i64), Value::from(v.as_ptr() as i64)],
     }
   }
 }
@@ -303,7 +299,7 @@ impl ValueType {
       ValueType::Nil => 0,
       ValueType::Int => 1,
       ValueType::Bool => 1,
-      ValueType::String => 3,
+      ValueType::String => 2,
 
       ValueType::Function => 1,
       ValueType::UserFunction => 1,

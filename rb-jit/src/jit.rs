@@ -490,10 +490,10 @@ impl FuncBuilder<'_> {
         mir::Literal::String(i) => {
           // Note that we don't care about alignment here: we handle reading an unaligned
           // i64.
-          let to_leak = i.clone();
+          let mut to_leak = i.clone();
+          to_leak.shrink_to_fit();
 
           let len = to_leak.len();
-          let cap = to_leak.capacity();
           let ptr = to_leak.as_ptr();
 
           // TODO: Throw this in a GC or something.
@@ -501,7 +501,7 @@ impl FuncBuilder<'_> {
 
           RValue {
             ty:     Value::Const(ValueType::String),
-            values: vec![Value::from(len as i64), Value::from(cap as i64), Value::from(ptr as i64)],
+            values: vec![Value::from(len as i64), Value::from(ptr as i64)],
           }
         }
       },
@@ -545,10 +545,10 @@ impl FuncBuilder<'_> {
         for segment in segments {
           let to_append = match segment {
             mir::StringInterp::Literal(str) => {
-              let to_leak = String::from(str);
+              let mut to_leak = String::from(str);
+              to_leak.shrink_to_fit();
 
               let len = to_leak.len();
-              let cap = to_leak.capacity();
               let ptr = to_leak.as_ptr();
 
               // TODO: Throw this in a memoized pool of string literals.
@@ -556,11 +556,7 @@ impl FuncBuilder<'_> {
 
               RValue {
                 ty:     Value::Const(ValueType::String),
-                values: vec![
-                  Value::from(len as i64),
-                  Value::from(cap as i64),
-                  Value::from(ptr as i64),
-                ],
+                values: vec![Value::from(len as i64), Value::from(ptr as i64)],
               }
             }
 
@@ -572,12 +568,15 @@ impl FuncBuilder<'_> {
           self.builder.ins().call(self.funcs.string_append_value, &[str_addr, arg_ptr]);
         }
 
-        // Now that we're done mutating the slot, we can track the value in the GC.
+        // Now that we're done mutating the slot, we can track the value in the GC (and
+        // we can drop the `cap` amount, because we don't need that anymore, now that
+        // the string is immutable).
         let result = RValue {
           ty:     Value::Const(ValueType::String),
           values: vec![
+            // Len
             Value::Dyn(self.builder.ins().stack_load(ir::types::I64, str_slot, 0)),
-            Value::Dyn(self.builder.ins().stack_load(ir::types::I64, str_slot, 8)),
+            // Ptr
             Value::Dyn(self.builder.ins().stack_load(ir::types::I64, str_slot, 16)),
           ],
         };
@@ -911,7 +910,6 @@ impl FuncBuilder<'_> {
         values: vec![
           Value::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, 0)),
           Value::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, 8)),
-          Value::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, 16)),
         ],
       },
       _ => unimplemented!("return type {ret_ty:?}"),
