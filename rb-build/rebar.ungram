@@ -38,8 +38,9 @@ Expr =
   ParenExpr |
   Block
 
-String = '"' 'char'* Escape* '"'
+String = '"' 'char'* Escape* Interpolation* '"'
 Escape = '\\' 'ident'
+Interpolation = '#' '{' Expr '}'
 
 FieldExpr = Expr '.' Name
 PrefixExpr = PrefixOp Expr

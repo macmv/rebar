@@ -85,7 +85,16 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
 
       // TODO: Escapes and such.
       while !p.at(EOF) && !p.at(T!['"']) {
-        p.bump();
+        if p.at(T![#]) && p.peek() == T!['{'] {
+          let m = p.start();
+          p.eat(T![#]);
+          p.eat(T!['{']);
+          expr(p);
+          p.expect(T!['}']);
+          m.complete(p, INTERPOLATION);
+        } else {
+          p.bump();
+        }
       }
 
       p.eat(T!['"']);
@@ -325,6 +334,33 @@ mod tests {
       expect![@r#"
         LITERAL
           NIL_KW 'nil'
+      "#],
+    );
+  }
+
+  #[test]
+  fn string_interpolation() {
+    check(
+      r#"
+        "hello #{world}"
+      "#,
+      expect![@r#"
+        SOURCE_FILE
+          NL_KW '\n'
+          WHITESPACE '        '
+          EXPR_STMT
+            STRING
+              DOUBLE_QUOTE '"'
+              IDENT 'hello'
+              WHITESPACE ' '
+              INTERPOLATION
+                POUND '#'
+                OPEN_CURLY '{'
+                NAME
+                  IDENT 'world'
+                CLOSE_CURLY '}'
+              DOUBLE_QUOTE '"'
+          NL_KW '\n'
       "#],
     );
   }
