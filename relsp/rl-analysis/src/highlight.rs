@@ -75,6 +75,20 @@ impl Highlighter<'_> {
 
   fn visit_expr(&mut self, expr: hir::ExprId) {
     match self.func.exprs[expr] {
+      hir::Expr::Literal(hir::Literal::Nil) => self.token(expr, HighlightKind::Number),
+      hir::Expr::Literal(hir::Literal::Int(_)) => self.token(expr, HighlightKind::Number),
+      hir::Expr::Literal(hir::Literal::Bool(_)) => self.token(expr, HighlightKind::Number),
+      hir::Expr::Literal(hir::Literal::String(_)) => self.token(expr, HighlightKind::String),
+
+      hir::Expr::StringInterp(ref segments) => {
+        for s in segments {
+          match s {
+            hir::StringInterp::Literal(_) => self.token(expr, HighlightKind::String),
+            hir::StringInterp::Expr(expr) => self.visit_expr(*expr),
+          }
+        }
+      }
+
       hir::Expr::Call(lhs, ref args) => {
         self.token(lhs, HighlightKind::Function);
 
@@ -107,11 +121,6 @@ impl Highlighter<'_> {
         self.visit_expr(inner);
       }
       hir::Expr::Paren(expr) => self.visit_expr(expr),
-
-      hir::Expr::Literal(hir::Literal::Nil) => self.token(expr, HighlightKind::Number),
-      hir::Expr::Literal(hir::Literal::Int(_)) => self.token(expr, HighlightKind::Number),
-      hir::Expr::Literal(hir::Literal::Bool(_)) => self.token(expr, HighlightKind::Number),
-      hir::Expr::Literal(hir::Literal::String(_)) => self.token(expr, HighlightKind::String),
 
       _ => {}
     }
