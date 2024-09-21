@@ -156,6 +156,21 @@ impl<'a> Typer<'a> {
         hir::Literal::String(_) => VType::Literal(ty::Literal::String),
       },
 
+      hir::Expr::StringInterp(ref segments) => {
+        for segment in segments {
+          match segment {
+            hir::StringInterp::Literal(_) => {}
+            hir::StringInterp::Expr(expr) => {
+              // TODO: Constraint this to be stringifiable (currently everything is, but later
+              // we want to restrict that).
+              self.type_expr(*expr);
+            }
+          }
+        }
+
+        VType::Literal(ty::Literal::String)
+      }
+
       hir::Expr::Call(lhs_expr, ref args) => {
         let lhs = self.type_expr(lhs_expr);
 
