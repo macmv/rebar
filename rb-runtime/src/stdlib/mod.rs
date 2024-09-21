@@ -147,46 +147,8 @@ impl Environment {
   fn track(args: *const RebarArgs) {
     ENV.with(|env| {
       let value = unsafe {
-        let args = &*args;
-        let mut offset = 0;
-
-        // A nil will only take up one slot, so we must check for that to avoid reading
-        // out of bounds.
-        let dyn_ty = *args.arg(offset);
-        offset += 1;
-
-        let vt = ValueType::try_from(dyn_ty).unwrap();
-
-        match vt {
-          ValueType::Nil => Value::Nil,
-          _ => {
-            // `offset` was just incremented, so read the next slot to get the actual
-            // value.
-            let value = *args.arg(offset);
-            offset += 1;
-
-            match vt {
-              // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
-              ValueType::Bool => Value::Bool(value as u8 != 0),
-              ValueType::Int => Value::Int(value),
-              ValueType::String => {
-                // SAFETY: `value` came from rebar, so we assume its a valid pointer.
-                let len = value;
-                let _cap = *args.arg(offset);
-                offset += 1;
-                let ptr = *args.arg(offset);
-                // offset += 1;
-                let str = ::std::str::from_utf8_unchecked(slice::from_raw_parts(
-                  ptr as *const u8,
-                  len as usize,
-                ));
-
-                Value::String(str.into())
-              }
-              _ => todo!("extended form for value type {vt:?}"),
-            }
-          }
-        }
+        let mut parser = RebarArgsParser::new(args);
+        parser.value_unsized()
       };
 
       let mut env = env.borrow_mut();
@@ -205,14 +167,11 @@ impl Environment {
     ENV.with(|_env| {
       let str = unsafe { &mut *(str as *mut RebarArgs) };
       let mut str_value = unsafe {
-        let mut offset = 0;
+        let mut parser = RebarArgsParser::new(str);
 
-        let len = *str.arg(offset);
-        offset += 1;
-        let cap = *str.arg(offset);
-        offset += 1;
-        let ptr = *str.arg(offset);
-        // offset += 1;
+        let len = parser.next();
+        let cap = parser.next();
+        let ptr = parser.next();
         ManuallyDrop::new(String::from_utf8_unchecked(Vec::from_raw_parts(
           ptr as *mut u8,
           len as usize,
@@ -220,46 +179,9 @@ impl Environment {
         )))
       };
 
-      let args = unsafe { &*args };
       let arg_value = unsafe {
-        let mut offset = 0;
-
-        // A nil will only take up one slot, so we must check for that to avoid reading
-        // out of bounds.
-        let dyn_ty = *args.arg(offset);
-        offset += 1;
-
-        let vt = ValueType::try_from(dyn_ty).unwrap();
-
-        match vt {
-          ValueType::Nil => Value::Nil,
-          _ => {
-            // `offset` was just incremented, so read the next slot to get the actual
-            // value.
-            let value = *args.arg(offset);
-            offset += 1;
-
-            match vt {
-              // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
-              ValueType::Bool => Value::Bool(value as u8 != 0),
-              ValueType::Int => Value::Int(value),
-              ValueType::String => {
-                let _cap = *args.arg(offset);
-                offset += 1;
-                let ptr = *args.arg(offset);
-                // offset += 1;
-
-                let str = ::std::str::from_utf8_unchecked(slice::from_raw_parts(
-                  ptr as *const u8,
-                  value as usize,
-                ));
-                Value::String(str.into())
-              }
-
-              _ => todo!("extended form for value type {vt:?}"),
-            }
-          }
-        }
+        let mut parser = RebarArgsParser::new(args);
+        parser.value_unsized()
       };
 
       match arg_value {
@@ -494,6 +416,16 @@ impl RebarArgsParser {
     }
 
     v
+  }
+
+  /// Parses a single value, and renders the current parser unusable. If the
+  /// value passed in changes type, the amount of slots parsed could change,
+  /// which makes this inconsistent. So, after calling this, a subsequent
+  /// value cannot be parsed.
+  pub unsafe fn value_unsized(&mut self) -> Value {
+    let ty = self.next();
+    let vt = ValueType::try_from(ty).unwrap();
+    self.value_const(vt)
   }
 }
 
