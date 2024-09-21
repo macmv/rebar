@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use rb_hir::ast as hir;
 use rb_mir::ast::{self as mir, UserFunctionId};
-use rb_typer::{Literal, Type, Typer};
+use rb_typer::{Type, Typer};
 
 /// The environment for lowering to MIR. This stores a tree of namespaces to
 /// native IDs, that are stored directly in the MIR.
@@ -89,6 +89,19 @@ impl Lower<'_> {
       hir::Expr::Literal(hir::Literal::Int(v)) => mir::Expr::Literal(mir::Literal::Int(v)),
       hir::Expr::Literal(hir::Literal::String(ref v)) => {
         mir::Expr::Literal(mir::Literal::String(v.clone()))
+      }
+
+      // TODO: It'd be nice to remove StringInterp from MIR
+      hir::Expr::StringInterp(ref segments) => {
+        let segments = segments
+          .iter()
+          .map(|segment| match segment {
+            hir::StringInterp::Literal(ref v) => mir::StringInterp::Literal(v.clone()),
+            hir::StringInterp::Expr(e) => mir::StringInterp::Expr(self.lower_expr(*e)),
+          })
+          .collect();
+
+        mir::Expr::StringInterp(segments)
       }
 
       // HIR should have fully qualified names, and the typer should get the type of this name.

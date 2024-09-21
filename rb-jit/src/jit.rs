@@ -56,7 +56,7 @@ macro_rules! native_funcs {
   };
 }
 
-native_funcs!(call, push_frame, pop_frame, track);
+native_funcs!(call, push_frame, pop_frame, track, string_append_value);
 
 pub struct FuncBuilder<'a> {
   builder: FunctionBuilder<'a>,
@@ -106,9 +106,10 @@ impl RebarArgs {
 pub struct RuntimeHelpers {
   pub call: fn(i64, *const RebarArgs, *mut RebarArgs),
 
-  pub push_frame: fn(),
-  pub pop_frame:  fn(),
-  pub track:      fn(*const RebarArgs),
+  pub push_frame:          fn(),
+  pub pop_frame:           fn(),
+  pub track:               fn(*const RebarArgs),
+  pub string_append_value: fn(*const RebarArgs, *const RebarArgs),
 }
 
 const DEBUG: bool = false;
@@ -130,6 +131,7 @@ impl JIT {
     builder.symbol("__push_frame", helpers.push_frame as *const _);
     builder.symbol("__pop_frame", helpers.pop_frame as *const _);
     builder.symbol("__track", helpers.track as *const _);
+    builder.symbol("__string_append_value", helpers.string_append_value as *const _);
 
     let mut module = JITModule::new(builder);
 
@@ -144,6 +146,10 @@ impl JIT {
     let mut track_sig = module.make_signature();
     track_sig.params.push(AbiParam::new(ir::types::I64));
 
+    let mut string_append_value = module.make_signature();
+    string_append_value.params.push(AbiParam::new(ir::types::I64));
+    string_append_value.params.push(AbiParam::new(ir::types::I64));
+
     JIT {
       data_description: DataDescription::new(),
       funcs: NativeFuncs {
@@ -155,6 +161,10 @@ impl JIT {
           .declare_function("__pop_frame", Linkage::Import, &pop_frame_sig)
           .unwrap(),
         track:      module.declare_function("__track", Linkage::Import, &track_sig).unwrap(),
+
+        string_append_value: module
+          .declare_function("__string_append_value", Linkage::Import, &string_append_value)
+          .unwrap(),
       },
       module,
       user_funcs: HashMap::new(),
@@ -497,6 +507,100 @@ impl FuncBuilder<'_> {
           }
         }
       },
+
+      mir::Expr::StringInterp(ref segments) => {
+        // This is a bit of nonsense, but here we go:
+        //
+        // - First, we make a new string to work with.
+        // - Second, we start appending things:
+        //   - String literals are easy, those get baked into the binary and appended
+        //     directly.
+        //   - Expressions get compiled in inline. The result of the expression is then
+        //     sent to a native function to stringify it, which will append to our
+        //     string in the heap.
+        // - Once we're done, we can throw the resulting string onto the heap, now that
+        //   we're done mutating it.
+
+        // Note that we don't care about alignment here: we handle reading an unaligned
+        // i64.
+        let to_leak = String::new();
+
+        let len = to_leak.len();
+        let cap = to_leak.capacity();
+        let ptr = to_leak.as_ptr();
+
+        // TODO: Throw this in a GC or something.
+        String::leak(to_leak);
+
+        let str_slot = self.builder.create_sized_stack_slot(StackSlotData {
+          kind: StackSlotKind::ExplicitSlot,
+          // A string is composed of 3 values, each being 8 bytes.
+          size: 3 * 8,
+        });
+        let len = self.builder.ins().iconst(ir::types::I64, len as i64);
+        let cap = self.builder.ins().iconst(ir::types::I64, cap as i64);
+        let ptr = self.builder.ins().iconst(ir::types::I64, ptr as i64);
+        self.builder.ins().stack_store(len, str_slot, 0);
+        self.builder.ins().stack_store(cap, str_slot, 8);
+        self.builder.ins().stack_store(ptr, str_slot, 16);
+
+        let str_addr = self.builder.ins().stack_addr(ir::types::I64, str_slot, 0);
+
+        for segment in segments {
+          let to_append = match segment {
+            mir::StringInterp::Literal(str) => {
+              let to_leak = String::from(str);
+
+              let len = to_leak.len();
+              let cap = to_leak.capacity();
+              let ptr = to_leak.as_ptr();
+
+              // TODO: Throw this in a memoized pool of string literals.
+              String::leak(to_leak);
+
+              RValue {
+                ty:     Value::Const(ValueType::String),
+                values: vec![
+                  Value::from(len as i64),
+                  Value::from(cap as i64),
+                  Value::from(ptr as i64),
+                ],
+              }
+            }
+
+            mir::StringInterp::Expr(e) => self.compile_expr(*e),
+          };
+
+          let append_str = to_append.to_ir(ParamKind::Extended(None), &mut self.builder);
+
+          let arg_slot = self.builder.create_sized_stack_slot(StackSlotData {
+            kind: StackSlotKind::ExplicitSlot,
+            // Each argument is 8 bytes wide.
+            size: append_str.len() as u32 * 8,
+          });
+          let mut slot_index = 0;
+          for &v in append_str.iter() {
+            self.builder.ins().stack_store(v, arg_slot, slot_index * 8);
+            slot_index += 1;
+          }
+
+          let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, arg_slot, 0);
+
+          let mut args = vec![str_addr];
+          args.extend(append_str);
+
+          self.builder.ins().call(self.funcs.string_append_value, &[str_addr, arg_ptr]);
+        }
+
+        RValue {
+          ty:     Value::Const(ValueType::String),
+          values: vec![
+            Value::Dyn(self.builder.ins().stack_load(ir::types::I64, str_slot, 0)),
+            Value::Dyn(self.builder.ins().stack_load(ir::types::I64, str_slot, 8)),
+            Value::Dyn(self.builder.ins().stack_load(ir::types::I64, str_slot, 16)),
+          ],
+        }
+      }
 
       mir::Expr::Local(id, ref ty) => use_var(&mut self.builder, &self.locals[&id], ty),
 

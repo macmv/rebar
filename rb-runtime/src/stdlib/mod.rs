@@ -1,4 +1,4 @@
-use ::std::{cell::RefCell, collections::HashMap, slice};
+use ::std::{cell::RefCell, collections::HashMap, fmt::Write, mem::ManuallyDrop, slice};
 
 mod core;
 mod std;
@@ -48,10 +48,11 @@ impl Environment {
     });
 
     RuntimeHelpers {
-      call:       Self::dyn_call_ptr(),
-      push_frame: Self::push_frame(),
-      pop_frame:  Self::pop_frame(),
-      track:      Self::track,
+      call:                Self::dyn_call_ptr(),
+      push_frame:          Self::push_frame(),
+      pop_frame:           Self::pop_frame(),
+      track:               Self::track,
+      string_append_value: Self::string_append_value,
     }
   }
 
@@ -263,6 +264,81 @@ impl Environment {
         let gc_value = Gc::new(m, value);
         thread.frames.last_mut().unwrap().borrow_mut(m).values.push(gc_value);
       });
+    });
+  }
+
+  fn string_append_value(str: *const RebarArgs, args: *const RebarArgs) {
+    ENV.with(|_env| {
+      let str = unsafe { &mut *(str as *mut RebarArgs) };
+      let mut str_value = unsafe {
+        let mut offset = 0;
+
+        let len = *str.arg(offset);
+        offset += 1;
+        let cap = *str.arg(offset);
+        offset += 1;
+        let ptr = *str.arg(offset);
+        // offset += 1;
+        ManuallyDrop::new(String::from_utf8_unchecked(Vec::from_raw_parts(
+          ptr as *mut u8,
+          len as usize,
+          cap as usize,
+        )))
+      };
+
+      let args = unsafe { &*args };
+      let arg_value = unsafe {
+        let mut offset = 0;
+
+        // A nil will only take up one slot, so we must check for that to avoid reading
+        // out of bounds.
+        let dyn_ty = *args.arg(offset);
+        offset += 1;
+
+        let vt = ValueType::try_from(dyn_ty).unwrap();
+
+        match vt {
+          ValueType::Nil => Value::Nil,
+          _ => {
+            // `offset` was just incremented, so read the next slot to get the actual
+            // value.
+            let value = *args.arg(offset);
+            offset += 1;
+
+            match vt {
+              // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
+              ValueType::Bool => Value::Bool(value as u8 != 0),
+              ValueType::Int => Value::Int(value),
+              ValueType::String => {
+                let _cap = *args.arg(offset);
+                offset += 1;
+                let ptr = *args.arg(offset);
+                // offset += 1;
+
+                let str = ::std::str::from_utf8_unchecked(slice::from_raw_parts(
+                  ptr as *const u8,
+                  value as usize,
+                ));
+                Value::String(str.into())
+              }
+
+              _ => todo!("extended form for value type {vt:?}"),
+            }
+          }
+        }
+      };
+
+      match arg_value {
+        Value::Int(i) => write!(str_value, "{}", i).unwrap(),
+        Value::String(s) => str_value.push_str(s.as_str()),
+        _ => panic!("expected string"),
+      }
+
+      unsafe {
+        str.ret(0, str_value.len() as i64);
+        str.ret(1, str_value.capacity() as i64);
+        str.ret(2, str_value.as_ptr() as i64);
+      }
     });
   }
 
