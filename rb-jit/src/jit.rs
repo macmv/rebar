@@ -56,7 +56,7 @@ macro_rules! native_funcs {
   };
 }
 
-native_funcs!(call, push_frame, pop_frame, track, string_append_value);
+native_funcs!(call, push_frame, pop_frame, track, string_append_value, value_equals);
 
 pub struct FuncBuilder<'a> {
   builder: FunctionBuilder<'a>,
@@ -110,6 +110,7 @@ pub struct RuntimeHelpers {
   pub pop_frame:           fn(),
   pub track:               fn(*const RebarArgs),
   pub string_append_value: fn(*const RebarArgs, *const RebarArgs),
+  pub value_equals:        fn(*const RebarArgs, *const RebarArgs) -> i8,
 }
 
 const DEBUG: bool = false;
@@ -132,6 +133,7 @@ impl JIT {
     builder.symbol("__pop_frame", helpers.pop_frame as *const _);
     builder.symbol("__track", helpers.track as *const _);
     builder.symbol("__string_append_value", helpers.string_append_value as *const _);
+    builder.symbol("__value_equals", helpers.value_equals as *const _);
 
     let mut module = JITModule::new(builder);
 
@@ -150,6 +152,11 @@ impl JIT {
     string_append_value.params.push(AbiParam::new(ir::types::I64));
     string_append_value.params.push(AbiParam::new(ir::types::I64));
 
+    let mut value_equals = module.make_signature();
+    value_equals.params.push(AbiParam::new(ir::types::I64));
+    value_equals.params.push(AbiParam::new(ir::types::I64));
+    value_equals.returns.push(AbiParam::new(ir::types::I8));
+
     JIT {
       data_description: DataDescription::new(),
       funcs: NativeFuncs {
@@ -164,6 +171,9 @@ impl JIT {
 
         string_append_value: module
           .declare_function("__string_append_value", Linkage::Import, &string_append_value)
+          .unwrap(),
+        value_equals:        module
+          .declare_function("__value_equals", Linkage::Import, &value_equals)
           .unwrap(),
       },
       module,
@@ -768,54 +778,42 @@ impl FuncBuilder<'_> {
 
               RValue::bool(res)
             }
-            (Some(ValueType::String), Some(ValueType::String)) => {
-              let l_len = lhs.values[0].to_ir(&mut self.builder);
-              // let _l_ptr = rhs.values[2].to_ir(&mut self.builder);
-              let r_len = rhs.values[0].to_ir(&mut self.builder);
-              // let _r_ptr = rhs.values[2].to_ir(&mut self.builder);
-
-              let res = match op {
-                mir::BinaryOp::Eq => self.builder.ins().icmp(IntCC::Equal, l_len, r_len),
-                mir::BinaryOp::Neq => self.builder.ins().icmp(IntCC::NotEqual, l_len, r_len),
-                _ => unreachable!(),
-              };
-
-              RValue::bool(res)
-            }
 
             (Some(a), Some(b)) if a != b => RValue::bool(false as i64),
 
             // TODO: Theres a couple more branches we could optimize for here, but the dynamic path
             // is nice to fall back on.
             (_, _) => {
-              let l_ty = lhs.ty.to_ir(&mut self.builder);
-              let r_ty = rhs.ty.to_ir(&mut self.builder);
-              let l_val = lhs.values.get(0).map(|v| v.to_ir(&mut self.builder));
-              let r_val = rhs.values.get(0).map(|v| v.to_ir(&mut self.builder));
+              let l_ir = lhs.to_ir(ParamKind::Extended(None), &mut self.builder);
+              let r_ir = rhs.to_ir(ParamKind::Extended(None), &mut self.builder);
 
-              let res = match op {
-                mir::BinaryOp::Eq => match (l_val, r_val) {
-                  (Some(l), Some(r)) => {
-                    let ty_eq = self.builder.ins().icmp(IntCC::Equal, l_ty, r_ty);
-                    let v_eq = self.builder.ins().icmp(IntCC::Equal, l, r);
-                    self.builder.ins().band(ty_eq, v_eq)
-                  }
-                  // This is handles the union case. For example the left could be `int | nil`, and
-                  // the right could be `nil`. In this case, we can just compare types.
-                  _ => self.builder.ins().icmp(IntCC::Equal, l_ty, r_ty),
-                },
-                mir::BinaryOp::Neq => match (l_val, r_val) {
-                  (Some(l), Some(r)) => {
-                    let ty_eq = self.builder.ins().icmp(IntCC::NotEqual, l_ty, r_ty);
-                    let v_eq = self.builder.ins().icmp(IntCC::NotEqual, l, r);
-                    self.builder.ins().bor(ty_eq, v_eq)
-                  }
-                  _ => self.builder.ins().icmp(IntCC::NotEqual, l_ty, r_ty),
-                },
-                _ => unreachable!(),
-              };
+              let l_slot = self.builder.create_sized_stack_slot(StackSlotData {
+                kind: StackSlotKind::ExplicitSlot,
+                size: l_ir.len() as u32 * 8,
+              });
+              let r_slot = self.builder.create_sized_stack_slot(StackSlotData {
+                kind: StackSlotKind::ExplicitSlot,
+                size: r_ir.len() as u32 * 8,
+              });
 
-              RValue::bool(res)
+              let mut slot_index = 0;
+              for &v in l_ir.iter() {
+                self.builder.ins().stack_store(v, l_slot, slot_index * 8);
+                slot_index += 1;
+              }
+
+              let mut slot_index = 0;
+              for &v in r_ir.iter() {
+                self.builder.ins().stack_store(v, r_slot, slot_index * 8);
+                slot_index += 1;
+              }
+
+              let l_addr = self.builder.ins().stack_addr(ir::types::I64, l_slot, 0);
+              let r_addr = self.builder.ins().stack_addr(ir::types::I64, r_slot, 0);
+
+              let ret = self.builder.ins().call(self.funcs.value_equals, &[l_addr, r_addr]);
+
+              RValue::bool(self.builder.inst_results(ret)[0])
             }
           },
 

@@ -53,6 +53,7 @@ impl Environment {
       pop_frame:           Self::pop_frame(),
       track:               Self::track,
       string_append_value: Self::string_append_value,
+      value_equals:        Self::value_equals,
     }
   }
 
@@ -198,6 +199,22 @@ impl Environment {
     });
   }
 
+  fn value_equals(a: *const RebarArgs, b: *const RebarArgs) -> i8 {
+    ENV.with(|_env| {
+      let a_value = unsafe {
+        let mut parser = RebarArgsParser::new(a);
+        parser.value_unsized()
+      };
+
+      let b_value = unsafe {
+        let mut parser = RebarArgsParser::new(b);
+        parser.value_unsized()
+      };
+
+      (a_value == b_value) as i8
+    })
+  }
+
   pub fn static_env(&self) -> rb_typer::Environment {
     rb_typer::Environment {
       names: self
@@ -226,7 +243,7 @@ pub trait DynFunction<T> {
   fn into_function(self) -> Function;
 }
 
-#[derive(Debug, Collect)]
+#[derive(Debug, Collect, PartialEq)]
 #[collect(no_drop)]
 pub enum Value {
   Nil,
