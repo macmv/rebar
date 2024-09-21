@@ -462,19 +462,7 @@ impl FuncBuilder<'_> {
   /// value will be untracked.
   fn track_value(&mut self, value: RValue, ty: &Type) {
     if self.type_needs_gc(ty) {
-      let values = value.to_ir(ParamKind::Extended(None), &mut self.builder);
-
-      let arg_slot = self.builder.create_sized_stack_slot(StackSlotData {
-        kind: StackSlotKind::ExplicitSlot,
-        // Each argument is 8 bytes wide.
-        size: values.len() as u32 * 8,
-      });
-
-      for (slot_index, &v) in values.iter().enumerate() {
-        self.builder.ins().stack_store(v, arg_slot, slot_index as i32 * 8);
-      }
-
-      let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, arg_slot, 0);
+      let arg_ptr = self.stack_slot_unsized(&value);
 
       self.builder.ins().call(self.funcs.track, &[arg_ptr]);
     }
@@ -581,23 +569,7 @@ impl FuncBuilder<'_> {
             mir::StringInterp::Expr(e) => self.compile_expr(*e),
           };
 
-          let append_str = to_append.to_ir(ParamKind::Extended(None), &mut self.builder);
-
-          let arg_slot = self.builder.create_sized_stack_slot(StackSlotData {
-            kind: StackSlotKind::ExplicitSlot,
-            // Each argument is 8 bytes wide.
-            size: append_str.len() as u32 * 8,
-          });
-          let mut slot_index = 0;
-          for &v in append_str.iter() {
-            self.builder.ins().stack_store(v, arg_slot, slot_index * 8);
-            slot_index += 1;
-          }
-
-          let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, arg_slot, 0);
-
-          let mut args = vec![str_addr];
-          args.extend(append_str);
+          let arg_ptr = self.stack_slot_unsized(&to_append);
 
           self.builder.ins().call(self.funcs.string_append_value, &[str_addr, arg_ptr]);
         }
@@ -784,32 +756,8 @@ impl FuncBuilder<'_> {
             // TODO: Theres a couple more branches we could optimize for here, but the dynamic path
             // is nice to fall back on.
             (_, _) => {
-              let l_ir = lhs.to_ir(ParamKind::Extended(None), &mut self.builder);
-              let r_ir = rhs.to_ir(ParamKind::Extended(None), &mut self.builder);
-
-              let l_slot = self.builder.create_sized_stack_slot(StackSlotData {
-                kind: StackSlotKind::ExplicitSlot,
-                size: l_ir.len() as u32 * 8,
-              });
-              let r_slot = self.builder.create_sized_stack_slot(StackSlotData {
-                kind: StackSlotKind::ExplicitSlot,
-                size: r_ir.len() as u32 * 8,
-              });
-
-              let mut slot_index = 0;
-              for &v in l_ir.iter() {
-                self.builder.ins().stack_store(v, l_slot, slot_index * 8);
-                slot_index += 1;
-              }
-
-              let mut slot_index = 0;
-              for &v in r_ir.iter() {
-                self.builder.ins().stack_store(v, r_slot, slot_index * 8);
-                slot_index += 1;
-              }
-
-              let l_addr = self.builder.ins().stack_addr(ir::types::I64, l_slot, 0);
-              let r_addr = self.builder.ins().stack_addr(ir::types::I64, r_slot, 0);
+              let l_addr = self.stack_slot_unsized(&lhs);
+              let r_addr = self.stack_slot_unsized(&rhs);
 
               let ret = self.builder.ins().call(self.funcs.value_equals, &[l_addr, r_addr]);
 
@@ -965,5 +913,22 @@ impl FuncBuilder<'_> {
       },
       _ => unimplemented!("return type {ret_ty:?}"),
     }
+  }
+
+  /// Creates a stack slot that stores a single unsized value, and returns the
+  /// address to that slot. Used when calling native functions.
+  fn stack_slot_unsized(&mut self, value: &RValue) -> ir::Value {
+    let ir = value.to_ir(ParamKind::Extended(None), &mut self.builder);
+
+    let slot = self.builder.create_sized_stack_slot(StackSlotData {
+      kind: StackSlotKind::ExplicitSlot,
+      size: ir.len() as u32 * 8,
+    });
+
+    for (i, &v) in ir.iter().enumerate() {
+      self.builder.ins().stack_store(v, slot, i as i32 * 8);
+    }
+
+    self.builder.ins().stack_addr(ir::types::I64, slot, 0)
   }
 }
