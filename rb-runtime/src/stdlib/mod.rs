@@ -78,77 +78,11 @@ impl Environment {
         let ret = unsafe { &mut *ret };
 
         let args = unsafe {
-          let arg_value = &*arg;
+          let mut parser = RebarArgsParser::new(arg);
 
           let mut args = vec![];
-          let mut offset = 0;
           for ty in f.args.iter() {
-            let dvt = DynamicValueType::for_type(ty);
-
-            let value = match dvt {
-              DynamicValueType::Const(vt) => {
-                match ty {
-                  Type::Literal(Literal::Unit) => Value::Nil,
-                  // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
-                  Type::Literal(Literal::Bool) => {
-                    // The value will always take up 8 bytes, even if less bytes are used.
-                    let value = *arg_value.arg(offset);
-                    offset += 1;
-                    Value::Bool(value as u8 != 0)
-                  }
-                  Type::Literal(Literal::Int) => {
-                    // The value will always take up 8 bytes, even if less bytes are used.
-                    let value = *arg_value.arg(offset);
-                    offset += 1;
-                    Value::Int(value)
-                  }
-                  Type::Literal(Literal::String) => {
-                    // SAFETY: `value` came from rebar, so we assume its a valid pointer.
-                    // The value will always take up 8 bytes, even if less bytes are used.
-                    let len = *arg_value.arg(offset);
-                    offset += 1;
-                    let _cap = *arg_value.arg(offset);
-                    offset += 1;
-                    let ptr = *arg_value.arg(offset);
-                    offset += 1;
-                    let str = ::std::str::from_utf8_unchecked(slice::from_raw_parts(
-                      ptr as *const u8,
-                      len as usize,
-                    ));
-
-                    Value::String(str.into())
-                  }
-                  v => unimplemented!("{v:?}"),
-                }
-              }
-              DynamicValueType::Union(_) => {
-                // A nil will only take up one slot, so we must check for that to avoid reading
-                // out of bounds.
-                let dyn_ty = *arg_value.arg(offset);
-                offset += 1;
-
-                let vt = ValueType::try_from(dyn_ty).unwrap();
-
-                match vt {
-                  ValueType::Nil => Value::Nil,
-                  _ => {
-                    // `offset` was just incremented, so read the next slot to get the actual
-                    // value.
-                    let value = *arg_value.arg(offset);
-                    offset += 1;
-
-                    match vt {
-                      // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
-                      ValueType::Bool => Value::Bool(value as u8 != 0),
-                      ValueType::Int => Value::Int(value),
-                      _ => todo!("extended form for value type {vt:?}"),
-                    }
-                  }
-                }
-              }
-            };
-
-            args.push(value);
+            args.push(parser.value(ty));
           }
           args
         };
@@ -495,6 +429,62 @@ impl FunctionRet for String {
 impl FunctionRet for () {
   fn static_type() -> Type { Type::Literal(Literal::Unit) }
   fn into_value(self) -> Value { Value::Nil }
+}
+
+pub struct RebarArgsParser {
+  args:   *const RebarArgs,
+  offset: usize,
+}
+
+impl RebarArgsParser {
+  pub fn new(args: *const RebarArgs) -> Self { RebarArgsParser { args, offset: 0 } }
+
+  unsafe fn next(&mut self) -> i64 {
+    let v = *(&*self.args).arg(self.offset) as i64;
+    self.offset += 1;
+    v
+  }
+
+  unsafe fn value_const(&mut self, vt: ValueType) -> Value {
+    match vt {
+      ValueType::Nil => Value::Nil,
+      // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
+      ValueType::Bool => {
+        // The value will always take up 8 bytes, even if less bytes are used.
+        Value::Bool(self.next() as u8 != 0)
+      }
+      ValueType::Int => Value::Int(self.next()),
+      ValueType::String => {
+        // SAFETY: `value` came from rebar, so we assume its a valid pointer.
+        // The value will always take up 8 bytes, even if less bytes are used.
+        let len = self.next();
+        let _cap = self.next();
+        let ptr = self.next();
+        let str =
+          ::std::str::from_utf8_unchecked(slice::from_raw_parts(ptr as *const u8, len as usize));
+
+        Value::String(str.into())
+      }
+      v => unimplemented!("{v:?}"),
+    }
+  }
+
+  pub unsafe fn value(&mut self, ty: &Type) -> Value {
+    let dvt = DynamicValueType::for_type(ty);
+
+    match dvt {
+      DynamicValueType::Const(vt) => self.value_const(vt),
+      DynamicValueType::Union(_) => {
+        // A nil will only take up one slot, so we must check for that to avoid reading
+        // out of bounds.
+        let dyn_ty = self.next();
+
+        let vt = ValueType::try_from(dyn_ty).unwrap();
+
+        self.value_const(vt)
+      }
+    }
+  }
 }
 
 #[cfg(test)]
