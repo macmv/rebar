@@ -1,3 +1,6 @@
+let interpolated = "hello #{1 + 2}"
+println(interpolated)
+
 let s = replace("hello!", "e", "a")
 
 assert(s == "hallo!")

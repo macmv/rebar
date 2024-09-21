@@ -31,6 +31,8 @@ pub enum Expr {
   Literal(Literal),
   Name(String),
 
+  StringInterp(Vec<StringInterp>),
+
   Call(ExprId, Vec<ExprId>),
   UnaryOp(ExprId, UnaryOp),
   BinaryOp(ExprId, BinaryOp, ExprId),
@@ -41,6 +43,12 @@ pub enum Expr {
   If { cond: ExprId, then: ExprId, els: Option<ExprId> },
 
   Assign { lhs: ExprId, rhs: ExprId },
+}
+
+#[derive(Clone, Debug)]
+pub enum StringInterp {
+  Literal(String),
+  Expr(ExprId),
 }
 
 #[derive(Clone, Debug)]
