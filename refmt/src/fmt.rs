@@ -100,6 +100,8 @@ impl FormatterContext<'_> {
         (Space, if self.multiline { Newline } else { Space })
       }
 
+      (T!['{'] | T!['}'], INTERPOLATION) => (None, None),
+
       (T!['}'], _) if self.multiline => (Newline, None),
       (T!['{'], _) if self.multiline => (None, Newline),
       (T!['}'], _) => (Space, None),
@@ -153,9 +155,26 @@ impl FormatterContext<'_> {
       match node {
         NodeOrToken::Node(ref n) => {
           match n.kind() {
-            // Leave strings alone.
+            // Special case: leave the insides of strings alone, except for interpolations, which
+            // we want to format.
             STRING => {
-              self.out += &n.text().to_string().trim();
+              let s = cst::String::cast(n.clone()).unwrap();
+
+              let str = n.text().to_string();
+
+              let start = n.text_range().start();
+              let mut prev = 0;
+              for interpolation in s.interpolations() {
+                let range = interpolation.syntax().text_range();
+
+                self.out += &str[prev..u32::from(range.start() - start) as usize];
+                self.fmt_syntax(interpolation.syntax(), false);
+
+                prev = u32::from(range.end() - start) as usize;
+              }
+
+              self.out += &str[prev..];
+
               continue;
             }
             _ => {}
@@ -732,6 +751,18 @@ mod tests {
       "#,
       expect![@r#"
         assert_eq("  h  ", "  h  ")
+      "#],
+    );
+  }
+
+  #[test]
+  fn interpolated_string() {
+    check(
+      r#"
+        "hello #{  2  +  3  }"
+      "#,
+      expect![@r#"
+        "hello #{2 + 3}"
       "#],
     );
   }
