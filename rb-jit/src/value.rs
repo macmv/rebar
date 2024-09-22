@@ -41,14 +41,17 @@ pub enum ValueType {
 #[derive(Debug, Clone, PartialEq)]
 pub enum DynamicValueType {
   Const(ValueType),
-  Union(Vec<ValueType>),
+
+  /// Maximum size of any type that can be stored in this slot. NB: Doesn't
+  /// include the type tag.
+  Union(u32),
 }
 
 impl DynamicValueType {
   pub fn encode(&self) -> i64 {
     match self {
       DynamicValueType::Const(ty) => ty.as_i64(),
-      DynamicValueType::Union(_) => -(self.len() as i64),
+      DynamicValueType::Union(len) => -(*len as i64),
     }
   }
 
@@ -56,8 +59,7 @@ impl DynamicValueType {
     if value >= 0 {
       DynamicValueType::Const(ValueType::try_from(value).unwrap())
     } else {
-      // FIXME
-      DynamicValueType::Union(vec![])
+      DynamicValueType::Union(-value as u32)
     }
   }
 }
@@ -342,10 +344,7 @@ impl DynamicValueType {
   pub fn len(&self) -> u32 {
     match self {
       DynamicValueType::Const(ty) => ty.len(),
-      DynamicValueType::Union(tys) => {
-        let max = tys.iter().map(ValueType::len).max().unwrap();
-        max + 1 // Add in the type tag
-      }
+      DynamicValueType::Union(len) => *len + 1, // Add 1 for the type tag.
     }
   }
 
@@ -372,11 +371,12 @@ impl DynamicValueType {
       Type::Union(tys) => DynamicValueType::Union(
         tys
           .iter()
-          .flat_map(|ty| match DynamicValueType::for_type(ty) {
-            DynamicValueType::Const(ty) => vec![ty],
-            DynamicValueType::Union(tys) => tys,
+          .map(|ty| match DynamicValueType::for_type(ty) {
+            DynamicValueType::Const(ty) => ty.len(),
+            DynamicValueType::Union(len) => len,
           })
-          .collect(),
+          .max()
+          .unwrap(),
       ),
       Type::Function(..) => todo!("function types to values"),
     }
