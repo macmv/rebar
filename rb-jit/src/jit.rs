@@ -616,9 +616,6 @@ impl FuncBuilder<'_> {
           self.builder.ins().call(self.funcs.array_push, &[result_ptr, slot_size_v, arg_ptr]);
         }
 
-        // Now that we're done mutating the slot, we can track the value in the GC (and
-        // we can drop the `cap` amount, because we don't need that anymore, now that
-        // the string is immutable).
         let result = RValue {
           ty:     Value::Const(ValueType::Array),
           values: vec![Value::Dyn(result_ptr), Value::Const(vt.encode())],
