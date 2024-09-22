@@ -2,5 +2,6 @@
 // the HIR tree once implemented.
 
 // pub mod interp;
+pub mod array;
 pub mod jit;
 pub mod value;
