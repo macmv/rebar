@@ -236,18 +236,8 @@ impl Environment {
     ENV.with(|_env| {
       let mut array = unsafe { ManuallyDrop::new(Box::from_raw(array)) };
 
-      let slice = unsafe {
-        let mut parser = RebarArgsParser::new(arg);
-        // Parse the value.
-        parser.value_unsized();
+      let slice = unsafe { ::std::slice::from_raw_parts(arg as *const i64, slot_size as usize) };
 
-        // Then, the resulting offset is the length of the item.
-        let len = parser.offset;
-
-        ::std::slice::from_raw_parts(arg as *const i64, len)
-      };
-
-      assert!(slice.len() <= slot_size as usize);
       array.extend(slice);
       for _ in slice.len()..slot_size as usize {
         array.push(0);

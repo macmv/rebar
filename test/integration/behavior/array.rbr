@@ -1,2 +1,2 @@
-let items = [1, 2, 3, true]
+let items = [1, 2, 3]
 println("#{items}")
