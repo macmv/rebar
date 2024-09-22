@@ -87,7 +87,8 @@ impl Environment {
 
           let mut args = vec![];
           for ty in f.args.iter() {
-            args.push(parser.value(ty));
+            let dvt = DynamicValueType::for_type(ty);
+            args.push(parser.value(dvt));
           }
           args
         };
@@ -205,7 +206,21 @@ impl Environment {
       match arg_value {
         Value::Int(i) => write!(str_value, "{}", i).unwrap(),
         Value::String(s) => str_value.push_str(s),
-        Value::Array(v, vt) => write!(str_value, "{v:?} of {vt:?}").unwrap(),
+        Value::Array(v, vt) => {
+          let mut values = vec![];
+
+          for chunk in v.chunks(vt.len() as usize) {
+            let v = unsafe {
+              let args = chunk.as_ptr() as *const RebarArgs;
+              let mut parser = RebarArgsParser::new(args);
+              parser.value(vt)
+            };
+
+            values.push(v);
+          }
+
+          write!(str_value, "{values:?}").unwrap()
+        }
         _ => panic!("expected string"),
       }
 
@@ -545,9 +560,7 @@ impl<'a> RebarArgsParser<'a> {
     }
   }
 
-  pub unsafe fn value(&mut self, ty: &Type) -> Value<'a> {
-    let dvt = DynamicValueType::for_type(ty);
-
+  pub unsafe fn value(&mut self, dvt: DynamicValueType) -> Value<'a> {
     let start = self.offset;
     let v = match dvt {
       DynamicValueType::Const(vt) => self.value_const(vt),
@@ -566,7 +579,7 @@ impl<'a> RebarArgsParser<'a> {
     if self.offset < expected_end {
       self.offset = expected_end;
     } else if self.offset > expected_end {
-      panic!("read too many slots while parsing argument of type {ty:?}");
+      panic!("read too many slots while parsing argument of type {dvt:?}");
     }
 
     v
