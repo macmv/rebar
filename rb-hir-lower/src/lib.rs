@@ -173,6 +173,16 @@ impl FunctionLower<'_, '_> {
         }
       }
 
+      cst::Expr::ArrayExpr(ref arr) => {
+        let mut items = vec![];
+
+        for expr in arr.exprs() {
+          items.push(self.expr(expr));
+        }
+
+        hir::Expr::Array(items)
+      }
+
       cst::Expr::Name(ref name) => {
         let name = name.ident_token().unwrap().to_string();
 
