@@ -107,7 +107,12 @@ impl Lower<'_> {
       hir::Expr::Array(ref exprs) => {
         let exprs = exprs.iter().map(|expr| self.lower_expr(*expr)).collect();
 
-        mir::Expr::Array(exprs)
+        let ty = match self.ty.type_of_expr(expr) {
+          Type::Array(ty) => *ty,
+          _ => unreachable!(),
+        };
+
+        mir::Expr::Array(exprs, ty)
       }
 
       // HIR should have fully qualified names, and the typer should get the type of this name.

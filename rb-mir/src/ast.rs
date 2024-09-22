@@ -46,7 +46,7 @@ pub enum Expr {
   Call(ExprId, Type, Vec<ExprId>),
 
   StringInterp(Vec<StringInterp>),
-  Array(Vec<ExprId>),
+  Array(Vec<ExprId>, Type),
 
   Unary(ExprId, UnaryOp, Type),
   Binary(ExprId, BinaryOp, ExprId, Type),
