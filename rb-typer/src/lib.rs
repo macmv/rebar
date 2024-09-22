@@ -172,6 +172,17 @@ impl<'a> Typer<'a> {
         VType::Literal(ty::Literal::String)
       }
 
+      hir::Expr::Array(ref exprs) => {
+        let v = self.fresh_var(self.span(expr), format!("array element"));
+
+        for &expr in exprs {
+          let e = self.type_expr(expr);
+          self.constrain(&e, &VType::Var(v), self.span(expr));
+        }
+
+        VType::Array(Box::new(VType::Var(v)))
+      }
+
       hir::Expr::Call(lhs_expr, ref args) => {
         let lhs = self.type_expr(lhs_expr);
 
