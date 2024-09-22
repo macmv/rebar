@@ -4,7 +4,7 @@ use gc_arena::{lock::GcRefLock, Arena, Collect, Gc, Rootable};
 
 mod value;
 
-use crate::Value;
+use crate::GcValue;
 
 #[derive(Collect)]
 #[collect(no_drop)]
@@ -26,7 +26,7 @@ pub struct Stack<'gc> {
 #[derive(Default, Collect)]
 #[collect(no_drop)]
 pub struct Frame<'gc> {
-  pub values: HashMap<GcId, Gc<'gc, Value>>,
+  pub values: HashMap<GcId, Gc<'gc, GcValue>>,
 }
 
 /// An opaque ID for a GC'ed object. This is usually just the pointer to the
@@ -53,7 +53,7 @@ fn gc_works() {
 
     // When a value like `Value::String` is created, it's inserted into the current
     // frame (note that we don't need mutable access here).
-    let v = Value::String("hello".into());
+    let v = GcValue::String("hello".into());
     thread.frames.last().unwrap().borrow_mut(m).values.insert(v.gc_id(), Gc::new(m, v));
 
     // When a function returns, this is called.

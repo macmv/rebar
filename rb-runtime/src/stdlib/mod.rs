@@ -1,4 +1,6 @@
-use ::std::{cell::RefCell, collections::HashMap, fmt::Write, mem::ManuallyDrop, slice};
+use ::std::{
+  cell::RefCell, collections::HashMap, fmt::Write, marker::PhantomData, mem::ManuallyDrop, slice,
+};
 
 mod core;
 mod std;
@@ -24,7 +26,7 @@ pub struct Function {
   args: Vec<Type>,
   ret:  Type,
 
-  imp: Box<dyn Fn(Vec<Value>) -> Value>,
+  imp: Box<dyn Fn(Vec<Value>) -> OwnedValue>,
 }
 
 // This works pretty well, but it would be nice to support multithreading, and
@@ -58,7 +60,7 @@ impl Environment {
     }
   }
 
-  fn track_value(&self, value: Value) {
+  fn track_value(&self, value: GcValue) {
     self.gc.mutate(|m, root| {
       let tid = 3; // FIXME: Use ThreadId.
 
@@ -108,7 +110,7 @@ impl Environment {
               ret.ret(0, str.len() as i64);
               ret.ret(1, ptr);
 
-              env.track_value(Value::String(str));
+              env.track_value(GcValue::String(str));
             }
             ref v => unimplemented!("{v:?}"),
           }
@@ -202,7 +204,7 @@ impl Environment {
 
       match arg_value {
         Value::Int(i) => write!(str_value, "{}", i).unwrap(),
-        Value::String(s) => str_value.push_str(s.as_str()),
+        Value::String(s) => str_value.push_str(s),
         Value::Array(v) => write!(str_value, "{v:?}").unwrap(),
         _ => panic!("expected string"),
       }
@@ -282,17 +284,41 @@ pub trait DynFunction<T> {
   fn into_function(self) -> Function;
 }
 
+/// An owned, garbage collected value. This is created from the rebar values, so
+/// it almost always shows up as a `ManuallyDrop<GcValue>`, as we need to
+/// control dropping behavior.
+///
+/// Using `GcValue::gc_id`, we can check if we've already tracked a value. If we
+/// haven't then the owned value is added to the garbage collector.
 #[derive(Debug, Collect, PartialEq)]
 #[collect(no_drop)]
-pub enum Value {
-  Nil,
-  Int(i64),
-  Bool(bool),
+pub enum GcValue {
   String(String),
   Array(Box<Vec<i64>>),
 }
 
-impl Value {
+/// A value with references to rebar values. This typically has the lifetime of
+/// the native rust function that is being passed this value.
+#[derive(Debug, PartialEq)]
+pub enum Value<'a> {
+  Nil,
+  Int(i64),
+  Bool(bool),
+  String(&'a str),
+  Array(&'a Vec<i64>),
+}
+
+/// An owned value, created from rust, that will be passed back to rebar.
+#[derive(Debug, PartialEq)]
+pub enum OwnedValue {
+  Nil,
+  Int(i64),
+  Bool(bool),
+  String(String),
+  Array(Vec<i64>),
+}
+
+impl Value<'_> {
   pub fn as_int(&self) -> i64 {
     match self {
       Value::Int(i) => *i,
@@ -307,21 +333,45 @@ impl Value {
     }
   }
 
-  pub fn as_str(&self) -> &String {
+  pub fn as_str(&self) -> &str {
     match self {
       Value::String(s) => s,
       _ => panic!("expected str"),
     }
   }
+}
 
+impl OwnedValue {
+  pub fn as_int(&self) -> i64 {
+    match self {
+      OwnedValue::Int(i) => *i,
+      _ => panic!("expected int"),
+    }
+  }
+
+  pub fn as_bool(&self) -> bool {
+    match self {
+      OwnedValue::Bool(b) => *b,
+      _ => panic!("expected bool"),
+    }
+  }
+
+  pub fn as_str(&self) -> &str {
+    match self {
+      OwnedValue::String(s) => s,
+      _ => panic!("expected str"),
+    }
+  }
+}
+
+impl GcValue {
   pub fn gc_id(&self) -> GcId {
     match self {
-      Value::String(s) => GcId(s.as_ptr() as u64),
-      Value::Array(b) => {
+      GcValue::String(s) => GcId(s.as_ptr() as u64),
+      GcValue::Array(b) => {
         let ptr = &**b as *const Vec<i64>;
         GcId(ptr as u64)
       }
-      _ => panic!("cannot gc {self:?}"),
     }
   }
 }
@@ -341,7 +391,7 @@ trait FunctionArg {
 
 trait FunctionRet {
   fn static_type() -> Type;
-  fn into_value(self) -> Value;
+  fn into_value(self) -> OwnedValue;
 }
 
 // Write a macro to generate the following From for Function impls:
@@ -384,7 +434,7 @@ impl FunctionArg for i64 {
 }
 impl FunctionRet for i64 {
   fn static_type() -> Type { Type::Literal(Literal::Int) }
-  fn into_value(self) -> Value { Value::Int(self) }
+  fn into_value(self) -> OwnedValue { OwnedValue::Int(self) }
 }
 
 impl FunctionArg for bool {
@@ -398,14 +448,14 @@ impl FunctionArg for bool {
 }
 impl FunctionRet for bool {
   fn static_type() -> Type { Type::Literal(Literal::Bool) }
-  fn into_value(self) -> Value { Value::Bool(self) }
+  fn into_value(self) -> OwnedValue { OwnedValue::Bool(self) }
 }
 
 impl FunctionArg for String {
   fn static_type() -> Type { Type::Literal(Literal::String) }
   fn from_value(v: Value) -> Self {
     match v {
-      Value::String(s) => s,
+      Value::String(s) => s.into(),
       _ => panic!("expected string"),
     }
   }
@@ -413,21 +463,25 @@ impl FunctionArg for String {
 
 impl FunctionRet for String {
   fn static_type() -> Type { Type::Literal(Literal::String) }
-  fn into_value(self) -> Value { Value::String(self) }
+  fn into_value(self) -> OwnedValue { OwnedValue::String(self) }
 }
 
 impl FunctionRet for () {
   fn static_type() -> Type { Type::Literal(Literal::Unit) }
-  fn into_value(self) -> Value { Value::Nil }
+  fn into_value(self) -> OwnedValue { OwnedValue::Nil }
 }
 
-pub struct RebarArgsParser {
+pub struct RebarArgsParser<'a> {
   args:   *const RebarArgs,
   offset: usize,
+
+  _phantom: PhantomData<&'a ()>,
 }
 
-impl RebarArgsParser {
-  pub fn new(args: *const RebarArgs) -> Self { RebarArgsParser { args, offset: 0 } }
+impl<'a> RebarArgsParser<'a> {
+  pub fn new(args: *const RebarArgs) -> Self {
+    RebarArgsParser { args, offset: 0, _phantom: PhantomData }
+  }
 
   unsafe fn next(&mut self) -> i64 {
     let v = *(&*self.args).arg(self.offset) as i64;
@@ -435,7 +489,7 @@ impl RebarArgsParser {
     v
   }
 
-  unsafe fn value_const(&mut self, vt: ValueType) -> Value {
+  unsafe fn value_const(&mut self, vt: ValueType) -> Value<'a> {
     match vt {
       ValueType::Nil => Value::Nil,
       // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
@@ -452,23 +506,20 @@ impl RebarArgsParser {
         let str =
           ::std::str::from_utf8_unchecked(slice::from_raw_parts(ptr as *const u8, len as usize));
 
-        Value::String(str.into())
+        Value::String(str)
       }
       ValueType::Array => {
         let ptr = self.next();
 
-        let array_ptr = ptr as *mut Vec<i64>;
-        let arr = ManuallyDrop::new(Box::from_raw(array_ptr));
+        let arr = &*(ptr as *const Vec<i64>) as &Vec<i64>;
 
-        let slice = arr.as_slice();
-
-        Value::Array(Box::new(slice.into()))
+        Value::Array(arr)
       }
       v => unimplemented!("{v:?}"),
     }
   }
 
-  unsafe fn value_owned(&mut self, vt: ValueType) -> ManuallyDrop<Value> {
+  unsafe fn value_owned(&mut self, vt: ValueType) -> ManuallyDrop<GcValue> {
     match vt {
       ValueType::String => {
         // Rebar always shrinks strings before throwing them on the stack, so the len
@@ -481,18 +532,18 @@ impl RebarArgsParser {
           len as usize,
         ));
 
-        ManuallyDrop::new(Value::String(str.into()))
+        ManuallyDrop::new(GcValue::String(str))
       }
       ValueType::Array => {
         let ptr = self.next();
 
-        ManuallyDrop::new(Value::Array(Box::from_raw(ptr as *mut Vec<i64>)))
+        ManuallyDrop::new(GcValue::Array(Box::from_raw(ptr as *mut Vec<i64>)))
       }
       _ => unreachable!("not an owned value: {vt:?}"),
     }
   }
 
-  pub unsafe fn value(&mut self, ty: &Type) -> Value {
+  pub unsafe fn value(&mut self, ty: &Type) -> Value<'a> {
     let dvt = DynamicValueType::for_type(ty);
 
     let start = self.offset;
@@ -523,14 +574,14 @@ impl RebarArgsParser {
   /// value passed in changes type, the amount of slots parsed could change,
   /// which makes this inconsistent. So, after calling this, a subsequent
   /// value cannot be parsed.
-  pub unsafe fn value_unsized(&mut self) -> Value {
+  pub unsafe fn value_unsized(&mut self) -> Value<'a> {
     let ty = self.next();
     let vt = ValueType::try_from(ty).unwrap();
     self.value_const(vt)
   }
 
   /// Parses a value to get tracked by the GC.
-  pub unsafe fn value_owned_unsized(&mut self) -> ManuallyDrop<Value> {
+  pub unsafe fn value_owned_unsized(&mut self) -> ManuallyDrop<GcValue> {
     let ty = self.next();
     let vt = ValueType::try_from(ty).unwrap();
     self.value_owned(vt)
