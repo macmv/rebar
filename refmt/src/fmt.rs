@@ -766,4 +766,25 @@ mod tests {
       "#],
     );
   }
+
+  #[test]
+  fn arrays() {
+    check(
+      r#"
+        [  ]
+      "#,
+      expect![@r#"
+        []
+      "#],
+    );
+
+    check(
+      r#"
+        [  1  ,  2  ,  3  ]
+      "#,
+      expect![@r#"
+        [1, 2, 3]
+      "#],
+    );
+  }
 }
