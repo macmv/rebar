@@ -99,6 +99,7 @@ impl<'a> Typer<'a> {
   fn lower_type(&self, ty: &VType) -> Type {
     match ty {
       VType::Literal(lit) => Type::Literal(*lit),
+      VType::Array(ty) => Type::Array(Box::new(self.lower_type(ty))),
       VType::Function(args, ret) => Type::Function(
         args.iter().map(|t| self.lower_type(t)).collect(),
         Box::new(self.lower_type(ret)),

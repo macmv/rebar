@@ -134,6 +134,12 @@ impl Constrain<'_, '_> {
         }
       }
 
+      (VType::Array(v), VType::Array(u)) => {
+        self.ctx(format!("constraining {v:?} to {u:?}"), None, |c| {
+          c.constrain(v, u, span);
+        });
+      }
+
       (VType::Function(va, vr), VType::Function(ua, ur)) => {
         if va.len() != ua.len() {
           self.error(TypeError::NotSubtype(v.clone(), u.clone()));

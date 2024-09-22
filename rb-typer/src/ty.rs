@@ -7,6 +7,7 @@ use rb_diagnostic::Span;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
   Literal(Literal),
+  Array(Box<Type>),
 
   Function(Vec<Type>, Box<Type>),
   Union(Vec<Type>),
@@ -22,6 +23,17 @@ pub struct Environment {
 pub enum VType {
   Literal(Literal),
 
+  // TODO: Should arrays have a length in the type?
+  //
+  // Some advantages:
+  // - Pattern matching
+  // - No need for tuples
+  //
+  // Some disadvantages:
+  // - Mutating an array changes the type (I think that's already a problem though?)
+  // - Tuples can live on the stack, and arrays can't really.
+  Array(Box<VType>),
+
   Function(Vec<VType>, Box<VType>),
 
   // TODO: Build unions sometimes.
@@ -36,6 +48,7 @@ impl From<Type> for VType {
   fn from(ty: Type) -> Self {
     match ty {
       Type::Literal(lit) => VType::Literal(lit),
+      Type::Array(ty) => VType::Array(Box::new((*ty).into())),
       Type::Function(args, ret) => {
         VType::Function(args.into_iter().map(Into::into).collect(), Box::new((*ret).into()))
       }
