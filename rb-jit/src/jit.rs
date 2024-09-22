@@ -906,13 +906,7 @@ impl FuncBuilder<'_> {
   ) -> RValue {
     assert_eq!(args.len(), arg_types.len());
 
-    // FIXME: This needs to be more generic.
-    let ret_len = match ret_ty {
-      Type::Literal(Literal::Unit) => 0,
-      Type::Literal(Literal::Int) => 1,
-      Type::Literal(Literal::String) => 3,
-      _ => unimplemented!("return type {ret_ty:?}"),
-    };
+    let ret_dvt = DynamicValueType::for_type(ret_ty);
 
     let arg_len = args.iter().map(|v| v.len()).sum::<usize>();
 
@@ -924,7 +918,7 @@ impl FuncBuilder<'_> {
     let ret_slot = self.builder.create_sized_stack_slot(StackSlotData {
       kind: StackSlotKind::ExplicitSlot,
       // Each return value is 8 bytes wide.
-      size: ret_len as u32 * 8,
+      size: ret_dvt.len() * 8,
     });
 
     let mut slot_index = 0;
@@ -940,19 +934,23 @@ impl FuncBuilder<'_> {
 
     self.builder.ins().call(self.funcs.call, &[native, arg_ptr, ret_ptr]);
 
-    match ret_ty {
-      Type::Literal(Literal::Unit) => RValue::nil(),
-      Type::Literal(Literal::Int) => {
-        RValue::int(self.builder.ins().stack_load(ir::types::I64, ret_slot, 0))
-      }
-      Type::Literal(Literal::String) => RValue {
+    match ret_dvt {
+      DynamicValueType::Const(vt) => RValue {
         ty:     Value::Const(ValueType::String),
-        values: vec![
-          Value::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, 0)),
-          Value::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, 8)),
-        ],
+        values: (0..vt.len())
+          .map(|i| {
+            Value::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, i as i32 * 8))
+          })
+          .collect(),
       },
-      _ => unimplemented!("return type {ret_ty:?}"),
+      DynamicValueType::Union(_) => RValue {
+        ty:     Value::Dyn(self.builder.ins().stack_load(ir::types::I64, ret_slot, 0)),
+        values: (0..ret_dvt.len())
+          .map(|i| {
+            Value::Dyn(self.builder.ins().stack_load(ir::types::I64, ret_slot, i as i32 * 8 + 8))
+          })
+          .collect(),
+      },
     }
   }
 
