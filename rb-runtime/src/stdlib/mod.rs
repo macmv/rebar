@@ -163,19 +163,15 @@ impl Environment {
         let id = value.gc_id();
         match frame.values.get(&id) {
           Some(_) => {
-            // Alright, now we've gotten into chaotic territory. Because this
+            // NB: Now we've gotten into chaotic territory. Because this
             // value is already tracked, it means we have just
-            // created an owned value (`parser.value_owned_unsized`)
-            // above, and that same value is already in the GC. That breaks all
-            // the assumptions! So we need to avoid dropping it to
-            // avoid a double free. Strictly speaking, we should
-            // have never created that owned value in the first place, but in
-            // practice it works out fine.
-
-            mem::forget(value);
+            // created an owned value `parser.value_owned_unsized`. However,
+            // that value is wrapped in a `ManuallyDrop`, so we
+            // don't need to do anything here, we can just
+            // forget about this value, as it's already in the GC.
           }
           None => {
-            frame.values.insert(id, Gc::new(&m, value));
+            frame.values.insert(id, Gc::new(&m, ManuallyDrop::into_inner(value)));
           }
         }
       });
@@ -432,7 +428,7 @@ impl RebarArgsParser {
     }
   }
 
-  unsafe fn value_owned(&mut self, vt: ValueType) -> Value {
+  unsafe fn value_owned(&mut self, vt: ValueType) -> ManuallyDrop<Value> {
     match vt {
       ValueType::String => {
         // Rebar always shrinks strings before throwing them on the stack, so the len
@@ -445,7 +441,7 @@ impl RebarArgsParser {
           len as usize,
         ));
 
-        Value::String(str.into())
+        ManuallyDrop::new(Value::String(str.into()))
       }
       _ => unreachable!("not an owned value: {vt:?}"),
     }
@@ -489,7 +485,7 @@ impl RebarArgsParser {
   }
 
   /// Parses a value to get tracked by the GC.
-  pub unsafe fn value_owned_unsized(&mut self) -> Value {
+  pub unsafe fn value_owned_unsized(&mut self) -> ManuallyDrop<Value> {
     let ty = self.next();
     let vt = ValueType::try_from(ty).unwrap();
     self.value_owned(vt)
