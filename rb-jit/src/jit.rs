@@ -11,7 +11,10 @@ use rb_mir::ast::{self as mir, UserFunctionId};
 use rb_typer::{Literal, Type};
 use std::{collections::HashMap, marker::PhantomPinned, mem::ManuallyDrop};
 
-use crate::value::{CompactValues, DynamicValueType, ParamKind, RValue, Value, ValueType};
+use crate::{
+  array::RbArray,
+  value::{CompactValues, DynamicValueType, ParamKind, RValue, Value, ValueType},
+};
 
 pub struct JIT {
   module: JITModule,
@@ -56,7 +59,7 @@ macro_rules! native_funcs {
   };
 }
 
-native_funcs!(call, push_frame, pop_frame, track, string_append_value, value_equals);
+native_funcs!(call, push_frame, pop_frame, track, string_append_value, array_push, value_equals);
 
 pub struct FuncBuilder<'a> {
   builder: FunctionBuilder<'a>,
@@ -110,6 +113,7 @@ pub struct RuntimeHelpers {
   pub pop_frame:           fn(),
   pub track:               fn(*const RebarArgs),
   pub string_append_value: fn(*const RebarArgs, *const RebarArgs),
+  pub array_push:          fn(*mut i64, i64, *const RebarArgs) -> *mut i64,
   pub value_equals:        fn(*const RebarArgs, *const RebarArgs) -> i8,
 }
 
@@ -133,6 +137,7 @@ impl JIT {
     builder.symbol("__pop_frame", helpers.pop_frame as *const _);
     builder.symbol("__track", helpers.track as *const _);
     builder.symbol("__string_append_value", helpers.string_append_value as *const _);
+    builder.symbol("__array_push", helpers.array_push as *const _);
     builder.symbol("__value_equals", helpers.value_equals as *const _);
 
     let mut module = JITModule::new(builder);
@@ -151,6 +156,12 @@ impl JIT {
     let mut string_append_value = module.make_signature();
     string_append_value.params.push(AbiParam::new(ir::types::I64));
     string_append_value.params.push(AbiParam::new(ir::types::I64));
+
+    let mut array_push = module.make_signature();
+    array_push.params.push(AbiParam::new(ir::types::I64));
+    array_push.params.push(AbiParam::new(ir::types::I64));
+    array_push.params.push(AbiParam::new(ir::types::I64));
+    array_push.returns.push(AbiParam::new(ir::types::I64));
 
     let mut value_equals = module.make_signature();
     value_equals.params.push(AbiParam::new(ir::types::I64));
@@ -171,6 +182,9 @@ impl JIT {
 
         string_append_value: module
           .declare_function("__string_append_value", Linkage::Import, &string_append_value)
+          .unwrap(),
+        array_push:          module
+          .declare_function("__array_push", Linkage::Import, &array_push)
           .unwrap(),
         value_equals:        module
           .declare_function("__value_equals", Linkage::Import, &value_equals)
@@ -474,6 +488,7 @@ impl FuncBuilder<'_> {
       Type::Literal(Literal::Int) => false,
       Type::Literal(Literal::Bool) => false,
       Type::Literal(Literal::String) => true,
+      Type::Array(_) => false, // TODO: Track arrays.
       Type::Union(vs) => vs.iter().any(|v| self.type_needs_gc(v)),
 
       // TODO: uhhhhhhhhhh
@@ -582,6 +597,48 @@ impl FuncBuilder<'_> {
         };
 
         self.track_value(&result);
+
+        result
+      }
+
+      mir::Expr::Array(ref exprs, ref ty) => {
+        // This is a bit more nonsense, especially because arrays are mutable.
+        //
+        // - First, we make a new array to work with. This is a bit harder than strings,
+        //   because arrays are thin pointers. So, we need to allocate our own buffer.
+        // - Next, we append things using the builtin `array_push` function, which takes
+        //   the size of each value in the array. Because arrays can contain unions and
+        //   such, the size of each value is only  determined by the type. So we need to
+        //   pass the type back to the runtime for it to allocate correctly.
+        // - Once we're done, we don't need to change anything. The initial array is
+        //   already tracked by the GC.
+
+        let slot_size = DynamicValueType::for_type(ty).len();
+
+        // We track this in the GC later, once we're done mutating it. For now, manually
+        // drop it so we don't double free.
+        let result_str = ManuallyDrop::new(RbArray::new(slot_size));
+
+        let mut result_ptr = self.builder.ins().iconst(ir::types::I64, result_str.as_ptr() as i64);
+        let slot_size_v = self.builder.ins().iconst(ir::types::I64, slot_size as i64);
+
+        for expr in exprs {
+          let to_append = self.compile_expr(*expr);
+          let arg_ptr = self.stack_slot_unsized(&to_append);
+
+          let res =
+            self.builder.ins().call(self.funcs.array_push, &[result_ptr, slot_size_v, arg_ptr]);
+          result_ptr = self.builder.inst_results(res)[0];
+        }
+
+        // Now that we're done mutating the slot, we can track the value in the GC (and
+        // we can drop the `cap` amount, because we don't need that anymore, now that
+        // the string is immutable).
+        let result =
+          RValue { ty: Value::Const(ValueType::Array), values: vec![Value::Dyn(result_ptr)] };
+
+        // TODO: Tracking arrays is hard.
+        // self.track_value(&result);
 
         result
       }

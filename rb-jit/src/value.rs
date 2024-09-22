@@ -27,6 +27,15 @@ pub enum ValueType {
   Function,
   UserFunction, // FIXME: Fix names
   String,
+
+  /// Array is a bit mystical. The value that lives on the stack is always a
+  /// pointer (arrays are thin pointers, so that they can be grown/shrunk
+  /// easily). However, the layout of the memory on the heap is defined by a
+  /// `DynamicValueType`. So, we don't need to store the array type here,
+  /// as that's only required when looking up array elements (which is a
+  /// specific operator, that can lookup the static type of the array
+  /// directly).
+  Array,
 }
 
 pub enum DynamicValueType {
@@ -67,6 +76,7 @@ impl AsIR for ValueType {
       ValueType::Function => 3,
       ValueType::UserFunction => 4,
       ValueType::String => 5,
+      ValueType::Array => 6,
     }
   }
 }
@@ -82,6 +92,7 @@ impl TryFrom<i64> for ValueType {
       3 => Ok(ValueType::Function),
       4 => Ok(ValueType::UserFunction),
       5 => Ok(ValueType::String),
+      6 => Ok(ValueType::Array),
       _ => Err(()),
     }
   }
@@ -299,7 +310,8 @@ impl ValueType {
       ValueType::Nil => 0,
       ValueType::Int => 1,
       ValueType::Bool => 1,
-      ValueType::String => 2,
+      ValueType::String => 2, // Fat pointer.
+      ValueType::Array => 1,  // Thin pointer.
 
       ValueType::Function => 1,
       ValueType::UserFunction => 1,
@@ -337,6 +349,7 @@ impl DynamicValueType {
       Type::Literal(Literal::Int) => DynamicValueType::Const(ValueType::Int),
       Type::Literal(Literal::Bool) => DynamicValueType::Const(ValueType::Bool),
       Type::Literal(Literal::String) => DynamicValueType::Const(ValueType::String),
+      Type::Array(_) => DynamicValueType::Const(ValueType::Array),
       Type::Union(tys) => DynamicValueType::Union(
         tys
           .iter()

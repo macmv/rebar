@@ -1,10 +1,11 @@
-use ::std::{cell::RefCell, collections::HashMap, fmt::Write, mem, mem::ManuallyDrop, slice};
+use ::std::{cell::RefCell, collections::HashMap, fmt::Write, mem::ManuallyDrop, slice};
 
 mod core;
 mod std;
 
 use gc_arena::{lock::RefLock, Collect, Gc};
 use rb_jit::{
+  array::RbArray,
   jit::{RebarArgs, RuntimeHelpers},
   value::{DynamicValueType, ValueType},
 };
@@ -53,6 +54,7 @@ impl Environment {
       pop_frame:           Self::pop_frame(),
       track:               Self::track,
       string_append_value: Self::string_append_value,
+      array_push:          Self::array_push,
       value_equals:        Self::value_equals,
     }
   }
@@ -202,6 +204,7 @@ impl Environment {
       match arg_value {
         Value::Int(i) => write!(str_value, "{}", i).unwrap(),
         Value::String(s) => str_value.push_str(s.as_str()),
+        Value::Array(v) => write!(str_value, "{v:?}").unwrap(),
         _ => panic!("expected string"),
       }
 
@@ -211,6 +214,28 @@ impl Environment {
         str.ret(2, str_value.as_ptr() as i64);
       }
     });
+  }
+
+  fn array_push(array: *mut i64, slot_size: i64, arg: *const RebarArgs) -> *mut i64 {
+    ENV.with(|_env| {
+      let mut array = unsafe { RbArray::from_raw_parts(array, u32::try_from(slot_size).unwrap()) };
+
+      let slice = unsafe {
+        let mut parser = RebarArgsParser::new(arg);
+        // Parse the value.
+        parser.value_unsized();
+
+        // Then, the resulting offset is the length of the item.
+        let len = parser.offset;
+
+        ::std::slice::from_raw_parts(arg as *const i64, len)
+      };
+
+      assert!(slice.len() <= slot_size as usize);
+      array.push(&slice);
+
+      array.into_ptr()
+    })
   }
 
   fn value_equals(a: *const RebarArgs, b: *const RebarArgs) -> i8 {
@@ -264,6 +289,7 @@ pub enum Value {
   Int(i64),
   Bool(bool),
   String(String),
+  Array(Vec<i64>),
 }
 
 impl Value {
@@ -423,6 +449,23 @@ impl RebarArgsParser {
           ::std::str::from_utf8_unchecked(slice::from_raw_parts(ptr as *const u8, len as usize));
 
         Value::String(str.into())
+      }
+      ValueType::Array => {
+        let ptr = self.next();
+
+        let array_ptr = ptr as *const i64;
+
+        if array_ptr.is_null() {
+          return Value::Array(vec![]);
+        } else {
+          let slot_size = 2; // FIXME: Pass this in from rebar.
+          let slice_len = *array_ptr * slot_size;
+          let slice_ptr = array_ptr.offset(2);
+
+          let slice = slice::from_raw_parts(slice_ptr as *const i64, slice_len as usize);
+
+          Value::Array(slice.into())
+        }
       }
       v => unimplemented!("{v:?}"),
     }
