@@ -943,9 +943,10 @@ impl FuncBuilder<'_> {
           })
           .collect(),
       },
-      DynamicValueType::Union(_) => RValue {
+      DynamicValueType::Union(len) => RValue {
         ty:     Value::Dyn(self.builder.ins().stack_load(ir::types::I64, ret_slot, 0)),
-        values: (0..ret_dvt.len())
+        // NB: Use `len`, not `ret_dvt.len()`, because we're reading the union tag by hand above.
+        values: (0..len)
           .map(|i| {
             Value::Dyn(self.builder.ins().stack_load(ir::types::I64, ret_slot, i as i32 * 8 + 8))
           })
