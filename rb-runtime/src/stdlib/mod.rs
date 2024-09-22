@@ -5,7 +5,6 @@ mod std;
 
 use gc_arena::{lock::RefLock, Collect, Gc};
 use rb_jit::{
-  array::RbArray,
   jit::{RebarArgs, RuntimeHelpers},
   value::{DynamicValueType, ValueType},
 };
@@ -216,9 +215,9 @@ impl Environment {
     });
   }
 
-  fn array_push(array: *mut i64, slot_size: i64, arg: *const RebarArgs) -> *mut i64 {
+  fn array_push(array: *mut Vec<i64>, slot_size: i64, arg: *const RebarArgs) {
     ENV.with(|_env| {
-      let mut array = unsafe { RbArray::from_raw_parts(array, u32::try_from(slot_size).unwrap()) };
+      let mut array = unsafe { ManuallyDrop::new(Box::from_raw(array)) };
 
       let slice = unsafe {
         let mut parser = RebarArgsParser::new(arg);
@@ -232,10 +231,11 @@ impl Environment {
       };
 
       assert!(slice.len() <= slot_size as usize);
-      array.push(&slice);
-
-      array.into_ptr()
-    })
+      array.extend(slice);
+      for _ in slice.len()..slot_size as usize {
+        array.push(0);
+      }
+    });
   }
 
   fn value_equals(a: *const RebarArgs, b: *const RebarArgs) -> i8 {
@@ -453,19 +453,12 @@ impl RebarArgsParser {
       ValueType::Array => {
         let ptr = self.next();
 
-        let array_ptr = ptr as *const i64;
+        let array_ptr = ptr as *mut Vec<i64>;
+        let arr = ManuallyDrop::new(Box::from_raw(array_ptr));
 
-        if array_ptr.is_null() {
-          return Value::Array(vec![]);
-        } else {
-          let slot_size = 2; // FIXME: Pass this in from rebar.
-          let slice_len = *array_ptr * slot_size;
-          let slice_ptr = array_ptr.offset(2);
+        let slice = arr.as_slice();
 
-          let slice = slice::from_raw_parts(slice_ptr as *const i64, slice_len as usize);
-
-          Value::Array(slice.into())
-        }
+        Value::Array(slice.into())
       }
       v => unimplemented!("{v:?}"),
     }

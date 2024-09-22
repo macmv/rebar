@@ -113,7 +113,7 @@ pub struct RuntimeHelpers {
   pub pop_frame:           fn(),
   pub track:               fn(*const RebarArgs),
   pub string_append_value: fn(*const RebarArgs, *const RebarArgs),
-  pub array_push:          fn(*mut i64, i64, *const RebarArgs) -> *mut i64,
+  pub array_push:          fn(*mut Vec<i64>, i64, *const RebarArgs),
   pub value_equals:        fn(*const RebarArgs, *const RebarArgs) -> i8,
 }
 
@@ -161,7 +161,6 @@ impl JIT {
     array_push.params.push(AbiParam::new(ir::types::I64));
     array_push.params.push(AbiParam::new(ir::types::I64));
     array_push.params.push(AbiParam::new(ir::types::I64));
-    array_push.returns.push(AbiParam::new(ir::types::I64));
 
     let mut value_equals = module.make_signature();
     value_equals.params.push(AbiParam::new(ir::types::I64));
@@ -602,33 +601,18 @@ impl FuncBuilder<'_> {
       }
 
       mir::Expr::Array(ref exprs, ref ty) => {
-        // This is a bit more nonsense, especially because arrays are mutable.
-        //
-        // - First, we make a new array to work with. This is a bit harder than strings,
-        //   because arrays are thin pointers. So, we need to allocate our own buffer.
-        // - Next, we append things using the builtin `array_push` function, which takes
-        //   the size of each value in the array. Because arrays can contain unions and
-        //   such, the size of each value is only  determined by the type. So we need to
-        //   pass the type back to the runtime for it to allocate correctly.
-        // - Once we're done, we don't need to change anything. The initial array is
-        //   already tracked by the GC.
-
         let slot_size = DynamicValueType::for_type(ty).len();
 
-        // We track this in the GC later, once we're done mutating it. For now, manually
-        // drop it so we don't double free.
-        let result_str = ManuallyDrop::new(RbArray::new(slot_size));
+        let result_box = Box::into_raw(Box::<Vec<i64>>::new(vec![]));
 
-        let mut result_ptr = self.builder.ins().iconst(ir::types::I64, result_str.as_ptr() as i64);
+        let result_ptr = self.builder.ins().iconst(ir::types::I64, result_box as i64);
         let slot_size_v = self.builder.ins().iconst(ir::types::I64, slot_size as i64);
 
         for expr in exprs {
           let to_append = self.compile_expr(*expr);
           let arg_ptr = self.stack_slot_unsized(&to_append);
 
-          let res =
-            self.builder.ins().call(self.funcs.array_push, &[result_ptr, slot_size_v, arg_ptr]);
-          result_ptr = self.builder.inst_results(res)[0];
+          self.builder.ins().call(self.funcs.array_push, &[result_ptr, slot_size_v, arg_ptr]);
         }
 
         // Now that we're done mutating the slot, we can track the value in the GC (and
