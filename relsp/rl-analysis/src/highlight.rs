@@ -68,7 +68,16 @@ impl Highlighter<'_> {
   fn visit_stmt(&mut self, stmt: hir::StmtId) {
     match self.func.stmts[stmt] {
       hir::Stmt::Expr(expr) => self.visit_expr(expr),
-      hir::Stmt::Let(_, expr) => self.visit_expr(expr),
+      hir::Stmt::Let(_, expr) => {
+        let span = self.span_map.let_stmts[&stmt];
+        self.hl.tokens.push(HighlightToken {
+          range:      span.range,
+          kind:       HighlightKind::Keyword,
+          modifierst: 0,
+        });
+
+        self.visit_expr(expr)
+      }
       hir::Stmt::Def(_, _, _) => {}
     }
   }

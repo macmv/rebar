@@ -121,7 +121,20 @@ impl FunctionLower<'_, '_> {
     };
 
     self.span_map.stmts.push(Span { file: self.source.source, range: cst.syntax().text_range() });
-    self.f.stmts.alloc(stmt)
+    let id = self.f.stmts.alloc(stmt);
+
+    match cst {
+      cst::Stmt::Let(ref let_stmt) => {
+        let span =
+          Span { file: self.source.source, range: let_stmt.let_token().unwrap().text_range() };
+
+        self.span_map.let_stmts.insert(id, span);
+      }
+
+      _ => {}
+    }
+
+    id
   }
 
   fn expr_opt(&mut self, cst: Option<cst::Expr>) -> hir::ExprId {
