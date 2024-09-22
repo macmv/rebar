@@ -19,6 +19,9 @@ pub struct RbArray {
 impl RbArray {
   pub fn new(slot_size: u32) -> Self { Self { slot_size, ptr: ptr::null_mut() } }
 
+  pub unsafe fn from_raw_parts(ptr: *mut i64, slot_size: u32) -> Self { Self { slot_size, ptr } }
+  pub fn into_ptr(self) -> *mut i64 { self.ptr }
+
   pub fn len(&self) -> usize {
     if self.ptr.is_null() {
       0
