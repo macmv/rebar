@@ -90,11 +90,19 @@ impl Highlighter<'_> {
       hir::Expr::Literal(hir::Literal::String(_)) => self.token(expr, HighlightKind::String),
 
       hir::Expr::StringInterp(ref segments) => {
+        self.token(expr, HighlightKind::String);
+
         for s in segments {
           match s {
-            hir::StringInterp::Literal(_) => self.token(expr, HighlightKind::String),
+            hir::StringInterp::Literal(_) => {}
             hir::StringInterp::Expr(expr) => self.visit_expr(*expr),
           }
+        }
+      }
+
+      hir::Expr::Array(ref items) => {
+        for i in items {
+          self.visit_expr(*i);
         }
       }
 
