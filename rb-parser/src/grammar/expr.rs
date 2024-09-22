@@ -50,7 +50,7 @@ fn expr_bp(p: &mut Parser, min_bp: u8, cond: bool) {
       lhs = m.complete(p, BINARY_EXPR);
     } else {
       match p.current() {
-        T![nl] | T![,] | T![')'] | T!['}'] | EOF => return,
+        T![nl] | T![,] | T![')'] | T![']'] | T!['}'] | EOF => return,
         T!['{'] if cond => return,
         _ => {
           p.error(format!("expected operator, got {:?}", p.current()));
@@ -125,6 +125,14 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
     }
 
     // test ok
+    // []
+    // [1, 2, 3]
+    T!['['] => {
+      arg_list(p, T!['['], T![']']);
+      Some(m.complete(p, ARRAY_EXPR))
+    }
+
+    // test ok
     // {
     //   print("hello")
     //   print("goodbye")
@@ -184,7 +192,9 @@ fn postfix_expr(p: &mut Parser, mut lhs: CompletedMarker) -> CompletedMarker {
       T!['('] => {
         let call = lhs.precede(p);
 
-        arg_list(p);
+        let m = p.start();
+        arg_list(p, T!['('], T![')']);
+        m.complete(p, ARG_LIST);
 
         call.complete(p, CALL_EXPR)
       }
@@ -195,11 +205,10 @@ fn postfix_expr(p: &mut Parser, mut lhs: CompletedMarker) -> CompletedMarker {
   lhs
 }
 
-fn arg_list(p: &mut Parser) {
-  let m = p.start();
-  p.eat(T!['(']);
+fn arg_list(p: &mut Parser, open: SyntaxKind, close: SyntaxKind) {
+  p.eat(open);
 
-  while !p.at(EOF) && !p.at(T![')']) {
+  while !p.at(EOF) && !p.at(close) {
     // test ok
     // foo(
     //   2)
@@ -231,7 +240,7 @@ fn arg_list(p: &mut Parser) {
       while p.at(T![nl]) {
         p.eat(T![nl]);
       }
-      if p.at(T![')']) {
+      if p.at(close) {
         break;
       }
     } else {
@@ -239,8 +248,7 @@ fn arg_list(p: &mut Parser) {
     }
   }
 
-  p.expect(T![')']);
-  m.complete(p, ARG_LIST);
+  p.expect(close);
 }
 
 #[cfg(test)]

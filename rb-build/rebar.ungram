@@ -36,6 +36,7 @@ Expr =
   BinaryExpr |
   IfExpr |
   ParenExpr |
+  ArrayExpr |
   Block
 
 String = '"' 'char'* Escape* Interpolation* '"'
@@ -50,6 +51,7 @@ BinaryExpr = Expr BinaryOp Expr
 IfExpr = 'if' Expr Block ('else' 'if' Expr Block)* ('else' Block)?
 
 ParenExpr = '(' Expr ')'
+ArrayExpr = '[' (Expr ',')* ']'
 Block = '{' Stmt* '}'
 
 Type = NameType | BinaryType
