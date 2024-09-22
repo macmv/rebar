@@ -487,7 +487,7 @@ impl FuncBuilder<'_> {
       Type::Literal(Literal::Int) => false,
       Type::Literal(Literal::Bool) => false,
       Type::Literal(Literal::String) => true,
-      Type::Array(_) => false, // TODO: Track arrays.
+      Type::Array(_) => true,
       Type::Union(vs) => vs.iter().any(|v| self.type_needs_gc(v)),
 
       // TODO: uhhhhhhhhhh
@@ -621,8 +621,7 @@ impl FuncBuilder<'_> {
         let result =
           RValue { ty: Value::Const(ValueType::Array), values: vec![Value::Dyn(result_ptr)] };
 
-        // TODO: Tracking arrays is hard.
-        // self.track_value(&result);
+        self.track_value(&result);
 
         result
       }

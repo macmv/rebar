@@ -289,7 +289,7 @@ pub enum Value {
   Int(i64),
   Bool(bool),
   String(String),
-  Array(Vec<i64>),
+  Array(Box<Vec<i64>>),
 }
 
 impl Value {
@@ -317,6 +317,10 @@ impl Value {
   pub fn gc_id(&self) -> GcId {
     match self {
       Value::String(s) => GcId(s.as_ptr() as u64),
+      Value::Array(b) => {
+        let ptr = &**b as *const Vec<i64>;
+        GcId(ptr as u64)
+      }
       _ => panic!("cannot gc {self:?}"),
     }
   }
@@ -458,7 +462,7 @@ impl RebarArgsParser {
 
         let slice = arr.as_slice();
 
-        Value::Array(slice.into())
+        Value::Array(Box::new(slice.into()))
       }
       v => unimplemented!("{v:?}"),
     }
@@ -478,6 +482,11 @@ impl RebarArgsParser {
         ));
 
         ManuallyDrop::new(Value::String(str.into()))
+      }
+      ValueType::Array => {
+        let ptr = self.next();
+
+        ManuallyDrop::new(Value::Array(Box::from_raw(ptr as *mut Vec<i64>)))
       }
       _ => unreachable!("not an owned value: {vt:?}"),
     }
