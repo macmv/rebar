@@ -961,16 +961,7 @@ impl FuncBuilder<'_> {
   fn stack_slot_unsized(&mut self, value: &RValue) -> ir::Value {
     let ir = value.to_ir(ParamKind::Extended(None), &mut self.builder);
 
-    let slot = self.builder.create_sized_stack_slot(StackSlotData {
-      kind: StackSlotKind::ExplicitSlot,
-      size: ir.len() as u32 * 8,
-    });
-
-    for (i, &v) in ir.iter().enumerate() {
-      self.builder.ins().stack_store(v, slot, i as i32 * 8);
-    }
-
-    self.builder.ins().stack_addr(ir::types::I64, slot, 0)
+    self.stack_slot_for_ir(ir)
   }
 
   /// Creates a stack slot that stores a single value, sized to the given
@@ -978,6 +969,10 @@ impl FuncBuilder<'_> {
   fn stack_slot_sized(&mut self, value: &RValue, vt: DynamicValueType) -> ir::Value {
     let ir = value.to_ir(vt.param_kind(), &mut self.builder);
 
+    self.stack_slot_for_ir(ir)
+  }
+
+  fn stack_slot_for_ir(&mut self, ir: Vec<ir::Value>) -> ir::Value {
     let slot = self.builder.create_sized_stack_slot(StackSlotData {
       kind: StackSlotKind::ExplicitSlot,
       size: ir.len() as u32 * 8,
