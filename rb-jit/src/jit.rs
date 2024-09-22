@@ -601,7 +601,8 @@ impl FuncBuilder<'_> {
       }
 
       mir::Expr::Array(ref exprs, ref ty) => {
-        let slot_size = DynamicValueType::for_type(ty).len();
+        let vt = DynamicValueType::for_type(ty);
+        let slot_size = vt.len();
 
         let result_box = Box::into_raw(Box::<Vec<i64>>::new(vec![]));
 
@@ -618,8 +619,10 @@ impl FuncBuilder<'_> {
         // Now that we're done mutating the slot, we can track the value in the GC (and
         // we can drop the `cap` amount, because we don't need that anymore, now that
         // the string is immutable).
-        let result =
-          RValue { ty: Value::Const(ValueType::Array), values: vec![Value::Dyn(result_ptr)] };
+        let result = RValue {
+          ty:     Value::Const(ValueType::Array),
+          values: vec![Value::Dyn(result_ptr), Value::Const(vt.encode())],
+        };
 
         self.track_value(&result);
 

@@ -205,7 +205,7 @@ impl Environment {
       match arg_value {
         Value::Int(i) => write!(str_value, "{}", i).unwrap(),
         Value::String(s) => str_value.push_str(s),
-        Value::Array(v) => write!(str_value, "{v:?}").unwrap(),
+        Value::Array(v, vt) => write!(str_value, "{v:?} of {vt:?}").unwrap(),
         _ => panic!("expected string"),
       }
 
@@ -305,7 +305,7 @@ pub enum Value<'a> {
   Int(i64),
   Bool(bool),
   String(&'a str),
-  Array(&'a Vec<i64>),
+  Array(&'a Vec<i64>, DynamicValueType),
 }
 
 /// An owned value, created from rust, that will be passed back to rebar.
@@ -510,10 +510,12 @@ impl<'a> RebarArgsParser<'a> {
       }
       ValueType::Array => {
         let ptr = self.next();
+        let vt = self.next();
 
         let arr = &*(ptr as *const Vec<i64>) as &Vec<i64>;
+        let vt = DynamicValueType::decode(vt);
 
-        Value::Array(arr)
+        Value::Array(arr, vt)
       }
       v => unimplemented!("{v:?}"),
     }

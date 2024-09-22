@@ -38,9 +38,28 @@ pub enum ValueType {
   Array,
 }
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum DynamicValueType {
   Const(ValueType),
   Union(Vec<ValueType>),
+}
+
+impl DynamicValueType {
+  pub fn encode(&self) -> i64 {
+    match self {
+      DynamicValueType::Const(ty) => ty.as_i64(),
+      DynamicValueType::Union(_) => -(self.len() as i64),
+    }
+  }
+
+  pub fn decode(value: i64) -> Self {
+    if value >= 0 {
+      DynamicValueType::Const(ValueType::try_from(value).unwrap())
+    } else {
+      // FIXME
+      DynamicValueType::Union(vec![])
+    }
+  }
 }
 
 impl<T: AsIR> From<T> for Value<T> {
@@ -310,8 +329,8 @@ impl ValueType {
       ValueType::Nil => 0,
       ValueType::Int => 1,
       ValueType::Bool => 1,
-      ValueType::String => 2, // Fat pointer.
-      ValueType::Array => 1,  // Thin pointer.
+      ValueType::String => 2,
+      ValueType::Array => 2,
 
       ValueType::Function => 1,
       ValueType::UserFunction => 1,
