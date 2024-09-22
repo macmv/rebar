@@ -19,7 +19,7 @@ fn build_tree(events: Vec<rb_parser::Event>, source: &str) -> (GreenNode, Vec<Sy
   for event in events {
     match event {
       Event::Token { kind, len } => {
-        let text = if index + len >= source.len() { "" } else { &source[index..index + len] };
+        let text = if index + len > source.len() { "" } else { &source[index..index + len] };
         builder.token(kind, text);
         index += len;
       }

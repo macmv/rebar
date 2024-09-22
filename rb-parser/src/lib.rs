@@ -212,6 +212,7 @@ impl Parser<'_> {
         }
         Ok(t) => break t,
         Err(LexError::Eof) => {
+          self.eat_trivia();
           break SyntaxKind::EOF;
         }
         Err(e) => {

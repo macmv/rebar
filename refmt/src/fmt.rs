@@ -412,6 +412,20 @@ mod tests {
   }
 
   #[test]
+  fn keep_trailing_comment() {
+    check(
+      r#"
+        print(1, 2)
+        // hello
+      "#,
+      expect![@r#"
+        print(1, 2)
+        // hello
+      "#],
+    );
+  }
+
+  #[test]
   fn keep_empty_line() {
     check(
       r#"

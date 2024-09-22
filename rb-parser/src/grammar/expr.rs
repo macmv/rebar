@@ -299,6 +299,7 @@ mod tests {
                     INTEGER_KW '3'
                 CLOSE_PAREN ')'
           NL_KW '\n'
+          WHITESPACE '      '
       "#],
     );
   }
@@ -369,6 +370,7 @@ mod tests {
                 CLOSE_CURLY '}'
               DOUBLE_QUOTE '"'
           NL_KW '\n'
+          WHITESPACE '      '
       "#],
     );
   }

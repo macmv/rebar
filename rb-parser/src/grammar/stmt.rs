@@ -160,6 +160,7 @@ mod tests {
               WHITESPACE '        '
               CLOSE_CURLY '}'
           NL_KW '\n'
+          WHITESPACE '      '
       "#],
     );
   }
