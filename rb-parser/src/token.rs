@@ -563,4 +563,16 @@ mod tests {
     assert_eq!(lexer.next(), Ok(T![->]));
     assert_eq!(lexer.next(), Err(LexError::Eof));
   }
+
+  #[test]
+  fn includes_trailing_comment() {
+    let mut lexer = Lexer::new("foo\n// hello");
+    assert_eq!(lexer.next(), Ok(T![ident]));
+    assert_eq!(lexer.slice(), "foo");
+    assert_eq!(lexer.next(), Ok(T![nl]));
+    assert_eq!(lexer.slice(), "\n");
+    assert_eq!(lexer.next(), Ok(T![ws]));
+    assert_eq!(lexer.slice(), "// hello");
+    assert_eq!(lexer.next(), Err(LexError::Eof));
+  }
 }
