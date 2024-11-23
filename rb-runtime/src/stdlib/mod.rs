@@ -230,12 +230,7 @@ impl Environment {
         Gc::as_ptr(Gc::new(
           m,
           GcArray {
-            arr: Gc::new(
-              m,
-              CollectArray(UnsafeCell::new(RbArray::new_with_len(
-                len as usize * vt.len() as usize,
-              ))),
-            ),
+            arr: UnsafeCell::new(RbArray::new_with_len(len as usize * vt.len() as usize)),
             vt,
           },
         )) as *const u8
@@ -297,22 +292,13 @@ pub trait DynFunction<T> {
 #[collect(no_drop)]
 pub enum GcValue<'gc> {
   String(Gc<'gc, String>),
-  Array(GcArray<'gc>),
+  Array(Gc<'gc, GcArray>),
 }
 
 #[derive(Debug)]
-pub struct GcArray<'gc> {
-  arr: Gc<'gc, CollectArray>,
+pub struct GcArray {
+  arr: UnsafeCell<RbArray>,
   vt:  DynamicValueType,
-}
-
-#[derive(Debug)]
-#[repr(transparent)]
-struct CollectArray(UnsafeCell<RbArray>);
-
-unsafe impl<'gc> Collect for CollectArray {
-  // FIXME: This is wrong.
-  fn trace(&self, _cc: &gc_arena::Collection) {}
 }
 
 impl<'a> GcValue<'a> {
@@ -321,10 +307,8 @@ impl<'a> GcValue<'a> {
     let gc = match value {
       Value::String(s) => unsafe { GcValue::String(Gc::from_ptr(s.as_ptr() as *const String)) },
       Value::Array(arr) => unsafe {
-        GcValue::Array(GcArray {
-          arr: Gc::from_ptr(arr.elems as *const RbArray as *const CollectArray),
-          vt:  arr.vt,
-        })
+        // This is horrible.
+        GcValue::Array(Gc::from_ptr(arr.elems as *const RbArray as *const GcArray))
       },
       _ => return None,
     };
@@ -332,15 +316,15 @@ impl<'a> GcValue<'a> {
   }
 }
 
-impl PartialEq for GcArray<'_> {
+impl PartialEq for GcArray {
   fn eq(&self, other: &Self) -> bool { self.as_slice() == other.as_slice() }
 }
 
-impl GcArray<'_> {
-  pub fn as_slice(&self) -> RbSlice { unsafe { RbSlice::new(&*(*self.arr).0.get(), self.vt) } }
+impl GcArray {
+  pub fn as_slice(&self) -> RbSlice { unsafe { RbSlice::new(&*self.arr.get(), self.vt) } }
 }
 
-unsafe impl Collect for GcArray<'_> {
+unsafe impl Collect for GcArray {
   fn trace(&self, cc: &gc_arena::Collection) {
     for value in self.as_slice().iter() {
       if let Some(v) = GcValue::from_value(&value) {
@@ -574,10 +558,8 @@ impl<'a> RebarArgsParser<'a> {
 
         let vt = DynamicValueType::decode(vt);
 
-        ManuallyDrop::new(GcValue::Array(GcArray {
-          arr: Gc::from_ptr(ptr as *const CollectArray),
-          vt,
-        }))
+        // FIXME: No.
+        ManuallyDrop::new(GcValue::Array(Gc::from_ptr(ptr as *const GcArray)))
       }
       _ => unreachable!("not an owned value: {vt:?}"),
     }
