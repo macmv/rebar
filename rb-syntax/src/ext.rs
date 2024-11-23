@@ -101,6 +101,11 @@ impl cst::BinaryExpr {
   pub fn rhs(&self) -> Option<cst::Expr> { support::children(&self.syntax).nth(1) }
 }
 
+impl cst::IndexExpr {
+  pub fn lhs(&self) -> Option<cst::Expr> { support::children(&self.syntax).next() }
+  pub fn rhs(&self) -> Option<cst::Expr> { support::children(&self.syntax).nth(1) }
+}
+
 impl cst::BinaryType {
   pub fn lhs(&self) -> Option<cst::Type> { support::children(&self.syntax).next() }
   pub fn rhs(&self) -> Option<cst::Type> { support::children(&self.syntax).nth(1) }
