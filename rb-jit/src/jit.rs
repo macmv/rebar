@@ -57,6 +57,12 @@ macro_rules! intrinsics {
     }
 
     impl Intrinsics<FuncId> {
+      pub fn prepare(builder: &mut JITBuilder, impls: &IntrinsicImpls) {
+        $(
+          builder.symbol(concat!("__", stringify!($name)), impls.$name as *const _);
+        )*
+      }
+
       pub fn build(module: &mut JITModule) -> Self {
         Intrinsics {
           $(
@@ -165,14 +171,7 @@ impl JIT {
     let isa = isa_builder.finish(settings::Flags::new(flag_builder)).unwrap();
     let mut builder = JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
 
-    builder.symbol("__call", intrinsics.call as *const _);
-    builder.symbol("__push_frame", intrinsics.push_frame as *const _);
-    builder.symbol("__pop_frame", intrinsics.pop_frame as *const _);
-    builder.symbol("__track", intrinsics.track as *const _);
-    builder.symbol("__string_append_value", intrinsics.string_append_value as *const _);
-    builder.symbol("__array_push", intrinsics.array_push as *const _);
-    builder.symbol("__array_index", intrinsics.array_index as *const _);
-    builder.symbol("__value_equals", intrinsics.value_equals as *const _);
+    Intrinsics::prepare(&mut builder, &intrinsics);
 
     let mut module = JITModule::new(builder);
 
