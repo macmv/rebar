@@ -11,10 +11,7 @@ use rb_mir::ast::{self as mir, UserFunctionId};
 use rb_typer::{Literal, Type};
 use std::{collections::HashMap, marker::PhantomPinned, mem::ManuallyDrop};
 
-use crate::{
-  array::RbArray,
-  value::{CompactValues, DynamicValueType, ParamKind, RValue, Value, ValueType},
-};
+use crate::value::{CompactValues, DynamicValueType, ParamKind, RValue, Value, ValueType};
 
 pub struct JIT {
   module: JITModule,
