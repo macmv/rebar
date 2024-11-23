@@ -57,9 +57,9 @@ impl Environment {
     });
 
     IntrinsicImpls {
-      call:                Self::dyn_call_ptr(),
-      push_frame:          Self::push_frame(),
-      pop_frame:           Self::pop_frame(),
+      call:                Self::dyn_call_ptr,
+      push_frame:          Self::push_frame,
+      pop_frame:           Self::pop_frame,
       track:               Self::track,
       string_append_value: Self::string_append_value,
       string_append_str:   Self::string_append_str,
@@ -82,81 +82,75 @@ impl Environment {
     });
   }
 
-  fn dyn_call_ptr() -> fn(i64, *const RebarArgs, *mut RebarArgs) {
-    |func, arg, ret| {
-      ENV.with(|env| {
-        let env = env.borrow();
-        let env = env.as_ref().unwrap();
+  fn dyn_call_ptr(func: i64, arg: *const RebarArgs, ret: *mut RebarArgs) {
+    ENV.with(|env| {
+      let env = env.borrow();
+      let env = env.as_ref().unwrap();
 
-        let f = &env.static_functions[&env.ids[func as usize]];
+      let f = &env.static_functions[&env.ids[func as usize]];
 
-        let ret = unsafe { &mut *ret };
+      let ret = unsafe { &mut *ret };
 
-        let args = unsafe {
-          let mut parser = RebarArgsParser::new(arg);
+      let args = unsafe {
+        let mut parser = RebarArgsParser::new(arg);
 
-          let mut args = vec![];
-          for ty in f.args.iter() {
-            let dvt = DynamicValueType::for_type(ty);
-            args.push(parser.value(dvt));
-          }
-          args
-        };
-
-        let ret_value = (f.imp)(args);
-
-        unsafe {
-          // TODO: Native functions must always return a value, but the runtime isn't
-          // going to assume that. Need to figure out a way to return something
-          // sane here.
-          match f.ret {
-            Type::Literal(Literal::Unit) => {}
-            Type::Literal(Literal::Bool) => ret.ret(0, ret_value.as_bool() as i64),
-            Type::Literal(Literal::Int) => ret.ret(0, ret_value.as_int() as i64),
-            Type::Literal(Literal::String) => {
-              let mut str = String::from(ret_value.as_str());
-              str.shrink_to_fit();
-              let gc: Gc<String> = env.gc.mutate(|m, _| ::std::mem::transmute(Gc::new(m, str)));
-
-              ret.ret(0, Gc::as_ptr(gc) as i64);
-
-              env.track_value(GcValue::String(gc));
-            }
-            ref v => unimplemented!("{v:?}"),
-          }
+        let mut args = vec![];
+        for ty in f.args.iter() {
+          let dvt = DynamicValueType::for_type(ty);
+          args.push(parser.value(dvt));
         }
-      })
-    }
+        args
+      };
+
+      let ret_value = (f.imp)(args);
+
+      unsafe {
+        // TODO: Native functions must always return a value, but the runtime isn't
+        // going to assume that. Need to figure out a way to return something
+        // sane here.
+        match f.ret {
+          Type::Literal(Literal::Unit) => {}
+          Type::Literal(Literal::Bool) => ret.ret(0, ret_value.as_bool() as i64),
+          Type::Literal(Literal::Int) => ret.ret(0, ret_value.as_int() as i64),
+          Type::Literal(Literal::String) => {
+            let mut str = String::from(ret_value.as_str());
+            str.shrink_to_fit();
+            let gc: Gc<String> = env.gc.mutate(|m, _| ::std::mem::transmute(Gc::new(m, str)));
+
+            ret.ret(0, Gc::as_ptr(gc) as i64);
+
+            env.track_value(GcValue::String(gc));
+          }
+          ref v => unimplemented!("{v:?}"),
+        }
+      }
+    })
   }
 
-  fn push_frame() -> fn() {
-    || {
-      ENV.with(|env| {
-        let mut env = env.borrow_mut();
-        env.as_mut().unwrap().gc.mutate_root(|m, root| {
-          let tid = 3; // FIXME: Use ThreadId.
+  fn push_frame() {
+    ENV.with(|env| {
+      let mut env = env.borrow_mut();
+      env.as_mut().unwrap().gc.mutate_root(|m, root| {
+        let tid = 3; // FIXME: Use ThreadId.
 
-          let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
+        let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
 
-          thread.frames.push(Gc::new(m, RefLock::new(crate::gc::Frame::default())));
-        });
+        thread.frames.push(Gc::new(m, RefLock::new(crate::gc::Frame::default())));
       });
-    }
+    });
   }
 
-  fn pop_frame() -> fn() {
-    || {
-      ENV.with(|env| {
-        let mut env = env.borrow_mut();
-        env.as_mut().unwrap().gc.mutate_root(|_, root| {
-          let tid = 3; // FIXME: Use ThreadId.
+  fn pop_frame() {
+    ENV.with(|env| {
+      let mut env = env.borrow_mut();
+      env.as_mut().unwrap().gc.mutate_root(|_, root| {
+        let tid = 3; // FIXME: Use ThreadId.
 
-          let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
+        let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
 
-          thread.frames.pop().unwrap();
-        });
+        thread.frames.pop().unwrap();
       });
-    }
+    });
   }
 
   fn track(args: *const RebarArgs) {
