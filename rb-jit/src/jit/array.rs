@@ -5,6 +5,8 @@ use std::{
   ptr::NonNull,
 };
 
+use crate::value::DynamicValueType;
+
 /// Same thing as `Vec<i64>`, but #[repr(C)] so that we can access fields
 /// directly from rebar.
 #[repr(C)]
@@ -19,6 +21,7 @@ impl RbArray {
   pub fn new_with_len(len: usize) -> Self { vec![0; len].into() }
 
   pub fn as_ptr(&self) -> *const i64 { self.ptr.as_ptr() }
+  pub fn len(&self) -> usize { self.len }
 }
 
 impl Deref for RbArray {

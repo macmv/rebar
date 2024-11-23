@@ -1,5 +1,5 @@
 use ::std::{
-  cell::RefCell, collections::HashMap, fmt::Write, marker::PhantomData, mem::ManuallyDrop, slice,
+  cell::RefCell, collections::HashMap, fmt::Write, marker::PhantomData, mem::ManuallyDrop,
 };
 
 mod core;
@@ -14,6 +14,9 @@ use rb_mir::ast::{self as mir};
 use rb_typer::{Literal, Type};
 
 use crate::gc::{GcArena, GcId, GcRoot};
+
+mod slice;
+use slice::RbSlice;
 
 pub struct Environment {
   pub static_functions: HashMap<String, Function>,
@@ -205,21 +208,7 @@ impl Environment {
       match arg_value {
         Value::Int(i) => write!(str_value, "{}", i).unwrap(),
         Value::String(s) => str_value.push_str(s),
-        Value::Array(v, vt) => {
-          let mut values = vec![];
-
-          for chunk in v.chunks(vt.len() as usize) {
-            let v = unsafe {
-              let args = chunk.as_ptr() as *const RebarArgs;
-              let mut parser = RebarArgsParser::new(args);
-              parser.value(vt)
-            };
-
-            values.push(v);
-          }
-
-          write!(str_value, "{values:?}").unwrap()
-        }
+        Value::Array(v) => write!(str_value, "{v:?}").unwrap(),
         _ => panic!("expected string"),
       }
 
@@ -312,7 +301,7 @@ pub enum Value<'a> {
   Int(i64),
   Bool(bool),
   String(&'a str),
-  Array(&'a RbArray, DynamicValueType),
+  Array(RbSlice<'a>),
 }
 
 /// An owned value, created from rust, that will be passed back to rebar.
@@ -510,8 +499,10 @@ impl<'a> RebarArgsParser<'a> {
         // The value will always take up 8 bytes, even if less bytes are used.
         let len = self.next();
         let ptr = self.next();
-        let str =
-          ::std::str::from_utf8_unchecked(slice::from_raw_parts(ptr as *const u8, len as usize));
+        let str = ::std::str::from_utf8_unchecked(::std::slice::from_raw_parts(
+          ptr as *const u8,
+          len as usize,
+        ));
 
         Value::String(str)
       }
@@ -522,7 +513,7 @@ impl<'a> RebarArgsParser<'a> {
         let arr = &*(ptr as *const RbArray) as &RbArray;
         let vt = DynamicValueType::decode(vt);
 
-        Value::Array(arr, vt)
+        Value::Array(RbSlice::new(arr, vt))
       }
       v => unimplemented!("{v:?}"),
     }
