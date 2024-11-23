@@ -600,6 +600,7 @@ impl FuncBuilder<'_> {
         let vt = DynamicValueType::for_type(ty);
         let slot_size = vt.len();
 
+        // FIXME: This needs to be constructed by the GC.
         let result_box =
           Box::<RbArray>::new(RbArray::new_with_len(slot_size as usize * exprs.len()));
         let array_ptr = result_box.as_ptr();

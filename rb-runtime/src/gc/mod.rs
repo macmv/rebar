@@ -26,7 +26,7 @@ pub struct Stack<'gc> {
 #[derive(Default, Collect)]
 #[collect(no_drop)]
 pub struct Frame<'gc> {
-  pub values: HashMap<GcId, Gc<'gc, GcValue>>,
+  pub values: HashMap<GcId, Gc<'gc, GcValue<'gc>>>,
 }
 
 /// An opaque ID for a GC'ed object. This is usually just the pointer to the

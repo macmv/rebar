@@ -1,5 +1,9 @@
 use ::std::{
-  cell::RefCell, collections::HashMap, fmt::Write, marker::PhantomData, mem::ManuallyDrop,
+  cell::{RefCell, UnsafeCell},
+  collections::HashMap,
+  fmt::Write,
+  marker::PhantomData,
+  mem::ManuallyDrop,
 };
 
 mod core;
@@ -64,6 +68,9 @@ impl Environment {
 
   fn track_value(&self, value: GcValue) {
     self.gc.mutate(|m, root| {
+      // SAFETY: This isn't really safe.
+      let value = unsafe { ::std::mem::transmute::<GcValue<'_>, GcValue<'_>>(value) };
+
       let tid = 3; // FIXME: Use ThreadId.
 
       let thread = root.threads.get(&tid).unwrap();
@@ -160,7 +167,13 @@ impl Environment {
       };
 
       let mut env = env.borrow_mut();
+
       env.as_mut().unwrap().gc.mutate_root(|m, root| {
+        // SAFETY: This isn't really safe.
+        let value = unsafe {
+          ::std::mem::transmute::<ManuallyDrop<GcValue<'_>>, ManuallyDrop<GcValue<'_>>>(value)
+        };
+
         let tid = 3; // FIXME: Use ThreadId.
 
         let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
@@ -272,27 +285,27 @@ pub trait DynFunction<T> {
 /// haven't then the owned value is added to the garbage collector.
 #[derive(Debug, Collect, PartialEq)]
 #[collect(no_drop)]
-pub enum GcValue {
+pub enum GcValue<'gc> {
   String(String),
-  Array(GcArray),
+  Array(GcArray<'gc>),
 }
 
-#[derive(Debug, PartialEq)]
-pub struct GcArray {
-  arr: Box<RbArray>,
+#[derive(Debug)]
+pub struct GcArray<'gc> {
+  arr: Gc<'gc, UnsafeCell<RbArray>>,
   vt:  DynamicValueType,
 }
 
-impl GcValue {
+impl<'a> GcValue<'a> {
   // NB: This `GcValue` cannot be dropped, as that will cause a double free.
-  pub(crate) fn from_value(value: &Value) -> Option<ManuallyDrop<GcValue>> {
+  pub(crate) fn from_value(value: &Value) -> Option<ManuallyDrop<GcValue<'a>>> {
     let gc = match value {
       Value::String(s) => unsafe {
         GcValue::String(String::from_raw_parts(s.as_ptr() as *mut u8, s.len(), s.len()))
       },
       Value::Array(arr) => unsafe {
         GcValue::Array(GcArray {
-          arr: Box::from_raw(arr.elems as *const RbArray as *mut RbArray),
+          arr: Gc::from_ptr(arr.elems as *const RbArray as *const UnsafeCell<RbArray>),
           vt:  arr.vt,
         })
       },
@@ -302,11 +315,15 @@ impl GcValue {
   }
 }
 
-impl GcArray {
-  pub fn as_slice(&self) -> RbSlice { RbSlice::new(&*self.arr, self.vt) }
+impl PartialEq for GcArray<'_> {
+  fn eq(&self, other: &Self) -> bool { self.as_slice() == other.as_slice() }
 }
 
-unsafe impl Collect for GcArray {
+impl GcArray<'_> {
+  pub fn as_slice(&self) -> RbSlice { unsafe { RbSlice::new(&*(*self.arr).get(), self.vt) } }
+}
+
+unsafe impl Collect for GcArray<'_> {
   fn trace(&self, cc: &gc_arena::Collection) {
     for value in self.as_slice().iter() {
       if let Some(v) = GcValue::from_value(&value) {
@@ -383,12 +400,12 @@ impl OwnedValue {
   }
 }
 
-impl GcValue {
+impl GcValue<'_> {
   pub fn gc_id(&self) -> GcId {
     match self {
       GcValue::String(s) => GcId(s.as_ptr() as u64),
       GcValue::Array(GcArray { arr, .. }) => {
-        let ptr = &**arr as *const RbArray;
+        let ptr = arr.get() as *const RbArray;
         GcId(ptr as u64)
       }
     }
@@ -542,7 +559,7 @@ impl<'a> RebarArgsParser<'a> {
     }
   }
 
-  unsafe fn value_owned(&mut self, vt: ValueType) -> ManuallyDrop<GcValue> {
+  unsafe fn value_owned(&mut self, vt: ValueType) -> ManuallyDrop<GcValue<'static>> {
     match vt {
       ValueType::String => {
         // Rebar always shrinks strings before throwing them on the stack, so the len
@@ -563,7 +580,10 @@ impl<'a> RebarArgsParser<'a> {
 
         let vt = DynamicValueType::decode(vt);
 
-        ManuallyDrop::new(GcValue::Array(GcArray { arr: Box::from_raw(ptr as *mut RbArray), vt }))
+        ManuallyDrop::new(GcValue::Array(GcArray {
+          arr: Gc::from_ptr(ptr as *const UnsafeCell<RbArray>),
+          vt,
+        }))
       }
       _ => unreachable!("not an owned value: {vt:?}"),
     }
@@ -605,7 +625,7 @@ impl<'a> RebarArgsParser<'a> {
   }
 
   /// Parses a value to get tracked by the GC.
-  pub unsafe fn value_owned_unsized(&mut self) -> ManuallyDrop<GcValue> {
+  pub unsafe fn value_owned_unsized(&mut self) -> ManuallyDrop<GcValue<'static>> {
     let ty = self.next();
     let vt = ValueType::try_from(ty).unwrap();
     self.value_owned(vt)
