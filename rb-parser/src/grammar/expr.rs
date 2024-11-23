@@ -199,6 +199,36 @@ fn postfix_expr(p: &mut Parser, mut lhs: CompletedMarker) -> CompletedMarker {
         call.complete(p, CALL_EXPR)
       }
 
+      // test ok
+      // foo[4]
+      // bar(3)[4][5](6)[7]
+      T!['['] => {
+        let call = lhs.precede(p);
+
+        p.eat(T!['[']);
+
+        // test ok
+        // foo[
+        //   2]
+        while p.at(T![nl]) {
+          p.eat(T![nl]);
+        }
+
+        expr(p);
+
+        // test ok
+        // foo[
+        //   2
+        // ]
+        while p.at(T![nl]) {
+          p.eat(T![nl]);
+        }
+
+        p.expect(T![']']);
+
+        call.complete(p, INDEX_EXPR)
+      }
+
       _ => break,
     };
   }

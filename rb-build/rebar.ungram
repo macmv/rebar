@@ -30,6 +30,7 @@ Expr =
   Name |
   String |
   CallExpr |
+  IndexExpr |
   FieldExpr |
   PrefixExpr |
   PostfixExpr |
@@ -61,6 +62,8 @@ BinaryType = Type TypeOp Type
 
 CallExpr = Expr '(' ArgList ')'
 ArgList = Expr (',' Expr)*
+
+IndexExpr = Expr '[' Expr ']'
 
 ExprStmt = Expr
 Stmt = Let | Assign | Def | Struct | ExprStmt
