@@ -274,11 +274,11 @@ pub trait DynFunction<T> {
 #[collect(no_drop)]
 pub enum GcValue {
   String(String),
-  Array(RbArrayCollect),
+  Array(GcArray),
 }
 
 #[derive(Debug, PartialEq)]
-pub struct RbArrayCollect {
+pub struct GcArray {
   arr: Box<RbArray>,
   vt:  DynamicValueType,
 }
@@ -288,7 +288,7 @@ pub struct RbArrayCollect {
 // `Vec<i64>`.
 //
 // TODO: Write new gc :)
-unsafe impl Collect for RbArrayCollect {
+unsafe impl Collect for GcArray {
   fn trace(&self, cc: &gc_arena::Collection) {
     for elem in self.arr.iter() {
       elem.trace(cc);
@@ -367,7 +367,7 @@ impl GcValue {
   pub fn gc_id(&self) -> GcId {
     match self {
       GcValue::String(s) => GcId(s.as_ptr() as u64),
-      GcValue::Array(RbArrayCollect { arr, .. }) => {
+      GcValue::Array(GcArray { arr, .. }) => {
         let ptr = &**arr as *const RbArray;
         GcId(ptr as u64)
       }
@@ -543,10 +543,7 @@ impl<'a> RebarArgsParser<'a> {
 
         let vt = DynamicValueType::decode(vt);
 
-        ManuallyDrop::new(GcValue::Array(RbArrayCollect {
-          arr: Box::from_raw(ptr as *mut RbArray),
-          vt,
-        }))
+        ManuallyDrop::new(GcValue::Array(GcArray { arr: Box::from_raw(ptr as *mut RbArray), vt }))
       }
       _ => unreachable!("not an owned value: {vt:?}"),
     }
