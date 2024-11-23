@@ -182,6 +182,13 @@ impl Lower<'_> {
         mir::Expr::Binary(lhs, op, rhs, self.ty.type_of_expr(expr))
       }
 
+      hir::Expr::Index(lhs, rhs) => {
+        let lhs = self.lower_expr(lhs);
+        let rhs = self.lower_expr(rhs);
+
+        mir::Expr::Index(lhs, rhs, self.ty.type_of_expr(expr))
+      }
+
       hir::Expr::Call(lhs, ref args) => {
         let lhs_ty = self.ty.type_of_expr(lhs);
         let lhs = self.lower_expr(lhs);
