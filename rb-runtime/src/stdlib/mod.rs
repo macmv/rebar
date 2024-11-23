@@ -283,15 +283,35 @@ pub struct GcArray {
   vt:  DynamicValueType,
 }
 
-// FIXME: This is horribly incorrect. I basically need to pass a `RuntimeEnv`
-// through `cc` somehow, so that I can parse the nested values out of this
-// `Vec<i64>`.
-//
-// TODO: Write new gc :)
+impl GcValue {
+  // NB: This `GcValue` cannot be dropped, as that will cause a double free.
+  pub(crate) fn from_value(value: &Value) -> Option<ManuallyDrop<GcValue>> {
+    let gc = match value {
+      Value::String(s) => unsafe {
+        GcValue::String(String::from_raw_parts(s.as_ptr() as *mut u8, s.len(), s.len()))
+      },
+      Value::Array(arr) => unsafe {
+        GcValue::Array(GcArray {
+          arr: Box::from_raw(arr.elems as *const RbArray as *mut RbArray),
+          vt:  arr.vt,
+        })
+      },
+      _ => return None,
+    };
+    Some(ManuallyDrop::new(gc))
+  }
+}
+
+impl GcArray {
+  pub fn as_slice(&self) -> RbSlice { RbSlice::new(&*self.arr, self.vt) }
+}
+
 unsafe impl Collect for GcArray {
   fn trace(&self, cc: &gc_arena::Collection) {
-    for elem in self.arr.iter() {
-      elem.trace(cc);
+    for value in self.as_slice().iter() {
+      if let Some(v) = GcValue::from_value(&value) {
+        v.trace(cc);
+      }
     }
   }
 }

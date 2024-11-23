@@ -12,8 +12,8 @@ pub struct RbSlice<'a> {
   // SAFETY: This `&RbArray` is quite special: the value of this reference is garunteed to also be
   // a valid `Box<RbArray>` pointer, and that pointer is used as a key in the garbage collector to
   // determine if the array is referenced or not.
-  elems: &'a RbArray,
-  vt:    DynamicValueType,
+  pub(super) elems: &'a RbArray,
+  pub(super) vt:    DynamicValueType,
 }
 
 impl<'a> RbSlice<'a> {
