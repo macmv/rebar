@@ -600,17 +600,27 @@ impl FuncBuilder<'_> {
         let vt = DynamicValueType::for_type(ty);
         let slot_size = vt.len();
 
-        let result_box = Box::into_raw(Box::<Vec<i64>>::new(vec![]));
+        let result_box = Box::<Vec<i64>>::new(vec![0; slot_size as usize * exprs.len()]);
+        let array_ptr = result_box.as_ptr();
 
-        let result_ptr = self.builder.ins().iconst(ir::types::I64, result_box as i64);
-        let slot_size_v = self.builder.ins().iconst(ir::types::I64, slot_size as i64);
-
-        for expr in exprs {
+        for (i, expr) in exprs.iter().enumerate() {
           let to_append = self.compile_expr(*expr);
-          let arg_ptr = self.stack_slot_sized(&to_append, vt);
+          let ir = to_append.to_ir(vt.param_kind(), &mut self.builder);
+          assert_eq!(ir.len(), slot_size as usize);
 
-          self.builder.ins().call(self.intrinsics.array_push, &[result_ptr, slot_size_v, arg_ptr]);
+          unsafe {
+            let element_ptr = array_ptr.offset(i as isize * slot_size as isize);
+            let element_ptr = self.builder.ins().iconst(ir::types::I64, element_ptr as i64);
+
+            // TODO: Compile this into a loop if its too long.
+            for j in 0..slot_size as usize {
+              self.builder.ins().store(MemFlags::new(), ir[j], element_ptr, (j as i32) * 8);
+            }
+          }
         }
+
+        let result_ptr =
+          self.builder.ins().iconst(ir::types::I64, Box::into_raw(result_box) as i64);
 
         let result = RValue {
           ty:     Value::Const(ValueType::Array),
