@@ -15,6 +15,7 @@ impl RbArray {
 
 impl From<Vec<i64>> for RbArray {
   fn from(vec: Vec<i64>) -> Self {
+    let vec = ManuallyDrop::new(vec);
     unsafe {
       RbArray {
         ptr: NonNull::new_unchecked(vec.as_ptr() as *mut i64),
@@ -22,6 +23,13 @@ impl From<Vec<i64>> for RbArray {
         cap: vec.capacity(),
       }
     }
+  }
+}
+
+impl From<RbArray> for Vec<i64> {
+  fn from(rb: RbArray) -> Self {
+    let rb = ManuallyDrop::new(rb);
+    unsafe { Vec::from_raw_parts(rb.ptr.as_ptr(), rb.len, rb.cap) }
   }
 }
 
