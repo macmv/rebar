@@ -345,11 +345,13 @@ fn generate_syntax_kinds(ast: &AstSrc) -> String {
   let mut keyword_idents: Vec<Ident> = vec![];
   let mut punctuation: Vec<Ident> = vec![];
   let mut punctuation_values: Vec<TokenStream> = vec![];
+  let mut punctuation_strs: Vec<String> = vec![];
   for name in ast.grammar_tokens.iter() {
     if name == "semi" {
       punctuation_values.push(quote!(;));
       let ident = Ident::new(&to_upper_snake_case(name), Span::call_site());
       punctuation.push(ident);
+      punctuation_strs.push("`;`".into());
     } else if name == "ident" {
       continue;
     } else if name != "_" && name.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
@@ -365,16 +367,21 @@ fn generate_syntax_kinds(ast: &AstSrc) -> String {
 
       if token == "'" {
         punctuation_values.push(quote!('\''));
+        punctuation_strs.push("`'`".into());
       } else if token == "\"" {
         punctuation_values.push(quote!('"'));
+        punctuation_strs.push("`\"`".into());
       } else if token == "\\" {
         punctuation_values.push(quote!('\\'));
+        punctuation_strs.push("`\\`".into());
       } else if "{}[]()".contains(token) {
         let c = token.chars().next().unwrap();
         punctuation_values.push(quote!(#c));
+        punctuation_strs.push(format!("`{c}`"));
       } else {
         let cs = token.chars().map(|c| Punct::new(c, Spacing::Joint));
         punctuation_values.push(quote!(#(#cs)*));
+        punctuation_strs.push(format!("`{}`", token.chars().join("")));
       }
       let ident = Ident::new(&to_upper_snake_case(name), Span::call_site());
       punctuation.push(ident);
@@ -423,6 +430,17 @@ fn generate_syntax_kinds(ast: &AstSrc) -> String {
       __LAST,
     }
     use self::SyntaxKind::*;
+
+    impl std::fmt::Display for SyntaxKind {
+      fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+          #(
+            #punctuation => f.write_str(#punctuation_strs),
+          )*
+          _ => std::fmt::Debug::fmt(self, f),
+        }
+      }
+    }
 
     impl SyntaxKind {
       pub fn is_keyword(self) -> bool {
