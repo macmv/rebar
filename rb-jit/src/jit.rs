@@ -41,7 +41,9 @@ struct IntrinsicDecl<'a> {
 }
 
 macro_rules! intrinsics {
-  ($($name:ident,)*) => {
+  ($(
+    $name:ident($($arg:ident),*) $(-> $ret:ident)?,
+  )*) => {
     pub struct Intrinsics<T> {
       $($name: T),*
     }
@@ -53,18 +55,42 @@ macro_rules! intrinsics {
         }
       }
     }
+
+    impl Intrinsics<FuncId> {
+      pub fn build(module: &mut JITModule) -> Self {
+        Intrinsics {
+          $(
+            $name: module.declare_function(
+              concat!("__", stringify!($name)),
+              Linkage::Import,
+              &{
+                #[allow(unused_mut)]
+                let mut sig = module.make_signature();
+                $(
+                  sig.params.push(AbiParam::new(ir::types::$arg));
+                )*
+                $(
+                  sig.returns.push(AbiParam::new(ir::types::$ret));
+                )?
+                sig
+              }
+            ).unwrap()
+          ),*
+        }
+      }
+    }
   };
 }
 
 intrinsics!(
-  call,
-  push_frame,
-  pop_frame,
-  track,
-  string_append_value,
-  array_push,
-  array_index,
-  value_equals,
+  call(I64, I64, I64),
+  push_frame(),
+  pop_frame(),
+  track(I64),
+  string_append_value(I64, I64),
+  array_push(I64, I64, I64),
+  array_index(I64, I64, I64),
+  value_equals(I64, I64) -> I8,
 );
 
 pub struct FuncBuilder<'a> {
@@ -150,61 +176,9 @@ impl JIT {
 
     let mut module = JITModule::new(builder);
 
-    let mut call_sig = module.make_signature();
-    call_sig.params.push(AbiParam::new(ir::types::I64));
-    call_sig.params.push(AbiParam::new(ir::types::I64));
-    call_sig.params.push(AbiParam::new(ir::types::I64));
-
-    let push_frame_sig = module.make_signature();
-    let pop_frame_sig = module.make_signature();
-
-    let mut track_sig = module.make_signature();
-    track_sig.params.push(AbiParam::new(ir::types::I64));
-
-    let mut string_append_value = module.make_signature();
-    string_append_value.params.push(AbiParam::new(ir::types::I64));
-    string_append_value.params.push(AbiParam::new(ir::types::I64));
-
-    let mut array_push = module.make_signature();
-    array_push.params.push(AbiParam::new(ir::types::I64));
-    array_push.params.push(AbiParam::new(ir::types::I64));
-    array_push.params.push(AbiParam::new(ir::types::I64));
-
-    let mut array_index = module.make_signature();
-    array_index.params.push(AbiParam::new(ir::types::I64));
-    array_index.params.push(AbiParam::new(ir::types::I64));
-    array_index.params.push(AbiParam::new(ir::types::I64));
-
-    let mut value_equals = module.make_signature();
-    value_equals.params.push(AbiParam::new(ir::types::I64));
-    value_equals.params.push(AbiParam::new(ir::types::I64));
-    value_equals.returns.push(AbiParam::new(ir::types::I8));
-
     JIT {
       data_description: DataDescription::new(),
-      intrinsics: Intrinsics {
-        call:       module.declare_function("__call", Linkage::Import, &call_sig).unwrap(),
-        push_frame: module
-          .declare_function("__push_frame", Linkage::Import, &push_frame_sig)
-          .unwrap(),
-        pop_frame:  module
-          .declare_function("__pop_frame", Linkage::Import, &pop_frame_sig)
-          .unwrap(),
-        track:      module.declare_function("__track", Linkage::Import, &track_sig).unwrap(),
-
-        string_append_value: module
-          .declare_function("__string_append_value", Linkage::Import, &string_append_value)
-          .unwrap(),
-        array_push:          module
-          .declare_function("__array_push", Linkage::Import, &array_push)
-          .unwrap(),
-        array_index:         module
-          .declare_function("__array_index", Linkage::Import, &array_index)
-          .unwrap(),
-        value_equals:        module
-          .declare_function("__value_equals", Linkage::Import, &value_equals)
-          .unwrap(),
-      },
+      intrinsics: Intrinsics::build(&mut module),
       module,
       user_funcs: HashMap::new(),
     }
