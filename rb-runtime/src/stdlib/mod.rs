@@ -7,7 +7,7 @@ mod std;
 
 use gc_arena::{lock::RefLock, Collect, Gc};
 use rb_jit::{
-  jit::{IntrinsicImpls, RebarArgs},
+  jit::{IntrinsicImpls, RbArray, RebarArgs},
   value::{DynamicValueType, ValueType},
 };
 use rb_mir::ast::{self as mir};
@@ -315,7 +315,23 @@ pub trait DynFunction<T> {
 #[collect(no_drop)]
 pub enum GcValue {
   String(String),
-  Array(Box<Vec<i64>>),
+  Array(RbArrayCollect),
+}
+
+#[derive(Debug, PartialEq)]
+pub struct RbArrayCollect(Box<RbArray>);
+
+// FIXME: This is horribly incorrect. I basically need to pass a `RuntimeEnv`
+// through `cc` somehow, so that I can parse the nested values out of this
+// `Vec<i64>`.
+//
+// TODO: Write new gc :)
+unsafe impl Collect for RbArrayCollect {
+  fn trace(&self, cc: &gc_arena::Collection) {
+    for elem in self.0.iter() {
+      elem.trace(cc);
+    }
+  }
 }
 
 /// A value with references to rebar values. This typically has the lifetime of
@@ -326,7 +342,7 @@ pub enum Value<'a> {
   Int(i64),
   Bool(bool),
   String(&'a str),
-  Array(&'a Vec<i64>, DynamicValueType),
+  Array(&'a RbArray, DynamicValueType),
 }
 
 /// An owned value, created from rust, that will be passed back to rebar.
@@ -389,8 +405,8 @@ impl GcValue {
   pub fn gc_id(&self) -> GcId {
     match self {
       GcValue::String(s) => GcId(s.as_ptr() as u64),
-      GcValue::Array(b) => {
-        let ptr = &**b as *const Vec<i64>;
+      GcValue::Array(RbArrayCollect(b)) => {
+        let ptr = &**b as *const RbArray;
         GcId(ptr as u64)
       }
     }
@@ -533,7 +549,7 @@ impl<'a> RebarArgsParser<'a> {
         let ptr = self.next();
         let vt = self.next();
 
-        let arr = &*(ptr as *const Vec<i64>) as &Vec<i64>;
+        let arr = &*(ptr as *const RbArray) as &RbArray;
         let vt = DynamicValueType::decode(vt);
 
         Value::Array(arr, vt)
@@ -560,7 +576,7 @@ impl<'a> RebarArgsParser<'a> {
       ValueType::Array => {
         let ptr = self.next();
 
-        ManuallyDrop::new(GcValue::Array(Box::from_raw(ptr as *mut Vec<i64>)))
+        ManuallyDrop::new(GcValue::Array(RbArrayCollect(Box::from_raw(ptr as *mut RbArray))))
       }
       _ => unreachable!("not an owned value: {vt:?}"),
     }

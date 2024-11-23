@@ -15,6 +15,8 @@ use crate::value::{CompactValues, DynamicValueType, ParamKind, RValue, Value, Va
 
 mod array;
 
+pub use array::RbArray;
+
 pub struct JIT {
   module: JITModule,
 
@@ -600,7 +602,8 @@ impl FuncBuilder<'_> {
         let vt = DynamicValueType::for_type(ty);
         let slot_size = vt.len();
 
-        let result_box = Box::<Vec<i64>>::new(vec![0; slot_size as usize * exprs.len()]);
+        let result_box =
+          Box::<RbArray>::new(RbArray::new_with_len(slot_size as usize * exprs.len()));
         let array_ptr = result_box.as_ptr();
 
         for (i, expr) in exprs.iter().enumerate() {
