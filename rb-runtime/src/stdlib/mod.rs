@@ -64,6 +64,7 @@ impl Environment {
       string_append_value: Self::string_append_value,
       string_append_str:   Self::string_append_str,
       string_new:          Self::string_new,
+      array_new:           Self::array_new,
       value_equals:        Self::value_equals,
     }
   }
@@ -218,6 +219,30 @@ impl Environment {
     })
   }
 
+  fn array_new(len: i64, vt: i64) -> *const u8 {
+    ENV.with(|env| {
+      let env = env.borrow();
+      let env = env.as_ref().unwrap();
+
+      let vt = DynamicValueType::decode(vt);
+
+      env.gc.mutate(|m, _| {
+        Gc::as_ptr(Gc::new(
+          m,
+          GcArray {
+            arr: Gc::new(
+              m,
+              CollectArray(UnsafeCell::new(RbArray::new_with_len(
+                len as usize * vt.len() as usize,
+              ))),
+            ),
+            vt,
+          },
+        )) as *const u8
+      })
+    })
+  }
+
   fn value_equals(a: *const RebarArgs, b: *const RebarArgs) -> i8 {
     ENV.with(|_env| {
       let a_value = unsafe {
@@ -277,8 +302,17 @@ pub enum GcValue<'gc> {
 
 #[derive(Debug)]
 pub struct GcArray<'gc> {
-  arr: Gc<'gc, UnsafeCell<RbArray>>,
+  arr: Gc<'gc, CollectArray>,
   vt:  DynamicValueType,
+}
+
+#[derive(Debug)]
+#[repr(transparent)]
+struct CollectArray(UnsafeCell<RbArray>);
+
+unsafe impl<'gc> Collect for CollectArray {
+  // FIXME: This is wrong.
+  fn trace(&self, _cc: &gc_arena::Collection) {}
 }
 
 impl<'a> GcValue<'a> {
@@ -288,7 +322,7 @@ impl<'a> GcValue<'a> {
       Value::String(s) => unsafe { GcValue::String(Gc::from_ptr(s.as_ptr() as *const String)) },
       Value::Array(arr) => unsafe {
         GcValue::Array(GcArray {
-          arr: Gc::from_ptr(arr.elems as *const RbArray as *const UnsafeCell<RbArray>),
+          arr: Gc::from_ptr(arr.elems as *const RbArray as *const CollectArray),
           vt:  arr.vt,
         })
       },
@@ -303,7 +337,7 @@ impl PartialEq for GcArray<'_> {
 }
 
 impl GcArray<'_> {
-  pub fn as_slice(&self) -> RbSlice { unsafe { RbSlice::new(&*(*self.arr).get(), self.vt) } }
+  pub fn as_slice(&self) -> RbSlice { unsafe { RbSlice::new(&*(*self.arr).0.get(), self.vt) } }
 }
 
 unsafe impl Collect for GcArray<'_> {
@@ -541,7 +575,7 @@ impl<'a> RebarArgsParser<'a> {
         let vt = DynamicValueType::decode(vt);
 
         ManuallyDrop::new(GcValue::Array(GcArray {
-          arr: Gc::from_ptr(ptr as *const UnsafeCell<RbArray>),
+          arr: Gc::from_ptr(ptr as *const CollectArray),
           vt,
         }))
       }

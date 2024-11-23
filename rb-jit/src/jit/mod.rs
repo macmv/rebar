@@ -100,6 +100,7 @@ intrinsics!(
   string_append_value(I64, I64),
   string_append_str(I64, I64, I64),
   string_new() -> I64,
+  array_new(I64, I64) -> I64,
   value_equals(I64, I64) -> I8,
 );
 
@@ -157,6 +158,7 @@ pub struct IntrinsicImpls {
   pub string_append_value: fn(*const String, *const RebarArgs),
   pub string_append_str:   fn(*const String, *const u8, i64),
   pub string_new:          fn() -> *const String,
+  pub array_new:           fn(i64, i64) -> *const u8,
   pub value_equals:        fn(*const RebarArgs, *const RebarArgs) -> i8,
 }
 
@@ -578,36 +580,37 @@ impl FuncBuilder<'_> {
         let vt = DynamicValueType::for_type(ty);
         let slot_size = vt.len();
 
-        // FIXME: This needs to be constructed by the GC.
-        let result_box =
-          Box::<RbArray>::new(RbArray::new_with_len(slot_size as usize * exprs.len()));
-        let array_ptr = result_box.as_ptr();
+        let result_ptr = {
+          let vt = self.builder.ins().iconst(ir::types::I64, vt.encode());
+          let len = self.builder.ins().iconst(ir::types::I64, exprs.len() as i64);
+
+          let result_ptr = self.builder.ins().call(self.intrinsics.array_new, &[len, vt]);
+          self.builder.inst_results(result_ptr)[0]
+        };
+
+        // `result_ptr` points to an `RbArray`, which has the elements pointer as the
+        // first element. So pick that pointer out, and use that when filling in
+        // elements.
+        let first_ptr = self.builder.ins().load(ir::types::I64, MemFlags::new(), result_ptr, 0);
 
         for (i, expr) in exprs.iter().enumerate() {
           let to_append = self.compile_expr(*expr);
           let ir = to_append.to_ir(vt.param_kind(), &mut self.builder);
           assert_eq!(ir.len(), slot_size as usize);
 
-          unsafe {
-            let element_ptr = array_ptr.offset(i as isize * slot_size as isize);
-            let element_ptr = self.builder.ins().iconst(ir::types::I64, element_ptr as i64);
+          let offset = self.builder.ins().iconst(ir::types::I64, i as i64 * slot_size as i64 * 8);
+          let element_ptr = self.builder.ins().iadd(first_ptr, offset);
 
-            // TODO: Compile this into a loop if its too long.
-            for j in 0..slot_size as usize {
-              self.builder.ins().store(MemFlags::new(), ir[j], element_ptr, (j as i32) * 8);
-            }
+          // TODO: Compile this into a loop if its too long.
+          for j in 0..slot_size as usize {
+            self.builder.ins().store(MemFlags::new(), ir[j], element_ptr, (j as i32) * 8);
           }
         }
-
-        let result_ptr =
-          self.builder.ins().iconst(ir::types::I64, Box::into_raw(result_box) as i64);
 
         let result = RValue {
           ty:     Value::Const(ValueType::Array),
           values: vec![Value::Dyn(result_ptr), Value::Const(vt.encode())],
         };
-
-        self.track_value(&result);
 
         result
       }
