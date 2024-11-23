@@ -76,8 +76,7 @@ impl Environment {
       let thread = root.threads.get(&tid).unwrap();
       let frame = thread.frames.last().unwrap();
 
-      let id = value.gc_id();
-      frame.borrow_mut(m).values.insert(id, Gc::new(&m, value));
+      frame.borrow_mut(m).values.push(Gc::new(&m, value));
     });
   }
 
@@ -179,20 +178,7 @@ impl Environment {
         let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
         let mut frame = thread.frames.last_mut().unwrap().borrow_mut(m);
 
-        let id = value.gc_id();
-        match frame.values.get(&id) {
-          Some(_) => {
-            // NB: Now we've gotten into chaotic territory. Because this
-            // value is already tracked, it means we have just
-            // created an owned value `parser.value_owned_unsized`. However,
-            // that value is wrapped in a `ManuallyDrop`, so we
-            // don't need to do anything here, we can just
-            // forget about this value, as it's already in the GC.
-          }
-          None => {
-            frame.values.insert(id, Gc::new(&m, ManuallyDrop::into_inner(value)));
-          }
-        }
+        frame.values.push(Gc::new(&m, ManuallyDrop::into_inner(value)));
       });
     });
   }
@@ -396,18 +382,6 @@ impl OwnedValue {
     match self {
       OwnedValue::String(s) => s,
       _ => panic!("expected str"),
-    }
-  }
-}
-
-impl GcValue<'_> {
-  pub fn gc_id(&self) -> GcId {
-    match self {
-      GcValue::String(s) => GcId(s.as_ptr() as u64),
-      GcValue::Array(GcArray { arr, .. }) => {
-        let ptr = arr.get() as *const RbArray;
-        GcId(ptr as u64)
-      }
     }
   }
 }
