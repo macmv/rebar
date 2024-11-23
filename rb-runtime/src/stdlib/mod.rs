@@ -278,7 +278,10 @@ pub enum GcValue {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct RbArrayCollect(Box<RbArray>);
+pub struct RbArrayCollect {
+  arr: Box<RbArray>,
+  vt:  DynamicValueType,
+}
 
 // FIXME: This is horribly incorrect. I basically need to pass a `RuntimeEnv`
 // through `cc` somehow, so that I can parse the nested values out of this
@@ -287,7 +290,7 @@ pub struct RbArrayCollect(Box<RbArray>);
 // TODO: Write new gc :)
 unsafe impl Collect for RbArrayCollect {
   fn trace(&self, cc: &gc_arena::Collection) {
-    for elem in self.0.iter() {
+    for elem in self.arr.iter() {
       elem.trace(cc);
     }
   }
@@ -364,8 +367,8 @@ impl GcValue {
   pub fn gc_id(&self) -> GcId {
     match self {
       GcValue::String(s) => GcId(s.as_ptr() as u64),
-      GcValue::Array(RbArrayCollect(b)) => {
-        let ptr = &**b as *const RbArray;
+      GcValue::Array(RbArrayCollect { arr, .. }) => {
+        let ptr = &**arr as *const RbArray;
         GcId(ptr as u64)
       }
     }
@@ -536,8 +539,14 @@ impl<'a> RebarArgsParser<'a> {
       }
       ValueType::Array => {
         let ptr = self.next();
+        let vt = self.next();
 
-        ManuallyDrop::new(GcValue::Array(RbArrayCollect(Box::from_raw(ptr as *mut RbArray))))
+        let vt = DynamicValueType::decode(vt);
+
+        ManuallyDrop::new(GcValue::Array(RbArrayCollect {
+          arr: Box::from_raw(ptr as *mut RbArray),
+          vt,
+        }))
       }
       _ => unreachable!("not an owned value: {vt:?}"),
     }
