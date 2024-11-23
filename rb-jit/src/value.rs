@@ -331,7 +331,7 @@ impl ValueType {
       ValueType::Nil => 0,
       ValueType::Int => 1,
       ValueType::Bool => 1,
-      ValueType::String => 2,
+      ValueType::String => 1,
       ValueType::Array => 2,
 
       ValueType::Function => 1,

@@ -17,7 +17,7 @@ use rb_jit::{
 use rb_mir::ast::{self as mir};
 use rb_typer::{Literal, Type};
 
-use crate::gc::{GcArena, GcId, GcRoot};
+use crate::gc::{GcArena, GcRoot};
 
 mod slice;
 use slice::RbSlice;
@@ -62,6 +62,8 @@ impl Environment {
       pop_frame:           Self::pop_frame(),
       track:               Self::track,
       string_append_value: Self::string_append_value,
+      string_append_str:   Self::string_append_str,
+      string_new:          Self::string_new,
       value_equals:        Self::value_equals,
     }
   }
@@ -114,12 +116,11 @@ impl Environment {
             Type::Literal(Literal::String) => {
               let mut str = String::from(ret_value.as_str());
               str.shrink_to_fit();
-              let ptr = str.as_ptr() as i64;
+              let gc: Gc<String> = env.gc.mutate(|m, _| ::std::mem::transmute(Gc::new(m, str)));
 
-              ret.ret(0, str.len() as i64);
-              ret.ret(1, ptr);
+              ret.ret(0, Gc::as_ptr(gc) as i64);
 
-              env.track_value(GcValue::String(str));
+              env.track_value(GcValue::String(gc));
             }
             ref v => unimplemented!("{v:?}"),
           }
@@ -183,40 +184,44 @@ impl Environment {
     });
   }
 
-  fn string_append_value(str: *const RebarArgs, args: *const RebarArgs) {
+  fn string_append_value(str: *const String, args: *const RebarArgs) {
     ENV.with(|_env| {
-      let str = unsafe { &mut *(str as *mut RebarArgs) };
-      let mut str_value = unsafe {
-        let mut parser = RebarArgsParser::new(str);
-
-        let len = parser.next();
-        let cap = parser.next();
-        let ptr = parser.next();
-        ManuallyDrop::new(String::from_utf8_unchecked(Vec::from_raw_parts(
-          ptr as *mut u8,
-          len as usize,
-          cap as usize,
-        )))
-      };
+      let str_value = unsafe { Gc::from_ptr(str as *const UnsafeCell<String>) };
 
       let arg_value = unsafe {
         let mut parser = RebarArgsParser::new(args);
         parser.value_unsized()
       };
 
+      let str = unsafe { &mut *str_value.get() };
+
       match arg_value {
-        Value::Int(i) => write!(str_value, "{}", i).unwrap(),
-        Value::String(s) => str_value.push_str(s),
-        Value::Array(v) => write!(str_value, "{v:?}").unwrap(),
+        Value::Int(i) => write!(str, "{}", i).unwrap(),
+        Value::String(s) => str.push_str(s),
+        Value::Array(v) => write!(str, "{v:?}").unwrap(),
         _ => panic!("expected string"),
       }
+    });
+  }
+
+  fn string_append_str(str: *const String, s: *const u8, len: i64) {
+    ENV.with(|_env| {
+      let str_value = unsafe { Gc::from_ptr(str as *const UnsafeCell<String>) };
+
+      let s = unsafe { ::std::slice::from_raw_parts(s, len as usize) };
 
       unsafe {
-        str.ret(0, str_value.len() as i64);
-        str.ret(1, str_value.capacity() as i64);
-        str.ret(2, str_value.as_ptr() as i64);
+        (&mut *str_value.get()).push_str(::std::str::from_utf8(s).unwrap());
       }
     });
+  }
+
+  fn string_new() -> *const String {
+    ENV.with(|env| {
+      let mut env = env.borrow_mut();
+
+      env.as_mut().unwrap().gc.mutate(|m, _| Gc::as_ptr(Gc::new(m, String::new())))
+    })
   }
 
   fn value_equals(a: *const RebarArgs, b: *const RebarArgs) -> i8 {
@@ -272,7 +277,7 @@ pub trait DynFunction<T> {
 #[derive(Debug, Collect, PartialEq)]
 #[collect(no_drop)]
 pub enum GcValue<'gc> {
-  String(String),
+  String(Gc<'gc, String>),
   Array(GcArray<'gc>),
 }
 
@@ -286,9 +291,7 @@ impl<'a> GcValue<'a> {
   // NB: This `GcValue` cannot be dropped, as that will cause a double free.
   pub(crate) fn from_value(value: &Value) -> Option<ManuallyDrop<GcValue<'a>>> {
     let gc = match value {
-      Value::String(s) => unsafe {
-        GcValue::String(String::from_raw_parts(s.as_ptr() as *mut u8, s.len(), s.len()))
-      },
+      Value::String(s) => unsafe { GcValue::String(Gc::from_ptr(s.as_ptr() as *const String)) },
       Value::Array(arr) => unsafe {
         GcValue::Array(GcArray {
           arr: Gc::from_ptr(arr.elems as *const RbArray as *const UnsafeCell<RbArray>),
@@ -509,16 +512,11 @@ impl<'a> RebarArgsParser<'a> {
       }
       ValueType::Int => Value::Int(self.next()),
       ValueType::String => {
-        // SAFETY: `value` came from rebar, so we assume its a valid pointer.
-        // The value will always take up 8 bytes, even if less bytes are used.
-        let len = self.next();
         let ptr = self.next();
-        let str = ::std::str::from_utf8_unchecked(::std::slice::from_raw_parts(
-          ptr as *const u8,
-          len as usize,
-        ));
 
-        Value::String(str)
+        let gc = Gc::from_ptr(ptr as *const String);
+
+        Value::String(::std::mem::transmute(gc.as_str()))
       }
       ValueType::Array => {
         let ptr = self.next();
@@ -536,17 +534,11 @@ impl<'a> RebarArgsParser<'a> {
   unsafe fn value_owned(&mut self, vt: ValueType) -> ManuallyDrop<GcValue<'static>> {
     match vt {
       ValueType::String => {
-        // Rebar always shrinks strings before throwing them on the stack, so the len
-        // and cap will be the same.
-        let len = self.next();
         let ptr = self.next();
-        let str = String::from_utf8_unchecked(Vec::from_raw_parts(
-          ptr as *mut u8,
-          len as usize,
-          len as usize,
-        ));
 
-        ManuallyDrop::new(GcValue::String(str))
+        let gc = Gc::from_ptr(ptr as *const String);
+
+        ManuallyDrop::new(GcValue::String(gc))
       }
       ValueType::Array => {
         let ptr = self.next();

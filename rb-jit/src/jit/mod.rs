@@ -9,7 +9,7 @@ use cranelift_module::{DataDescription, FuncId, FunctionDeclaration, Linkage, Mo
 use isa::{CallConv, TargetIsa};
 use rb_mir::ast::{self as mir, UserFunctionId};
 use rb_typer::{Literal, Type};
-use std::{collections::HashMap, marker::PhantomPinned, mem::ManuallyDrop};
+use std::{collections::HashMap, marker::PhantomPinned};
 
 use crate::value::{CompactValues, DynamicValueType, ParamKind, RValue, Value, ValueType};
 
@@ -98,6 +98,8 @@ intrinsics!(
   pop_frame(),
   track(I64),
   string_append_value(I64, I64),
+  string_append_str(I64, I64, I64),
+  string_new() -> I64,
   value_equals(I64, I64) -> I8,
 );
 
@@ -152,7 +154,9 @@ pub struct IntrinsicImpls {
   pub push_frame:          fn(),
   pub pop_frame:           fn(),
   pub track:               fn(*const RebarArgs),
-  pub string_append_value: fn(*const RebarArgs, *const RebarArgs),
+  pub string_append_value: fn(*const String, *const RebarArgs),
+  pub string_append_str:   fn(*const String, *const u8, i64),
+  pub string_new:          fn() -> *const String,
   pub value_equals:        fn(*const RebarArgs, *const RebarArgs) -> i8,
 }
 
@@ -498,21 +502,24 @@ impl FuncBuilder<'_> {
         mir::Literal::Bool(v) => RValue::bool(self.builder.ins().iconst(ir::types::I8, *v as i64)),
         mir::Literal::Int(i) => RValue::int(self.builder.ins().iconst(ir::types::I64, *i)),
         mir::Literal::String(i) => {
-          // Note that we don't care about alignment here: we handle reading an unaligned
-          // i64.
+          let str = self.builder.ins().call(self.intrinsics.string_new, &[]);
+          let str = self.builder.inst_results(str)[0];
+
           let mut to_leak = i.clone();
           to_leak.shrink_to_fit();
 
           let len = to_leak.len();
           let ptr = to_leak.as_ptr();
 
+          let ptr = self.builder.ins().iconst(ir::types::I64, ptr as i64);
+          let len = self.builder.ins().iconst(ir::types::I64, len as i64);
+
           // TODO: Throw this in a GC or something.
           String::leak(to_leak);
 
-          RValue {
-            ty:     Value::Const(ValueType::String),
-            values: vec![Value::from(len as i64), Value::from(ptr as i64)],
-          }
+          self.builder.ins().call(self.intrinsics.string_append_str, &[str, ptr, len]);
+
+          RValue { ty: Value::Const(ValueType::String), values: vec![Value::from(str)] }
         }
       },
 
@@ -531,67 +538,38 @@ impl FuncBuilder<'_> {
 
         // We track this in the GC later, once we're done mutating it. For now, manually
         // drop it so we don't double free.
-        let result_str = ManuallyDrop::new(String::new());
-
-        let len = result_str.len();
-        let cap = result_str.capacity();
-        let ptr = result_str.as_ptr();
-
-        // NB: This slot is mutated! We're using it to append to the string.
-        let str_slot = self.builder.create_sized_stack_slot(StackSlotData {
-          kind: StackSlotKind::ExplicitSlot,
-          // A string is composed of 3 values, each being 8 bytes.
-          size: 3 * 8,
-        });
-        let len = self.builder.ins().iconst(ir::types::I64, len as i64);
-        let cap = self.builder.ins().iconst(ir::types::I64, cap as i64);
-        let ptr = self.builder.ins().iconst(ir::types::I64, ptr as i64);
-        self.builder.ins().stack_store(len, str_slot, 0);
-        self.builder.ins().stack_store(cap, str_slot, 8);
-        self.builder.ins().stack_store(ptr, str_slot, 16);
-
-        let str_addr = self.builder.ins().stack_addr(ir::types::I64, str_slot, 0);
+        let ret = self.builder.ins().call(self.intrinsics.string_new, &[]);
+        let str = self.builder.inst_results(ret)[0];
 
         for segment in segments {
-          let to_append = match segment {
-            mir::StringInterp::Literal(str) => {
-              let mut to_leak = String::from(str);
-              to_leak.shrink_to_fit();
+          match segment {
+            mir::StringInterp::Literal(s) => {
+              let mut v = String::from(s);
+              v.shrink_to_fit();
 
-              let len = to_leak.len();
-              let ptr = to_leak.as_ptr();
+              let len = v.len();
+              let ptr = v.as_ptr();
 
-              // TODO: Throw this in a memoized pool of string literals.
-              String::leak(to_leak);
+              let ptr = self.builder.ins().iconst(ir::types::I64, ptr as i64);
+              let len = self.builder.ins().iconst(ir::types::I64, len as i64);
 
-              RValue {
-                ty:     Value::Const(ValueType::String),
-                values: vec![Value::from(len as i64), Value::from(ptr as i64)],
-              }
+              // TODO: Keep this in a memoized string table.
+              String::leak(v);
+
+              self.builder.ins().call(self.intrinsics.string_append_str, &[str, ptr, len]);
             }
 
-            mir::StringInterp::Expr(e) => self.compile_expr(*e),
+            mir::StringInterp::Expr(e) => {
+              let value = self.compile_expr(*e);
+              let arg_ptr = self.stack_slot_unsized(&value);
+
+              self.builder.ins().call(self.intrinsics.string_append_value, &[str, arg_ptr]);
+            }
           };
-
-          let arg_ptr = self.stack_slot_unsized(&to_append);
-
-          self.builder.ins().call(self.intrinsics.string_append_value, &[str_addr, arg_ptr]);
         }
 
-        // Now that we're done mutating the slot, we can track the value in the GC (and
-        // we can drop the `cap` amount, because we don't need that anymore, now that
-        // the string is immutable).
-        let result = RValue {
-          ty:     Value::Const(ValueType::String),
-          values: vec![
-            // Len
-            Value::Dyn(self.builder.ins().stack_load(ir::types::I64, str_slot, 0)),
-            // Ptr
-            Value::Dyn(self.builder.ins().stack_load(ir::types::I64, str_slot, 16)),
-          ],
-        };
-
-        self.track_value(&result);
+        let result =
+          RValue { ty: Value::Const(ValueType::String), values: vec![Value::Dyn(str)] };
 
         result
       }
