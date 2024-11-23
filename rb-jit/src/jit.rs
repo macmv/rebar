@@ -41,7 +41,7 @@ struct NativeFuncDecl<'a> {
 }
 
 macro_rules! native_funcs {
-  ($($name:ident),*) => {
+  ($($name:ident,)*) => {
     pub struct NativeFuncs<T> {
       $($name: T),*
     }
@@ -56,7 +56,16 @@ macro_rules! native_funcs {
   };
 }
 
-native_funcs!(call, push_frame, pop_frame, track, string_append_value, array_push, value_equals);
+native_funcs!(
+  call,
+  push_frame,
+  pop_frame,
+  track,
+  string_append_value,
+  array_push,
+  array_index,
+  value_equals,
+);
 
 pub struct FuncBuilder<'a> {
   builder: FunctionBuilder<'a>,
@@ -111,6 +120,7 @@ pub struct RuntimeHelpers {
   pub track:               fn(*const RebarArgs),
   pub string_append_value: fn(*const RebarArgs, *const RebarArgs),
   pub array_push:          fn(*mut Vec<i64>, i64, *const RebarArgs),
+  pub array_index:         fn(*const RebarArgs, *const RebarArgs, *mut RebarArgs),
   pub value_equals:        fn(*const RebarArgs, *const RebarArgs) -> i8,
 }
 
@@ -135,6 +145,7 @@ impl JIT {
     builder.symbol("__track", helpers.track as *const _);
     builder.symbol("__string_append_value", helpers.string_append_value as *const _);
     builder.symbol("__array_push", helpers.array_push as *const _);
+    builder.symbol("__array_index", helpers.array_index as *const _);
     builder.symbol("__value_equals", helpers.value_equals as *const _);
 
     let mut module = JITModule::new(builder);
@@ -159,6 +170,11 @@ impl JIT {
     array_push.params.push(AbiParam::new(ir::types::I64));
     array_push.params.push(AbiParam::new(ir::types::I64));
 
+    let mut array_index = module.make_signature();
+    array_index.params.push(AbiParam::new(ir::types::I64));
+    array_index.params.push(AbiParam::new(ir::types::I64));
+    array_index.params.push(AbiParam::new(ir::types::I64));
+
     let mut value_equals = module.make_signature();
     value_equals.params.push(AbiParam::new(ir::types::I64));
     value_equals.params.push(AbiParam::new(ir::types::I64));
@@ -181,6 +197,9 @@ impl JIT {
           .unwrap(),
         array_push:          module
           .declare_function("__array_push", Linkage::Import, &array_push)
+          .unwrap(),
+        array_index:         module
+          .declare_function("__array_index", Linkage::Import, &array_index)
           .unwrap(),
         value_equals:        module
           .declare_function("__value_equals", Linkage::Import, &value_equals)
@@ -825,6 +844,50 @@ impl FuncBuilder<'_> {
         };
 
         res
+      }
+
+      mir::Expr::Index(lhs, rhs, ref ret_ty) => {
+        let lhs = self.compile_expr(lhs);
+        let rhs = self.compile_expr(rhs);
+
+        let ret_dvt = DynamicValueType::for_type(ret_ty);
+
+        let l_addr = self.stack_slot_unsized(&lhs);
+        let r_addr = self.stack_slot_unsized(&rhs);
+
+        let ret_slot = self.builder.create_sized_stack_slot(StackSlotData {
+          kind: StackSlotKind::ExplicitSlot,
+          // Each return value is 8 bytes wide.
+          size: ret_dvt.len() * 8,
+        });
+        let ret_ptr = self.builder.ins().stack_addr(ir::types::I64, ret_slot, 0);
+
+        self.builder.ins().call(self.funcs.array_index, &[l_addr, r_addr, ret_ptr]);
+
+        match ret_dvt {
+          DynamicValueType::Const(vt) => RValue {
+            ty:     Value::Const(vt),
+            values: (0..vt.len())
+              .map(|i| {
+                Value::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, i as i32 * 8))
+              })
+              .collect(),
+          },
+          DynamicValueType::Union(len) => RValue {
+            ty:     Value::Dyn(self.builder.ins().stack_load(ir::types::I64, ret_slot, 0)),
+            // NB: Use `len`, not `ret_dvt.len()`, because we're reading the union tag by hand
+            // above.
+            values: (0..len)
+              .map(|i| {
+                Value::Dyn(self.builder.ins().stack_load(
+                  ir::types::I64,
+                  ret_slot,
+                  i as i32 * 8 + 8,
+                ))
+              })
+              .collect(),
+          },
+        }
       }
 
       mir::Expr::If { cond, then, els: None, ty: _ } => {
