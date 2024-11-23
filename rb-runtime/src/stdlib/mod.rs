@@ -55,7 +55,6 @@ impl Environment {
       pop_frame:           Self::pop_frame(),
       track:               Self::track,
       string_append_value: Self::string_append_value,
-      array_index:         Self::array_index,
       value_equals:        Self::value_equals,
     }
   }
@@ -230,35 +229,6 @@ impl Environment {
         str.ret(2, str_value.as_ptr() as i64);
       }
     });
-  }
-
-  fn array_index(array: *const RebarArgs, index: *const RebarArgs, ret: *mut RebarArgs) {
-    ENV.with(|_env| {
-      let array = unsafe {
-        let mut parser = RebarArgsParser::new(array);
-        parser.value_unsized()
-      };
-
-      let index = unsafe {
-        let mut parser = RebarArgsParser::new(index);
-        parser.value_unsized()
-      };
-
-      let ret = unsafe { &mut *ret };
-
-      match array {
-        Value::Array(v, vt) => {
-          let chunk = v.chunks(vt.len() as usize).nth(index.as_int() as usize).unwrap();
-
-          unsafe {
-            for (i, elem) in chunk.iter().enumerate() {
-              ret.ret(i, *elem);
-            }
-          }
-        }
-        _ => unreachable!("cannot index into non-array {:?}", array),
-      }
-    })
   }
 
   fn value_equals(a: *const RebarArgs, b: *const RebarArgs) -> i8 {
