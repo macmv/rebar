@@ -13,6 +13,8 @@ use std::{collections::HashMap, marker::PhantomPinned, mem::ManuallyDrop};
 
 use crate::value::{CompactValues, DynamicValueType, ParamKind, RValue, Value, ValueType};
 
+mod array;
+
 pub struct JIT {
   module: JITModule,
 
