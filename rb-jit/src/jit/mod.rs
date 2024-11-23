@@ -845,36 +845,53 @@ impl FuncBuilder<'_> {
 
         let ret_dvt = DynamicValueType::for_type(ret_ty);
 
-        let l_addr = self.stack_slot_unsized(&lhs);
-        let r_addr = self.stack_slot_unsized(&rhs);
+        // `lhs` must be an array. Arrays are represented as a `Box<RbArray>`. `RbArray`
+        // stores the pointer to its elements at the start, so we can simply read at the
+        // pointer `lhs` to get the pointer to the first element. Then, we offset that
+        // pointer by the integer `rhs` times the slot_size (which can be found by
+        // looking at `ret_ty`).
 
-        let ret_slot = self.builder.create_sized_stack_slot(StackSlotData {
-          kind: StackSlotKind::ExplicitSlot,
-          // Each return value is 8 bytes wide.
-          size: ret_dvt.len() * 8,
-        });
-        let ret_ptr = self.builder.ins().stack_addr(ir::types::I64, ret_slot, 0);
+        let array_ptr = lhs.values[0].to_ir(&mut self.builder);
 
-        self.builder.ins().call(self.intrinsics.array_index, &[l_addr, r_addr, ret_ptr]);
+        let first_ptr = self.builder.ins().load(ir::types::I64, MemFlags::new(), array_ptr, 0);
+
+        let slot_size = ret_dvt.len();
+        let slot_size = self.builder.ins().iconst(ir::types::I64, slot_size as i64 * 8);
+
+        let index = rhs.values[0].to_ir(&mut self.builder);
+
+        let offset = self.builder.ins().imul(index, slot_size);
+        let element_ptr = self.builder.ins().iadd(first_ptr, offset);
 
         match ret_dvt {
           DynamicValueType::Const(vt) => RValue {
             ty:     Value::Const(vt),
             values: (0..vt.len())
               .map(|i| {
-                Value::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, i as i32 * 8))
+                Value::from(self.builder.ins().load(
+                  ir::types::I64,
+                  MemFlags::new(),
+                  element_ptr,
+                  i as i32 * 8,
+                ))
               })
               .collect(),
           },
           DynamicValueType::Union(len) => RValue {
-            ty:     Value::Dyn(self.builder.ins().stack_load(ir::types::I64, ret_slot, 0)),
+            ty:     Value::Dyn(self.builder.ins().load(
+              ir::types::I64,
+              MemFlags::new(),
+              element_ptr,
+              0,
+            )),
             // NB: Use `len`, not `ret_dvt.len()`, because we're reading the union tag by hand
             // above.
             values: (0..len)
               .map(|i| {
-                Value::Dyn(self.builder.ins().stack_load(
+                Value::Dyn(self.builder.ins().load(
                   ir::types::I64,
-                  ret_slot,
+                  MemFlags::new(),
+                  element_ptr,
                   i as i32 * 8 + 8,
                 ))
               })
