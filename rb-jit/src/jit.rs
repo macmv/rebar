@@ -20,7 +20,7 @@ pub struct JIT {
   #[allow(dead_code)]
   data_description: DataDescription,
 
-  funcs:      NativeFuncs<FuncId>,
+  intrinsics: Intrinsics<FuncId>,
   user_funcs: HashMap<mir::UserFunctionId, (FuncId, Signature)>,
 }
 
@@ -30,25 +30,25 @@ pub struct ThreadCtx<'a> {
 
   isa: &'a dyn TargetIsa,
 
-  funcs:      NativeFuncs<NativeFuncDecl<'a>>,
+  intrinsics: Intrinsics<IntrinsicDecl<'a>>,
   user_funcs: &'a HashMap<mir::UserFunctionId, (FuncId, Signature)>,
 }
 
 #[derive(Clone, Copy)]
-struct NativeFuncDecl<'a> {
+struct IntrinsicDecl<'a> {
   id:   FuncId,
   decl: &'a FunctionDeclaration,
 }
 
-macro_rules! native_funcs {
+macro_rules! intrinsics {
   ($($name:ident,)*) => {
-    pub struct NativeFuncs<T> {
+    pub struct Intrinsics<T> {
       $($name: T),*
     }
 
-    impl<T: Copy> NativeFuncs<T> {
-      fn map<U>(&self, mut f: impl FnMut(T) -> U) -> NativeFuncs<U> {
-        NativeFuncs {
+    impl<T: Copy> Intrinsics<T> {
+      fn map<U>(&self, mut f: impl FnMut(T) -> U) -> Intrinsics<U> {
+        Intrinsics {
           $($name: f(self.$name)),*
         }
       }
@@ -56,7 +56,7 @@ macro_rules! native_funcs {
   };
 }
 
-native_funcs!(
+intrinsics!(
   call,
   push_frame,
   pop_frame,
@@ -68,9 +68,9 @@ native_funcs!(
 );
 
 pub struct FuncBuilder<'a> {
-  builder: FunctionBuilder<'a>,
-  mir:     &'a mir::Function,
-  funcs:   NativeFuncs<FuncRef>,
+  builder:    FunctionBuilder<'a>,
+  mir:        &'a mir::Function,
+  intrinsics: Intrinsics<FuncRef>,
 
   // Note that `VarId` and `Variable` are entirely distinct.
   //
@@ -112,7 +112,7 @@ impl RebarArgs {
   }
 }
 
-pub struct RuntimeHelpers {
+pub struct IntrinsicImpls {
   pub call: fn(i64, *const RebarArgs, *mut RebarArgs),
 
   pub push_frame:          fn(),
@@ -128,7 +128,7 @@ const DEBUG: bool = false;
 
 impl JIT {
   #[allow(clippy::new_without_default)]
-  pub fn new(helpers: RuntimeHelpers) -> Self {
+  pub fn new(intrinsics: IntrinsicImpls) -> Self {
     let mut flag_builder = settings::builder();
     flag_builder.set("use_colocated_libcalls", "false").unwrap();
     flag_builder.set("is_pic", "false").unwrap();
@@ -139,14 +139,14 @@ impl JIT {
     let isa = isa_builder.finish(settings::Flags::new(flag_builder)).unwrap();
     let mut builder = JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
 
-    builder.symbol("__call", helpers.call as *const _);
-    builder.symbol("__push_frame", helpers.push_frame as *const _);
-    builder.symbol("__pop_frame", helpers.pop_frame as *const _);
-    builder.symbol("__track", helpers.track as *const _);
-    builder.symbol("__string_append_value", helpers.string_append_value as *const _);
-    builder.symbol("__array_push", helpers.array_push as *const _);
-    builder.symbol("__array_index", helpers.array_index as *const _);
-    builder.symbol("__value_equals", helpers.value_equals as *const _);
+    builder.symbol("__call", intrinsics.call as *const _);
+    builder.symbol("__push_frame", intrinsics.push_frame as *const _);
+    builder.symbol("__pop_frame", intrinsics.pop_frame as *const _);
+    builder.symbol("__track", intrinsics.track as *const _);
+    builder.symbol("__string_append_value", intrinsics.string_append_value as *const _);
+    builder.symbol("__array_push", intrinsics.array_push as *const _);
+    builder.symbol("__array_index", intrinsics.array_index as *const _);
+    builder.symbol("__value_equals", intrinsics.value_equals as *const _);
 
     let mut module = JITModule::new(builder);
 
@@ -182,7 +182,7 @@ impl JIT {
 
     JIT {
       data_description: DataDescription::new(),
-      funcs: NativeFuncs {
+      intrinsics: Intrinsics {
         call:       module.declare_function("__call", Linkage::Import, &call_sig).unwrap(),
         push_frame: module
           .declare_function("__push_frame", Linkage::Import, &push_frame_sig)
@@ -218,15 +218,15 @@ impl JIT {
       ctx,
       isa: self.module.isa(),
 
-      funcs: self.funcs(),
+      intrinsics: self.intrinsics(),
       user_funcs: &self.user_funcs,
     }
   }
 
-  fn funcs(&self) -> NativeFuncs<NativeFuncDecl> {
+  fn intrinsics(&self) -> Intrinsics<IntrinsicDecl> {
     self
-      .funcs
-      .map(|id| NativeFuncDecl { id, decl: self.module.declarations().get_function_decl(id) })
+      .intrinsics
+      .map(|id| IntrinsicDecl { id, decl: self.module.declarations().get_function_decl(id) })
   }
 
   pub fn finalize(&mut self) { self.module.finalize_definitions().unwrap(); }
@@ -246,7 +246,7 @@ impl ThreadCtx<'_> {
     let builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
 
     let mut index = 0;
-    let funcs = self.funcs.map(|func| {
+    let funcs = self.intrinsics.map(|func| {
       let signature = builder.func.import_signature(func.decl.signature.clone());
       let user_name_ref =
         builder.func.declare_imported_user_function(ir::UserExternalName { namespace: 0, index });
@@ -276,7 +276,14 @@ impl ThreadCtx<'_> {
       user_funcs.insert(dep, func_ref);
     }
 
-    FuncBuilder { builder, mir, funcs, locals: HashMap::new(), next_variable: 0, user_funcs }
+    FuncBuilder {
+      builder,
+      mir,
+      intrinsics: funcs,
+      locals: HashMap::new(),
+      next_variable: 0,
+      user_funcs,
+    }
   }
 
   fn translate_function(&mut self, mir: &mir::Function) { self.new_function(mir).translate(); }
@@ -356,7 +363,7 @@ impl FuncBuilder<'_> {
     self.builder.switch_to_block(entry_block);
     self.builder.seal_block(entry_block);
 
-    self.builder.ins().call(self.funcs.push_frame, &[]);
+    self.builder.ins().call(self.intrinsics.push_frame, &[]);
 
     for (id, param) in param_values.into_iter().enumerate() {
       let len = param.len();
@@ -372,7 +379,7 @@ impl FuncBuilder<'_> {
       // self.def_var(return_variable, res.to_ir());
     }
 
-    self.builder.ins().call(self.funcs.pop_frame, &[]);
+    self.builder.ins().call(self.intrinsics.pop_frame, &[]);
 
     // Emit the return instruction.
     self.builder.ins().return_(&[]);
@@ -494,7 +501,7 @@ impl FuncBuilder<'_> {
   fn track_value(&mut self, value: &RValue) {
     let arg_ptr = self.stack_slot_unsized(&value);
 
-    self.builder.ins().call(self.funcs.track, &[arg_ptr]);
+    self.builder.ins().call(self.intrinsics.track, &[arg_ptr]);
   }
 
   fn type_needs_gc(&self, ty: &Type) -> bool {
@@ -595,7 +602,7 @@ impl FuncBuilder<'_> {
 
           let arg_ptr = self.stack_slot_unsized(&to_append);
 
-          self.builder.ins().call(self.funcs.string_append_value, &[str_addr, arg_ptr]);
+          self.builder.ins().call(self.intrinsics.string_append_value, &[str_addr, arg_ptr]);
         }
 
         // Now that we're done mutating the slot, we can track the value in the GC (and
@@ -629,7 +636,7 @@ impl FuncBuilder<'_> {
           let to_append = self.compile_expr(*expr);
           let arg_ptr = self.stack_slot_sized(&to_append, vt);
 
-          self.builder.ins().call(self.funcs.array_push, &[result_ptr, slot_size_v, arg_ptr]);
+          self.builder.ins().call(self.intrinsics.array_push, &[result_ptr, slot_size_v, arg_ptr]);
         }
 
         let result = RValue {
@@ -817,7 +824,7 @@ impl FuncBuilder<'_> {
               let l_addr = self.stack_slot_unsized(&lhs);
               let r_addr = self.stack_slot_unsized(&rhs);
 
-              let ret = self.builder.ins().call(self.funcs.value_equals, &[l_addr, r_addr]);
+              let ret = self.builder.ins().call(self.intrinsics.value_equals, &[l_addr, r_addr]);
 
               RValue::bool(self.builder.inst_results(ret)[0])
             }
@@ -862,7 +869,7 @@ impl FuncBuilder<'_> {
         });
         let ret_ptr = self.builder.ins().stack_addr(ir::types::I64, ret_slot, 0);
 
-        self.builder.ins().call(self.funcs.array_index, &[l_addr, r_addr, ret_ptr]);
+        self.builder.ins().call(self.intrinsics.array_index, &[l_addr, r_addr, ret_ptr]);
 
         match ret_dvt {
           DynamicValueType::Const(vt) => RValue {
@@ -992,7 +999,7 @@ impl FuncBuilder<'_> {
     let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, arg_slot, 0);
     let ret_ptr = self.builder.ins().stack_addr(ir::types::I64, ret_slot, 0);
 
-    self.builder.ins().call(self.funcs.call, &[native, arg_ptr, ret_ptr]);
+    self.builder.ins().call(self.intrinsics.call, &[native, arg_ptr, ret_ptr]);
 
     match ret_dvt {
       DynamicValueType::Const(vt) => RValue {

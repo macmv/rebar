@@ -7,7 +7,7 @@ mod std;
 
 use gc_arena::{lock::RefLock, Collect, Gc};
 use rb_jit::{
-  jit::{RebarArgs, RuntimeHelpers},
+  jit::{IntrinsicImpls, RebarArgs},
   value::{DynamicValueType, ValueType},
 };
 use rb_mir::ast::{self as mir};
@@ -44,12 +44,12 @@ impl Environment {
     }
   }
 
-  pub(crate) fn helpers(self) -> RuntimeHelpers {
+  pub(crate) fn intrinsics(self) -> IntrinsicImpls {
     ENV.with(|env| {
       *env.borrow_mut() = Some(self);
     });
 
-    RuntimeHelpers {
+    IntrinsicImpls {
       call:                Self::dyn_call_ptr(),
       push_frame:          Self::push_frame(),
       pop_frame:           Self::pop_frame(),
