@@ -9,21 +9,24 @@ use super::{RebarArgsParser, Value};
 
 /// The rust-friendly version of an `RbArray`.
 pub struct RbSlice<'a> {
-  elems: &'a [i64],
+  // SAFETY: This `&RbArray` is quite special: the value of this reference is garunteed to also be
+  // a valid `Box<RbArray>` pointer, and that pointer is used as a key in the garbage collector to
+  // determine if the array is referenced or not.
+  elems: &'a RbArray,
   vt:    DynamicValueType,
 }
 
 impl<'a> RbSlice<'a> {
-  pub fn new(arr: &'a RbArray, vt: DynamicValueType) -> Self {
+  pub(crate) fn new(elems: &'a RbArray, vt: DynamicValueType) -> Self {
     assert!(
-      arr.len() % vt.len() as usize == 0,
+      elems.len() % vt.len() as usize == 0,
       "array length {} must be a multiple of the slot size {} for the type {:?}",
-      arr.len(),
+      elems.len(),
       vt.len(),
       vt
     );
 
-    Self { elems: arr.as_ref(), vt }
+    Self { elems, vt }
   }
 
   pub fn as_ptr(&self) -> *const i64 { self.elems.as_ptr() }
