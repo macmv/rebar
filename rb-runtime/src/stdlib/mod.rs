@@ -55,7 +55,6 @@ impl Environment {
       pop_frame:           Self::pop_frame(),
       track:               Self::track,
       string_append_value: Self::string_append_value,
-      array_push:          Self::array_push,
       array_index:         Self::array_index,
       value_equals:        Self::value_equals,
     }
@@ -229,19 +228,6 @@ impl Environment {
         str.ret(0, str_value.len() as i64);
         str.ret(1, str_value.capacity() as i64);
         str.ret(2, str_value.as_ptr() as i64);
-      }
-    });
-  }
-
-  fn array_push(array: *mut Vec<i64>, slot_size: i64, arg: *const RebarArgs) {
-    ENV.with(|_env| {
-      let mut array = unsafe { ManuallyDrop::new(Box::from_raw(array)) };
-
-      let slice = unsafe { ::std::slice::from_raw_parts(arg as *const i64, slot_size as usize) };
-
-      array.extend(slice);
-      for _ in slice.len()..slot_size as usize {
-        array.push(0);
       }
     });
   }

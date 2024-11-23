@@ -94,7 +94,6 @@ intrinsics!(
   pop_frame(),
   track(I64),
   string_append_value(I64, I64),
-  array_push(I64, I64, I64),
   array_index(I64, I64, I64),
   value_equals(I64, I64) -> I8,
 );
@@ -151,7 +150,6 @@ pub struct IntrinsicImpls {
   pub pop_frame:           fn(),
   pub track:               fn(*const RebarArgs),
   pub string_append_value: fn(*const RebarArgs, *const RebarArgs),
-  pub array_push:          fn(*mut Vec<i64>, i64, *const RebarArgs),
   pub array_index:         fn(*const RebarArgs, *const RebarArgs, *mut RebarArgs),
   pub value_equals:        fn(*const RebarArgs, *const RebarArgs) -> i8,
 }
