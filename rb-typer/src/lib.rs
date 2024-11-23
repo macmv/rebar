@@ -312,6 +312,18 @@ impl<'a> Typer<'a> {
         ret
       }
 
+      hir::Expr::Index(lhs, rhs) => {
+        let lhs = self.type_expr(lhs);
+        let rhs = self.type_expr(rhs);
+
+        let elem = VType::Var(self.fresh_var(self.span(expr), format!("array element")));
+
+        self.constrain(&lhs, &VType::Array(Box::new(elem.clone())), self.span(expr));
+        self.constrain(&rhs, &VType::Literal(Literal::Int), self.span(expr));
+
+        elem
+      }
+
       hir::Expr::If { cond, then, els } => {
         let cond_ty = self.type_expr(cond);
 
