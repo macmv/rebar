@@ -1,4 +1,9 @@
-use std::ptr::NonNull;
+use std::{
+  fmt,
+  mem::ManuallyDrop,
+  ops::{Deref, DerefMut},
+  ptr::NonNull,
+};
 
 /// Same thing as `Vec<i64>`, but #[repr(C)] so that we can access fields
 /// directly from rebar.
@@ -11,6 +16,30 @@ pub struct RbArray {
 
 impl RbArray {
   pub fn new() -> Self { Self { ptr: NonNull::dangling(), len: 0, cap: 0 } }
+  pub fn new_with_len(len: usize) -> Self { vec![0; len].into() }
+
+  pub fn as_ptr(&self) -> *const i64 { self.ptr.as_ptr() }
+}
+
+impl Deref for RbArray {
+  type Target = [i64];
+
+  fn deref(&self) -> &Self::Target {
+    unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.len) }
+  }
+}
+
+impl DerefMut for RbArray {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    unsafe { std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len) }
+  }
+}
+
+impl fmt::Debug for RbArray {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.deref().fmt(f) }
+}
+impl PartialEq for RbArray {
+  fn eq(&self, other: &Self) -> bool { self.deref().eq(other.deref()) }
 }
 
 impl From<Vec<i64>> for RbArray {
