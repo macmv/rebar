@@ -225,7 +225,7 @@ impl Parser<'_> {
 
   pub fn expect(&mut self, t: SyntaxKind) {
     if self.current() != t {
-      self.error(format!("expected {t:?}"));
+      self.error(format!("expected {t}"));
     } else {
       self.bump();
     }

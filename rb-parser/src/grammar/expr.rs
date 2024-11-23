@@ -53,7 +53,7 @@ fn expr_bp(p: &mut Parser, min_bp: u8, cond: bool) {
         T![nl] | T![,] | T![')'] | T![']'] | T!['}'] | EOF => return,
         T!['{'] if cond => return,
         _ => {
-          p.error(format!("expected operator, got {:?}", p.current()));
+          p.error(format!("expected operator, got {}", p.current()));
           return;
         }
       }
@@ -173,7 +173,7 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
 
     _ => {
       m.abandon(p);
-      p.error(format!("expected expression, got {:?}", p.current()));
+      p.error(format!("expected expression, got {}", p.current()));
 
       // Advance to avoid infinite loop.
       p.bump();

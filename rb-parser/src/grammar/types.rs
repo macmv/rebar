@@ -48,7 +48,7 @@ fn ty_bp(p: &mut Parser, min_bp: u8) {
       match p.current() {
         T![nl] | T![=] | T![,] | T!['{'] | T![')'] | T!['}'] | EOF => return,
         _ => {
-          p.error(format!("expected type, got {:?}", p.current()));
+          p.error(format!("expected type, got {}", p.current()));
           return;
         }
       }
