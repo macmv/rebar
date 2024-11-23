@@ -37,6 +37,7 @@ pub enum Expr {
   Call(ExprId, Vec<ExprId>),
   UnaryOp(ExprId, UnaryOp),
   BinaryOp(ExprId, BinaryOp, ExprId),
+  Index(ExprId, ExprId),
 
   // TODO: Is this really needed?
   Paren(ExprId),
