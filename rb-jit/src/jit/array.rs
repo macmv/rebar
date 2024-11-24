@@ -5,8 +5,6 @@ use std::{
   ptr::NonNull,
 };
 
-use crate::value::DynamicValueType;
-
 /// Same thing as `Vec<i64>`, but #[repr(C)] so that we can access fields
 /// directly from rebar.
 #[repr(C)]
