@@ -178,7 +178,7 @@ impl Environment {
       let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
       let mut frame = thread.frames.last_mut().unwrap().borrow_mut(m);
 
-      frame.values.push(Gc::new(&m, ManuallyDrop::into_inner(value)));
+      frame.values.push(Gc::new(&m, value));
     });
   }
 
@@ -567,19 +567,19 @@ impl<'a> RebarArgsParser<'a> {
     }
   }
 
-  unsafe fn value_owned(&mut self, vt: ValueType) -> ManuallyDrop<GcValue> {
+  unsafe fn value_owned(&mut self, vt: ValueType) -> GcValue {
     match vt {
       ValueType::String => {
         let ptr = self.next();
 
         let gc = Gc::from_ptr(ptr as *const String);
 
-        ManuallyDrop::new(GcValue::String(gc))
+        GcValue::String(gc)
       }
       ValueType::Array => {
         let ptr = self.next();
 
-        ManuallyDrop::new(GcValue::Array(Gc::from_ptr(ptr as *const GcArray)))
+        GcValue::Array(Gc::from_ptr(ptr as *const GcArray))
       }
       _ => unreachable!("not an owned value: {vt:?}"),
     }
@@ -620,8 +620,8 @@ impl<'a> RebarArgsParser<'a> {
     self.value_const(vt)
   }
 
-  /// Parses a value to get tracked by the GC.
-  pub unsafe fn value_owned_unsized(&mut self) -> ManuallyDrop<GcValue> {
+  /// Parses a value to get tracked by the GC. This value should not be dropped!
+  pub unsafe fn value_owned_unsized(&mut self) -> GcValue {
     let ty = self.next();
     let vt = ValueType::try_from(ty).unwrap();
     self.value_owned(vt)
