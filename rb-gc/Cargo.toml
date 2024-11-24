@@ -1,0 +1,20 @@
+[package]
+name = "rb-gc"
+description = "safe, incrementally garbage collected arenas"
+edition = "2021"
+
+[features]
+default = ["std"]
+std = []
+tracing = ["dep:tracing"]
+allocator-api2 = ["dep:allocator-api2", "hashbrown?/allocator-api2"]
+
+[dependencies]
+allocator-api2 = { version = "0.2", optional = true, default-features = false, features = ["alloc"] }
+hashbrown = { version = "0.14", optional = true, default-features = false }
+sptr = "0.3.2"
+tracing = { version = "0.1.37", optional = true, default-features = false }
+
+[dev-dependencies]
+rand = "0.8"
+trybuild = "1.0"

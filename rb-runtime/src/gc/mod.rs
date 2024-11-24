@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use gc_arena::{lock::GcRefLock, Arena, Collect, Collection, Gc, Rootable};
+use rb_gc::{lock::GcRefLock, Arena, Collect, Collection, Gc, Rootable};
 
 use crate::GcValue;
 
@@ -15,7 +15,8 @@ unsafe impl Collect for GcRoot<'_> {
   fn trace(&self, cc: &Collection) { self.threads.trace(cc); }
 }
 
-pub type GcArena = Arena<Rootable![GcRoot<'_>]>;
+pub type GcArena =
+  Arena<rb_gc::__DynRootable<dyn for<'gc> rb_gc::Rootable<'gc, Root = GcRoot<'gc>>>>;
 
 #[derive(Default)]
 pub struct Stack<'gc> {
@@ -37,9 +38,9 @@ unsafe impl Collect for Frame<'_> {
 
 #[test]
 fn gc_works() {
-  use gc_arena::lock::RefLock;
+  use rb_gc::lock::RefLock;
 
-  type MyArena = Arena<Rootable![GcRoot<'_>]>;
+  type MyArena = Arena<rb_gc::__DynRootable<dyn for<'gc> rb_gc::Rootable<'gc, Root = GcRoot<'gc>>>>;
 
   let mut arena = MyArena::new(|_| GcRoot { threads: HashMap::new() });
 

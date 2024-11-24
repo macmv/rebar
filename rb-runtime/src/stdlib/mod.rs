@@ -9,7 +9,7 @@ use ::std::{
 mod core;
 mod std;
 
-use gc_arena::{lock::RefLock, Collect, Gc};
+use rb_gc::{lock::RefLock, Collect, Gc};
 use rb_jit::{
   jit::{IntrinsicImpls, RbArray, RebarArgs},
   value::{DynamicValueType, ValueType},
@@ -305,7 +305,7 @@ pub enum GcValue<'gc> {
 }
 
 unsafe impl Collect for GcValue<'_> {
-  fn trace(&self, cc: &gc_arena::Collection) {
+  fn trace(&self, cc: &rb_gc::Collection) {
     match self {
       GcValue::String(s) => s.trace(cc),
       GcValue::Array(arr) => arr.trace(cc),
@@ -347,7 +347,7 @@ impl GcArray {
 }
 
 unsafe impl Collect for GcArray {
-  fn trace(&self, cc: &gc_arena::Collection) {
+  fn trace(&self, cc: &rb_gc::Collection) {
     for value in self.as_slice().iter() {
       if let Some(v) = GcValue::from_value(&value) {
         v.trace(cc);
