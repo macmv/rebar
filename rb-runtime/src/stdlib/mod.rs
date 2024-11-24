@@ -60,6 +60,7 @@ impl Environment {
       call:                Self::dyn_call_ptr,
       push_frame:          Self::push_frame,
       pop_frame:           Self::pop_frame,
+      gc_collect:          Self::gc_collect,
       track:               Self::track,
       string_append_value: Self::string_append_value,
       string_append_str:   Self::string_append_str,
@@ -151,6 +152,15 @@ impl Environment {
 
         thread.frames.pop().unwrap();
       });
+    });
+  }
+
+  fn gc_collect() {
+    ENV.with(|env| {
+      let mut env = env.borrow_mut();
+
+      // TODO: Use `collect_debt` instead, but while testing this is more effective.
+      env.as_mut().unwrap().gc.collect_all();
     });
   }
 
@@ -333,6 +343,18 @@ unsafe impl Collect for GcArray {
     for value in self.as_slice().iter() {
       if let Some(v) = GcValue::from_value(&value) {
         v.trace(cc);
+      }
+    }
+  }
+}
+
+impl Drop for GcArray {
+  fn drop(&mut self) {
+    for value in self.as_slice().iter() {
+      if let Some(mut v) = GcValue::from_value(&value) {
+        unsafe {
+          ManuallyDrop::drop(&mut v);
+        }
       }
     }
   }

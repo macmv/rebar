@@ -96,6 +96,7 @@ intrinsics!(
   call(I64, I64, I64),
   push_frame(),
   pop_frame(),
+  gc_collect(),
   track(I64),
   string_append_value(I64, I64),
   string_append_str(I64, I64, I64),
@@ -154,6 +155,7 @@ pub struct IntrinsicImpls {
 
   pub push_frame:          fn(),
   pub pop_frame:           fn(),
+  pub gc_collect:          fn(),
   pub track:               fn(*const RebarArgs),
   pub string_append_value: fn(*const String, *const RebarArgs),
   pub string_append_str:   fn(*const String, *const u8, i64),
@@ -470,6 +472,8 @@ impl FuncBuilder<'_> {
           self.track_value(&value);
         }
 
+        self.builder.ins().call(self.intrinsics.gc_collect, &[]);
+
         RValue::nil()
       }
     }
@@ -627,9 +631,13 @@ impl FuncBuilder<'_> {
       mir::Expr::Block(ref stmts) => {
         // FIXME: Make a new scope so that locals don't leak.
         let mut return_value = RValue::nil();
+        self.builder.ins().call(self.intrinsics.push_frame, &[]);
+
         for &stmt in stmts {
           return_value = self.compile_stmt(stmt);
         }
+
+        self.builder.ins().call(self.intrinsics.pop_frame, &[]);
         return_value
       }
 
