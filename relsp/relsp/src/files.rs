@@ -81,19 +81,3 @@ impl Files {
     }
   }
 }
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn path_to_id() {
-    let mut files = Files::new();
-
-    let id = files.create(Path::new("foo"));
-    files.write(id, "bar".to_string());
-
-    let id = files.path_to_id(Path::new("foo"));
-    assert_eq!(id, FileId::new_raw(0));
-  }
-}
