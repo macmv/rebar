@@ -2,8 +2,6 @@ use std::collections::HashMap;
 
 use gc_arena::{lock::GcRefLock, Arena, Collect, Collection, Gc, Rootable};
 
-mod value;
-
 use crate::GcValue;
 
 pub struct GcRoot<'gc> {
