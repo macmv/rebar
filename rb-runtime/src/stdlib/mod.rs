@@ -298,11 +298,19 @@ pub trait DynFunction<T> {
 ///
 /// Using `GcValue::gc_id`, we can check if we've already tracked a value. If we
 /// haven't then the owned value is added to the garbage collector.
-#[derive(Debug, Collect, PartialEq)]
-#[collect(no_drop)]
+#[derive(Debug, PartialEq)]
 pub enum GcValue<'gc> {
   String(Gc<'gc, String>),
   Array(Gc<'gc, GcArray>),
+}
+
+unsafe impl Collect for GcValue<'_> {
+  fn trace(&self, cc: &gc_arena::Collection) {
+    match self {
+      GcValue::String(s) => s.trace(cc),
+      GcValue::Array(arr) => arr.trace(cc),
+    }
+  }
 }
 
 // SAFETY: Must be `#[repr(C)]`, so that rebar can access fields in it. Rebar
