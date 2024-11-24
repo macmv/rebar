@@ -139,6 +139,11 @@ impl Highlighter<'_> {
       }
       hir::Expr::Paren(expr) => self.visit_expr(expr),
 
+      hir::Expr::Index(lhs, rhs) => {
+        self.visit_expr(lhs);
+        self.visit_expr(rhs);
+      }
+
       _ => {}
     }
   }
