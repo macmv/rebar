@@ -1,13 +1,11 @@
 use std::collections::HashMap;
 
-use gc_arena::{lock::GcRefLock, Arena, Collect, Gc, Rootable};
+use gc_arena::{lock::GcRefLock, Arena, Collect, Collection, Gc, Rootable};
 
 mod value;
 
 use crate::GcValue;
 
-#[derive(Collect)]
-#[collect(no_drop)]
 pub struct GcRoot<'gc> {
   /// Stores all the GC'able objects on each thread's stack.
   ///
@@ -15,18 +13,28 @@ pub struct GcRoot<'gc> {
   pub threads: HashMap<u64, Stack<'gc>>,
 }
 
+unsafe impl Collect for GcRoot<'_> {
+  fn trace(&self, cc: &Collection) { self.threads.trace(cc); }
+}
+
 pub type GcArena = Arena<Rootable![GcRoot<'_>]>;
 
-#[derive(Default, Collect)]
-#[collect(no_drop)]
+#[derive(Default)]
 pub struct Stack<'gc> {
   pub frames: Vec<GcRefLock<'gc, Frame<'gc>>>,
 }
 
-#[derive(Default, Collect)]
-#[collect(no_drop)]
+unsafe impl Collect for Stack<'_> {
+  fn trace(&self, cc: &Collection) { self.frames.trace(cc); }
+}
+
+#[derive(Default)]
 pub struct Frame<'gc> {
   pub values: Vec<Gc<'gc, GcValue<'gc>>>,
+}
+
+unsafe impl Collect for Frame<'_> {
+  fn trace(&self, cc: &Collection) { self.values.trace(cc); }
 }
 
 #[test]
