@@ -61,7 +61,7 @@
 //! let actual = Foo { value: 92 };
 //! let expected = expect![@"
 //!   Foo {
-//!     value: 92,
+//!       value: 92,
 //!   }
 //! "];
 //! expected.assert_debug_eq(&actual);
