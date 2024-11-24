@@ -74,9 +74,9 @@ impl<T: ?Sized> Borrow<T> for Gc<T> {
   fn borrow(&self) -> &T { unsafe { &self.ptr.as_ref().value } }
 }
 
-impl<'gc, T: Collect + 'gc> Gc<T> {
+impl<T: Collect> Gc<T> {
   #[inline]
-  pub fn new(mc: &Mutation<'gc>, t: T) -> Gc<T> { Gc { ptr: mc.allocate(t) } }
+  pub fn new(mc: &Mutation, t: T) -> Gc<T> { Gc { ptr: mc.allocate(t) } }
 }
 
 impl<T: 'static> Gc<T> {
@@ -140,7 +140,7 @@ impl<'gc, T: ?Sized + 'gc> Gc<T> {
 impl<'gc, T: Unlock + ?Sized + 'gc> Gc<T> {
   /// Shorthand for [`Gc::write`]`(mc, self).`[`unlock()`](Write::unlock).
   #[inline]
-  pub fn unlock(self, mc: &Mutation<'gc>) -> &'gc T::Unlocked {
+  pub fn unlock(self, mc: &Mutation) -> &'gc T::Unlocked {
     Gc::write(mc, self);
     // SAFETY: see doc-comment.
     unsafe { self.as_ref().unlock_unchecked() }
@@ -175,7 +175,7 @@ impl<'gc, T: ?Sized + 'gc> Gc<T> {
   /// allow for unrestricted mutation on the held type or any of its directly
   /// held fields.
   #[inline]
-  pub fn write(mc: &Mutation<'gc>, gc: Self) -> &'gc Write<T> {
+  pub fn write(mc: &Mutation, gc: Self) -> &'gc Write<T> {
     unsafe {
       mc.backward_barrier(Gc::erase(gc), None);
       // SAFETY: the write barrier stays valid until the end of the current callback.
@@ -209,7 +209,7 @@ impl<'gc, T: ?Sized + 'gc> Gc<T> {
   /// can be strong pointers reachable only through other weak pointers that
   /// can be dead.
   #[inline]
-  pub fn is_dead(_: &Finalization<'gc>, gc: Gc<T>) -> bool {
+  pub fn is_dead(_: &Finalization, gc: Gc<T>) -> bool {
     let inner = unsafe { gc.ptr.as_ref() };
     matches!(inner.header.color(), GcColor::White | GcColor::WhiteWeak)
   }
@@ -220,7 +220,7 @@ impl<'gc, T: ?Sized + 'gc> Gc<T> {
   /// pointer and all transitively held pointers as reachable, thus keeping
   /// them from being dropped this collection cycle.
   #[inline]
-  pub fn resurrect(fc: &Finalization<'gc>, gc: Gc<T>) {
+  pub fn resurrect(fc: &Finalization, gc: Gc<T>) {
     unsafe {
       fc.resurrect(GcBox::erase(gc.ptr));
     }

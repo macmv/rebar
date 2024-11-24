@@ -26,7 +26,7 @@ unsafe impl<T: ?Sized> Collect for GcWeak<T> {
   }
 }
 
-impl<'gc, T: ?Sized + 'gc> GcWeak<T> {
+impl<T: ?Sized> GcWeak<T> {
   #[inline]
   pub fn upgrade(self, mc: &Mutation) -> Option<Gc<T>> {
     let ptr = unsafe { GcBox::erase(self.inner.ptr) };
@@ -59,7 +59,7 @@ impl<'gc, T: ?Sized + 'gc> GcWeak<T> {
   /// collection cycle with marking stages in-between, and in the precise order
   /// that you want.
   #[inline]
-  pub fn is_dead(self, fc: &Finalization<'gc>) -> bool { Gc::is_dead(fc, self.inner) }
+  pub fn is_dead(self, fc: &Finalization) -> bool { Gc::is_dead(fc, self.inner) }
 
   /// Manually marks a dead (but non-dropped) `GcWeak` as strongly reachable and
   /// keeps it alive.
@@ -74,7 +74,7 @@ impl<'gc, T: ?Sized + 'gc> GcWeak<T> {
   /// reachable values are still guaranteed to not be dropped this collection
   /// cycle.
   #[inline]
-  pub fn resurrect(self, fc: &Finalization<'gc>) -> Option<Gc<T>> {
+  pub fn resurrect(self, fc: &Finalization) -> Option<Gc<T>> {
     // SAFETY: We know that we are currently marking, so any non-dropped pointer is
     // safe to resurrect.
     if unsafe { self.inner.ptr.as_ref() }.header.is_live() {

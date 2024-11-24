@@ -245,9 +245,6 @@ pub(crate) enum GcColor {
   Black,
 }
 
-// Phantom type that holds a lifetime and ensures that it is invariant.
-pub(crate) type Invariant<'a> = PhantomData<Cell<&'a ()>>;
-
 /// Utility functions for tagging and untagging pointers.
 mod tagged_ptr {
   #![cfg_attr(not(miri), allow(unstable_name_collisions))]

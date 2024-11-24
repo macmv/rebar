@@ -89,7 +89,7 @@ where
   /// appropriate root.
   pub fn new<F>(f: F) -> Arena<R>
   where
-    F: for<'gc> FnOnce(&'gc Mutation<'gc>) -> Root<'gc, R>,
+    F: for<'gc> FnOnce(&'gc Mutation) -> Root<'gc, R>,
   {
     unsafe {
       let context = Box::new(Context::new());
@@ -100,7 +100,7 @@ where
       // but is not yet stable. Casting the `&Mutation` is completely invisible
       // to the callback `f` (since it needs to handle an arbitrary lifetime),
       // and lets us stay compatible with older versions of Rust
-      let mc: &'static Mutation<'_> = &*(context.mutation_context() as *const _);
+      let mc: &'static Mutation = &*(context.mutation_context() as *const _);
       let root: Root<'static, R> = f(mc);
       Arena { context, root }
     }
@@ -109,11 +109,11 @@ where
   /// Similar to `new`, but allows for constructor that can fail.
   pub fn try_new<F, E>(f: F) -> Result<Arena<R>, E>
   where
-    F: for<'gc> FnOnce(&'gc Mutation<'gc>) -> Result<Root<'gc, R>, E>,
+    F: for<'gc> FnOnce(&'gc Mutation) -> Result<Root<'gc, R>, E>,
   {
     unsafe {
       let context = Box::new(Context::new());
-      let mc: &'static Mutation<'_> = &*(context.mutation_context() as *const _);
+      let mc: &'static Mutation = &*(context.mutation_context() as *const _);
       let root: Root<'static, R> = f(mc)?;
       Ok(Arena { context, root })
     }
@@ -122,7 +122,7 @@ where
   #[inline]
   pub fn map_root<R2>(
     self,
-    f: impl for<'gc> FnOnce(&'gc Mutation<'gc>, Root<'gc, R>) -> Root<'gc, R2>,
+    f: impl for<'gc> FnOnce(&'gc Mutation, Root<'gc, R>) -> Root<'gc, R2>,
   ) -> Arena<R2>
   where
     R2: for<'a> Rootable<'a>,
@@ -130,7 +130,7 @@ where
   {
     self.context.root_barrier();
     let new_root: Root<'static, R2> = unsafe {
-      let mc: &'static Mutation<'_> = &*(self.context.mutation_context() as *const _);
+      let mc: &'static Mutation = &*(self.context.mutation_context() as *const _);
       f(mc, self.root)
     };
     Arena { context: self.context, root: new_root }
@@ -139,7 +139,7 @@ where
   #[inline]
   pub fn try_map_root<R2, E>(
     self,
-    f: impl for<'gc> FnOnce(&'gc Mutation<'gc>, Root<'gc, R>) -> Result<Root<'gc, R2>, E>,
+    f: impl for<'gc> FnOnce(&'gc Mutation, Root<'gc, R>) -> Result<Root<'gc, R2>, E>,
   ) -> Result<Arena<R2>, E>
   where
     R2: for<'a> Rootable<'a>,
@@ -147,7 +147,7 @@ where
   {
     self.context.root_barrier();
     let new_root: Root<'static, R2> = unsafe {
-      let mc: &'static Mutation<'_> = &*(self.context.mutation_context() as *const _);
+      let mc: &'static Mutation = &*(self.context.mutation_context() as *const _);
       f(mc, self.root)?
     };
     Ok(Arena { context: self.context, root: new_root })
@@ -166,10 +166,10 @@ where
   #[inline]
   pub fn mutate<F, T>(&self, f: F) -> T
   where
-    F: for<'gc> FnOnce(&'gc Mutation<'gc>, &'gc Root<'gc, R>) -> T,
+    F: for<'gc> FnOnce(&'gc Mutation, &'gc Root<'gc, R>) -> T,
   {
     unsafe {
-      let mc: &'static Mutation<'_> = &*(self.context.mutation_context() as *const _);
+      let mc: &'static Mutation = &*(self.context.mutation_context() as *const _);
       let root: &'static Root<'_, R> = &*(&self.root as *const _);
       f(mc, root)
     }
@@ -180,11 +180,11 @@ where
   #[inline]
   pub fn mutate_root<F, T>(&mut self, f: F) -> T
   where
-    F: for<'gc> FnOnce(&'gc Mutation<'gc>, &'gc mut Root<'gc, R>) -> T,
+    F: for<'gc> FnOnce(&'gc Mutation, &'gc mut Root<'gc, R>) -> T,
   {
     self.context.root_barrier();
     unsafe {
-      let mc: &'static Mutation<'_> = &*(self.context.mutation_context() as *const _);
+      let mc: &'static Mutation = &*(self.context.mutation_context() as *const _);
       let root: &'static mut Root<'_, R> = &mut *(&mut self.root as *mut _);
       f(mc, root)
     }
@@ -302,10 +302,10 @@ where
   #[inline]
   pub fn finalize<F, T>(self, f: F) -> T
   where
-    F: for<'gc> FnOnce(&'gc Finalization<'gc>, &'gc Root<'gc, R>) -> T,
+    F: for<'gc> FnOnce(&'gc Finalization, &'gc Root<'gc, R>) -> T,
   {
     unsafe {
-      let mc: &'static Finalization<'_> = &*(self.0.context.finalization_context() as *const _);
+      let mc: &'static Finalization = &*(self.0.context.finalization_context() as *const _);
       let root: &'static Root<'_, R> = &*(&self.0.root as *const _);
       f(mc, root)
     }
@@ -332,7 +332,7 @@ where
 /// code that uses `gc-arena`, it is not very useful on its own.
 pub fn rootless_mutate<F, R>(f: F) -> R
 where
-  F: for<'gc> FnOnce(&'gc Mutation<'gc>) -> R,
+  F: for<'gc> FnOnce(&'gc Mutation) -> R,
 {
   unsafe {
     let context = Context::new();

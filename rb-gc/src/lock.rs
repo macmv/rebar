@@ -144,7 +144,7 @@ impl<'gc, T: Copy + 'gc> Gc<Lock<T>> {
   pub fn get(self) -> T { self.cell.get() }
 
   #[inline]
-  pub fn set(self, mc: &Mutation<'gc>, t: T) { self.unlock(mc).set(t); }
+  pub fn set(self, mc: &Mutation, t: T) { self.unlock(mc).set(t); }
 }
 
 unsafe impl<'gc, T: Collect + Copy + 'gc> Collect for Lock<T> {
@@ -260,10 +260,10 @@ impl<'gc, T: ?Sized + 'gc> Gc<RefLock<T>> {
 
   #[track_caller]
   #[inline]
-  pub fn borrow_mut(self, mc: &Mutation<'gc>) -> RefMut<'gc, T> { self.unlock(mc).borrow_mut() }
+  pub fn borrow_mut(self, mc: &Mutation) -> RefMut<'gc, T> { self.unlock(mc).borrow_mut() }
 
   #[inline]
-  pub fn try_borrow_mut(self, mc: &Mutation<'gc>) -> Result<RefMut<'gc, T>, BorrowMutError> {
+  pub fn try_borrow_mut(self, mc: &Mutation) -> Result<RefMut<'gc, T>, BorrowMutError> {
     self.unlock(mc).try_borrow_mut()
   }
 }

@@ -9,7 +9,7 @@ use core::{
 use crate::{
   collect::Collect,
   metrics::Metrics,
-  types::{GcBox, GcBoxHeader, GcBoxInner, GcColor, Invariant},
+  types::{GcBox, GcBoxHeader, GcBoxInner, GcColor},
   Gc,
 };
 
@@ -17,12 +17,11 @@ use crate::{
 /// Allows allocating new `Gc` pointers and internally mutating values held by
 /// `Gc` pointers.
 #[repr(transparent)]
-pub struct Mutation<'gc> {
-  context:    Context,
-  _invariant: Invariant<'gc>,
+pub struct Mutation {
+  context: Context,
 }
 
-impl<'gc> Mutation<'gc> {
+impl Mutation {
   #[inline]
   pub fn metrics(&self) -> &Metrics { self.context.metrics() }
 
@@ -70,7 +69,7 @@ impl<'gc> Mutation<'gc> {
   }
 
   #[inline]
-  pub(crate) fn allocate<T: Collect + 'gc>(&self, t: T) -> NonNull<GcBoxInner<T>> {
+  pub(crate) fn allocate<T: Collect>(&self, t: T) -> NonNull<GcBoxInner<T>> {
     self.context.allocate(t)
   }
 
@@ -83,13 +82,12 @@ impl<'gc> Mutation<'gc> {
 /// Derefs to `Mutation<'gc>` to allow for arbitrary mutation, but adds
 /// additional powers to examine the state of the fully marked arena.
 #[repr(transparent)]
-pub struct Finalization<'gc> {
-  context:    Context,
-  _invariant: Invariant<'gc>,
+pub struct Finalization {
+  context: Context,
 }
 
-impl<'gc> Deref for Finalization<'gc> {
-  type Target = Mutation<'gc>;
+impl Deref for Finalization {
+  type Target = Mutation;
 
   fn deref(&self) -> &Self::Target {
     // SAFETY: Finalization and Mutation are #[repr(transparent)]
@@ -97,7 +95,7 @@ impl<'gc> Deref for Finalization<'gc> {
   }
 }
 
-impl<'gc> Finalization<'gc> {
+impl Finalization {
   #[inline]
   pub(crate) fn resurrect(&self, gc_box: GcBox) { self.context.resurrect(gc_box) }
 }
@@ -209,7 +207,7 @@ impl Context {
   }
 
   #[inline]
-  pub(crate) unsafe fn mutation_context<'gc>(&self) -> &Mutation<'gc> {
+  pub(crate) unsafe fn mutation_context(&self) -> &Mutation {
     mem::transmute::<&Self, &Mutation>(&self)
   }
 
@@ -220,7 +218,7 @@ impl Context {
   }
 
   #[inline]
-  pub(crate) unsafe fn finalization_context<'gc>(&self) -> &Finalization<'gc> {
+  pub(crate) unsafe fn finalization_context<'gc>(&self) -> &Finalization {
     mem::transmute::<&Self, &Finalization>(&self)
   }
 
