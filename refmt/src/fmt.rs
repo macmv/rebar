@@ -181,7 +181,8 @@ impl FormatterContext<'_> {
           }
 
           let retry = match n.kind() {
-            CALL_EXPR | BINARY_EXPR | IF_EXPR => Some(self.clone()),
+            // Expressions that can toggle the multiline flag.
+            CALL_EXPR | BINARY_EXPR | IF_EXPR | ARRAY_EXPR => Some(self.clone()),
             _ => None,
           };
 
@@ -798,6 +799,25 @@ mod tests {
       "#,
       expect![@r#"
         [1, 2, 3]
+      "#],
+    );
+  }
+
+  #[test]
+  fn nested_multiline_array() {
+    check(
+      r#"
+        let a = {
+          let b = [1,
+          2]
+          b
+        }
+      "#,
+      expect![@r#"
+        let a = {
+          let b = [1, 2]
+          b
+        }
       "#],
     );
   }
