@@ -29,12 +29,6 @@ pub struct Frame<'gc> {
   pub values: Vec<Gc<'gc, GcValue<'gc>>>,
 }
 
-/// An opaque ID for a GC'ed object. This is usually just the pointer to the
-/// heap-allocated object.
-#[derive(Default, Collect, Clone, Copy, PartialEq, Eq, Hash)]
-#[collect(no_drop)]
-pub struct GcId(pub u64);
-
 #[test]
 fn gc_works() {
   use gc_arena::lock::RefLock;
