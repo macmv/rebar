@@ -1,9 +1,9 @@
 //! GC-aware interior mutability types.
 
 use core::{
-    cell::{BorrowError, BorrowMutError, Cell, Ref, RefCell, RefMut},
-    cmp::Ordering,
-    fmt,
+  cell::{BorrowError, BorrowMutError, Cell, Ref, RefCell, RefMut},
+  cmp::Ordering,
+  fmt,
 };
 
 use crate::{barrier::Unlock, Collect, Collection, Gc, Mutation};
@@ -134,65 +134,59 @@ make_lock_wrapper!(
 );
 
 impl<T: Copy + fmt::Debug> fmt::Debug for Lock<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("Lock").field(&self.cell).finish()
-    }
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.debug_tuple("Lock").field(&self.cell).finish()
+  }
 }
 
 impl<'gc, T: Copy + 'gc> Gc<'gc, Lock<T>> {
-    #[inline]
-    pub fn get(self) -> T {
-        self.cell.get()
-    }
+  #[inline]
+  pub fn get(self) -> T { self.cell.get() }
 
-    #[inline]
-    pub fn set(self, mc: &Mutation<'gc>, t: T) {
-        self.unlock(mc).set(t);
-    }
+  #[inline]
+  pub fn set(self, mc: &Mutation<'gc>, t: T) { self.unlock(mc).set(t); }
 }
 
 unsafe impl<'gc, T: Collect + Copy + 'gc> Collect for Lock<T> {
-    #[inline]
-    fn needs_trace() -> bool {
-        T::needs_trace()
-    }
+  #[inline]
+  fn needs_trace() -> bool { T::needs_trace() }
 
-    #[inline]
-    fn trace(&self, cc: &Collection) {
-        // Okay, so this calls `T::trace` on a *copy* of `T`.
-        //
-        // This is theoretically a correctness issue, because technically `T` could have interior
-        // mutability and modify the copy, and this modification would be lost.
-        //
-        // However, currently there is not a type in rust that allows for interior mutability that
-        // is also `Copy`, so this *currently* impossible to even observe.
-        //
-        // I am assured that this requirement is technially "only" a lint, and could be relaxed in
-        // the future. If this requirement is ever relaxed in some way, fixing this is relatively
-        // easy, by setting the value of the cell to the copy we make, after tracing (via a drop
-        // guard in case of panics). Additionally, this is not a safety issue, only a correctness
-        // issue, the changes will "just" be lost after this call returns.
-        //
-        // It could be fixed now, but since it is not even testable because it is currently
-        // *impossible*, I did not bother. One day this may need to be implemented!
-        T::trace(&self.get(), cc);
-    }
+  #[inline]
+  fn trace(&self, cc: &Collection) {
+    // Okay, so this calls `T::trace` on a *copy* of `T`.
+    //
+    // This is theoretically a correctness issue, because technically `T` could have
+    // interior mutability and modify the copy, and this modification would be
+    // lost.
+    //
+    // However, currently there is not a type in rust that allows for interior
+    // mutability that is also `Copy`, so this *currently* impossible to even
+    // observe.
+    //
+    // I am assured that this requirement is technially "only" a lint, and could be
+    // relaxed in the future. If this requirement is ever relaxed in some way,
+    // fixing this is relatively easy, by setting the value of the cell to the
+    // copy we make, after tracing (via a drop guard in case of panics).
+    // Additionally, this is not a safety issue, only a correctness issue, the
+    // changes will "just" be lost after this call returns.
+    //
+    // It could be fixed now, but since it is not even testable because it is
+    // currently *impossible*, I did not bother. One day this may need to be
+    // implemented!
+    T::trace(&self.get(), cc);
+  }
 }
 
 // Can't use `#[derive]` because of the non-standard bounds.
 impl<T: Copy> Clone for Lock<T> {
-    #[inline]
-    fn clone(&self) -> Self {
-        Self::new(self.get())
-    }
+  #[inline]
+  fn clone(&self) -> Self { Self::new(self.get()) }
 }
 
 // Can't use `#[derive]` because of the non-standard bounds.
 impl<T: PartialEq + Copy> PartialEq for Lock<T> {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        self.get() == other.get()
-    }
+  #[inline]
+  fn eq(&self, other: &Self) -> bool { self.get() == other.get() }
 }
 
 // Can't use `#[derive]` because of the non-standard bounds.
@@ -200,18 +194,14 @@ impl<T: Eq + Copy> Eq for Lock<T> {}
 
 // Can't use `#[derive]` because of the non-standard bounds.
 impl<T: PartialOrd + Copy> PartialOrd for Lock<T> {
-    #[inline]
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.get().partial_cmp(&other.get())
-    }
+  #[inline]
+  fn partial_cmp(&self, other: &Self) -> Option<Ordering> { self.get().partial_cmp(&other.get()) }
 }
 
 // Can't use `#[derive]` because of the non-standard bounds.
 impl<T: Ord + Copy> Ord for Lock<T> {
-    #[inline]
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.get().cmp(&other.get())
-    }
+  #[inline]
+  fn cmp(&self, other: &Self) -> Ordering { self.get().cmp(&other.get()) }
 }
 
 make_lock_wrapper!(
@@ -240,50 +230,42 @@ make_lock_wrapper!(
 );
 
 impl<T: fmt::Debug + ?Sized> fmt::Debug for RefLock<T> {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        let mut fmt = fmt.debug_tuple("RefLock");
-        match self.try_borrow() {
-            Ok(borrow) => fmt.field(&borrow),
-            Err(_) => {
-                // The RefLock is mutably borrowed so we can't look at its value
-                // here. Show a placeholder instead.
-                struct BorrowedPlaceholder;
+  fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+    let mut fmt = fmt.debug_tuple("RefLock");
+    match self.try_borrow() {
+      Ok(borrow) => fmt.field(&borrow),
+      Err(_) => {
+        // The RefLock is mutably borrowed so we can't look at its value
+        // here. Show a placeholder instead.
+        struct BorrowedPlaceholder;
 
-                impl fmt::Debug for BorrowedPlaceholder {
-                    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                        f.write_str("<borrowed>")
-                    }
-                }
-
-                fmt.field(&BorrowedPlaceholder)
-            }
+        impl fmt::Debug for BorrowedPlaceholder {
+          fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.write_str("<borrowed>") }
         }
-        .finish()
+
+        fmt.field(&BorrowedPlaceholder)
+      }
     }
+    .finish()
+  }
 }
 
 impl<'gc, T: ?Sized + 'gc> Gc<'gc, RefLock<T>> {
-    #[track_caller]
-    #[inline]
-    pub fn borrow(self) -> Ref<'gc, T> {
-        RefLock::borrow(self.as_ref())
-    }
+  #[track_caller]
+  #[inline]
+  pub fn borrow(self) -> Ref<'gc, T> { RefLock::borrow(self.as_ref()) }
 
-    #[inline]
-    pub fn try_borrow(self) -> Result<Ref<'gc, T>, BorrowError> {
-        RefLock::try_borrow(self.as_ref())
-    }
+  #[inline]
+  pub fn try_borrow(self) -> Result<Ref<'gc, T>, BorrowError> { RefLock::try_borrow(self.as_ref()) }
 
-    #[track_caller]
-    #[inline]
-    pub fn borrow_mut(self, mc: &Mutation<'gc>) -> RefMut<'gc, T> {
-        self.unlock(mc).borrow_mut()
-    }
+  #[track_caller]
+  #[inline]
+  pub fn borrow_mut(self, mc: &Mutation<'gc>) -> RefMut<'gc, T> { self.unlock(mc).borrow_mut() }
 
-    #[inline]
-    pub fn try_borrow_mut(self, mc: &Mutation<'gc>) -> Result<RefMut<'gc, T>, BorrowMutError> {
-        self.unlock(mc).try_borrow_mut()
-    }
+  #[inline]
+  pub fn try_borrow_mut(self, mc: &Mutation<'gc>) -> Result<RefMut<'gc, T>, BorrowMutError> {
+    self.unlock(mc).try_borrow_mut()
+  }
 }
 
 // We can't have `T: ?Sized` here because rustc is dumb and doesn't
@@ -292,13 +274,9 @@ impl<'gc, T: ?Sized + 'gc> Gc<'gc, RefLock<T>> {
 // Fortunately this doesn't matter much as there's no way to allocate
 // unsized GC'd values directly.
 unsafe impl<'gc, T: Collect + 'gc> Collect for RefLock<T> {
-    #[inline]
-    fn needs_trace() -> bool {
-        T::needs_trace()
-    }
+  #[inline]
+  fn needs_trace() -> bool { T::needs_trace() }
 
-    #[inline]
-    fn trace(&self, cc: &Collection) {
-        self.borrow().trace(cc);
-    }
+  #[inline]
+  fn trace(&self, cc: &Collection) { self.borrow().trace(cc); }
 }
