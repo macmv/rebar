@@ -144,7 +144,7 @@ pub trait Unlock {
 /// # Usage
 ///
 /// ```
-/// # use gc_arena::barrier::{field, Write};
+/// # use rb_gc::barrier::{field, Write};
 /// struct Container<T> {
 ///     field: T,
 /// }

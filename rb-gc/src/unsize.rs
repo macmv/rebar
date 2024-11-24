@@ -4,16 +4,16 @@ use crate::{types::GcBoxInner, Gc, GcWeak};
 
 /// Unsizes a [`Gc`] or [`GcWeak`] pointer.
 ///
-/// This macro is a `gc_arena`-specific replacement for the nightly-only
+/// This macro is a `rb_gc`-specific replacement for the nightly-only
 /// `CoerceUnsized` trait.
 ///
 /// ## Usage
 ///
 /// ```rust
 /// # use std::fmt::Display;
-/// # use gc_arena::{Gc, unsize};
+/// # use rb_gc::{Gc, unsize};
 /// # fn main() {
-/// # gc_arena::arena::rootless_mutate(|mc| {
+/// # rb_gc::arena::rootless_mutate(|mc| {
 /// // Unsizing arrays to slices.
 /// let mut slice;
 /// slice = unsize!(Gc::new(mc, [1, 2]) => [u8]);
@@ -35,9 +35,9 @@ use crate::{types::GcBoxInner, Gc, GcWeak};
 /// between incompatible types.
 /// ```rust,compile_fail
 /// # use std::error::Error;
-/// # use gc_arena::{Gc, unsize};
+/// # use rb_gc::{Gc, unsize};
 /// # fn main() {
-/// # gc_arena::arena::rootless_mutate(|mc| {
+/// # rb_gc::arena::rootless_mutate(|mc| {
 /// // Error: `Option<char>` doesn't implement `Error`.
 /// let _ = unsize!(Gc::new(mc, Some('💥')) => dyn Error);
 /// # })
