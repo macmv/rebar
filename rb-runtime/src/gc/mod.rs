@@ -1,38 +1,37 @@
 use std::collections::HashMap;
 
-use rb_gc::{lock::GcRefLock, Arena, Collect, Collection, Gc, Rootable};
+use rb_gc::{lock::GcRefLock, Arena, Collect, Collection, Gc};
 
 use crate::GcValue;
 
-pub struct GcRoot<'gc> {
+pub struct GcRoot {
   /// Stores all the GC'able objects on each thread's stack.
   ///
   /// JIT compiled functions will push/pop to this stack
-  pub threads: HashMap<u64, Stack<'gc>>,
+  pub threads: HashMap<u64, Stack>,
 }
 
-unsafe impl Collect for GcRoot<'_> {
+unsafe impl Collect for GcRoot {
   fn trace(&self, cc: &Collection) { self.threads.trace(cc); }
 }
 
-pub type GcArena =
-  Arena<rb_gc::__DynRootable<dyn for<'gc> rb_gc::Rootable<'gc, Root = GcRoot<'gc>>>>;
+pub type GcArena = Arena<rb_gc::__DynRootable<dyn for<'gc> rb_gc::Rootable<'gc, Root = GcRoot>>>;
 
 #[derive(Default)]
-pub struct Stack<'gc> {
-  pub frames: Vec<GcRefLock<'gc, Frame<'gc>>>,
+pub struct Stack {
+  pub frames: Vec<GcRefLock<Frame>>,
 }
 
-unsafe impl Collect for Stack<'_> {
+unsafe impl Collect for Stack {
   fn trace(&self, cc: &Collection) { self.frames.trace(cc); }
 }
 
 #[derive(Default)]
-pub struct Frame<'gc> {
-  pub values: Vec<Gc<'gc, GcValue<'gc>>>,
+pub struct Frame {
+  pub values: Vec<Gc<GcValue>>,
 }
 
-unsafe impl Collect for Frame<'_> {
+unsafe impl Collect for Frame {
   fn trace(&self, cc: &Collection) { self.values.trace(cc); }
 }
 
@@ -40,7 +39,7 @@ unsafe impl Collect for Frame<'_> {
 fn gc_works() {
   use rb_gc::lock::RefLock;
 
-  type MyArena = Arena<rb_gc::__DynRootable<dyn for<'gc> rb_gc::Rootable<'gc, Root = GcRoot<'gc>>>>;
+  type MyArena = Arena<rb_gc::__DynRootable<dyn for<'gc> rb_gc::Rootable<'gc, Root = GcRoot>>>;
 
   let mut arena = MyArena::new(|_| GcRoot { threads: HashMap::new() });
 

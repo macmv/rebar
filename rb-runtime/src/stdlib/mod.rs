@@ -72,9 +72,6 @@ impl Environment {
 
   fn track_value(&self, value: GcValue) {
     self.gc.mutate(|m, root| {
-      // SAFETY: This isn't really safe.
-      let value = unsafe { ::std::mem::transmute::<GcValue<'_>, GcValue<'_>>(value) };
-
       let tid = 3; // FIXME: Use ThreadId.
 
       let thread = root.threads.get(&tid).unwrap();
@@ -174,11 +171,6 @@ impl Environment {
       let mut env = env.borrow_mut();
 
       env.as_mut().unwrap().gc.mutate_root(|m, root| {
-        // SAFETY: This isn't really safe.
-        let value = unsafe {
-          ::std::mem::transmute::<ManuallyDrop<GcValue<'_>>, ManuallyDrop<GcValue<'_>>>(value)
-        };
-
         let tid = 3; // FIXME: Use ThreadId.
 
         let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
@@ -299,12 +291,12 @@ pub trait DynFunction<T> {
 /// Using `GcValue::gc_id`, we can check if we've already tracked a value. If we
 /// haven't then the owned value is added to the garbage collector.
 #[derive(Debug, PartialEq)]
-pub enum GcValue<'gc> {
-  String(Gc<'gc, String>),
-  Array(Gc<'gc, GcArray>),
+pub enum GcValue {
+  String(Gc<String>),
+  Array(Gc<GcArray>),
 }
 
-unsafe impl Collect for GcValue<'_> {
+unsafe impl Collect for GcValue {
   fn trace(&self, cc: &rb_gc::Collection) {
     match self {
       GcValue::String(s) => s.trace(cc),
@@ -323,9 +315,9 @@ pub struct GcArray {
   vt:  DynamicValueType,
 }
 
-impl<'a> GcValue<'a> {
+impl GcValue {
   // NB: This `GcValue` cannot be dropped, as that will cause a double free.
-  pub(crate) fn from_value(value: &Value) -> Option<ManuallyDrop<GcValue<'a>>> {
+  pub(crate) fn from_value(value: &Value) -> Option<ManuallyDrop<GcValue>> {
     let gc = match value {
       Value::String(s) => unsafe { GcValue::String(Gc::from_ptr(s.as_ptr() as *const String)) },
       Value::Array(arr) => unsafe {
@@ -574,7 +566,7 @@ impl<'a> RebarArgsParser<'a> {
     }
   }
 
-  unsafe fn value_owned(&mut self, vt: ValueType) -> ManuallyDrop<GcValue<'static>> {
+  unsafe fn value_owned(&mut self, vt: ValueType) -> ManuallyDrop<GcValue> {
     match vt {
       ValueType::String => {
         let ptr = self.next();
@@ -628,7 +620,7 @@ impl<'a> RebarArgsParser<'a> {
   }
 
   /// Parses a value to get tracked by the GC.
-  pub unsafe fn value_owned_unsized(&mut self) -> ManuallyDrop<GcValue<'static>> {
+  pub unsafe fn value_owned_unsized(&mut self) -> ManuallyDrop<GcValue> {
     let ty = self.next();
     let vt = ValueType::try_from(ty).unwrap();
     self.value_owned(vt)

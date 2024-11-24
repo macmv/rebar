@@ -12,7 +12,7 @@ use crate::{arena::Root, metrics::Metrics, Collect, Gc, Mutation, Rootable};
 /// Use this type as (a part of) an [`Arena`](crate::Arena) root to enable
 /// dynamic rooting of GC'd objects through [`DynamicRoot`] handles.
 //
-// SAFETY: This allows us to convert `Gc<'gc>` pointers to `Gc<'static>` and back, and this is VERY
+// SAFETY: This allows us to convert `Gc` pointers to `Gc<'static>` and back, and this is VERY
 // sketchy. We know it is safe because:
 //   1) The `DynamicRootSet` must be created inside an arena and is branded with an invariant `'gc`
 //      lifetime.
@@ -23,15 +23,15 @@ use crate::{arena::Root, metrics::Metrics, Collect, Gc, Mutation, Rootable};
 //      pointer *must* have originally been stashed using *this* set. Therefore, it is safe to cast
 //      it back to whatever our current `'gc` lifetime is.
 #[derive(Copy, Clone)]
-pub struct DynamicRootSet<'gc>(Gc<'gc, Inner<'gc>>);
+pub struct DynamicRootSet(Gc<Inner>);
 
-unsafe impl<'gc> Collect for DynamicRootSet<'gc> {
+unsafe impl Collect for DynamicRootSet {
   fn trace(&self, cc: &crate::Collection) { self.0.trace(cc); }
 }
 
-impl<'gc> DynamicRootSet<'gc> {
+impl DynamicRootSet {
   /// Creates a new, empty root set.
-  pub fn new(mc: &Mutation<'gc>) -> Self {
+  pub fn new(mc: &Mutation) -> Self {
     DynamicRootSet(Gc::new(
       mc,
       Inner { slots: Rc::new(RefCell::new(Slots::new(mc.metrics().clone()))) },
@@ -42,11 +42,7 @@ impl<'gc> DynamicRootSet<'gc> {
   ///
   /// The returned handle can be freely stored outside the current arena, and
   /// will keep the root alive across garbage collections.
-  pub fn stash<R: for<'a> Rootable<'a>>(
-    &self,
-    mc: &Mutation<'gc>,
-    root: Gc<'gc, Root<'gc, R>>,
-  ) -> DynamicRoot<R> {
+  pub fn stash<R: for<'a> Rootable<'a>>(&self, mc: &Mutation, root: Gc<Root<R>>) -> DynamicRoot<R> {
     // SAFETY: We are adopting a new `Gc` pointer, so we must invoke a write
     // barrier.
     mc.backward_barrier(Gc::erase(self.0), Some(Gc::erase(root)));
@@ -54,13 +50,8 @@ impl<'gc> DynamicRootSet<'gc> {
     let mut slots = self.0.slots.borrow_mut();
     let index = slots.add(unsafe { Gc::cast(root) });
 
-    let ptr =
-      unsafe { mem::transmute::<Gc<'gc, Root<'gc, R>>, Gc<'static, Root<'static, R>>>(root) };
-    let slots = unsafe {
-      mem::transmute::<Weak<RefCell<Slots<'gc>>>, Weak<RefCell<Slots<'static>>>>(Rc::downgrade(
-        &self.0.slots,
-      ))
-    };
+    let ptr = unsafe { mem::transmute::<Gc<Root<R>>, Gc<Root<'static, R>>>(root) };
+    let slots = Rc::downgrade(&self.0.slots);
 
     DynamicRoot { ptr, slots, index }
   }
@@ -72,9 +63,9 @@ impl<'gc> DynamicRootSet<'gc> {
   /// Panics if the handle doesn't belong to this root set. For the
   /// non-panicking variant, use [`try_fetch`](Self::try_fetch).
   #[inline]
-  pub fn fetch<R: for<'r> Rootable<'r>>(&self, root: &DynamicRoot<R>) -> Gc<'gc, Root<'gc, R>> {
+  pub fn fetch<R: for<'r> Rootable<'r>>(&self, root: &DynamicRoot<R>) -> Gc<Root<R>> {
     if self.contains(root) {
-      unsafe { mem::transmute::<Gc<'static, Root<'static, R>>, Gc<'gc, Root<'gc, R>>>(root.ptr) }
+      unsafe { mem::transmute::<Gc<Root<'static, R>>, Gc<Root<R>>>(root.ptr) }
     } else {
       panic!("mismatched root set")
     }
@@ -86,11 +77,9 @@ impl<'gc> DynamicRootSet<'gc> {
   pub fn try_fetch<R: for<'r> Rootable<'r>>(
     &self,
     root: &DynamicRoot<R>,
-  ) -> Result<Gc<'gc, Root<'gc, R>>, MismatchedRootSet> {
+  ) -> Result<Gc<Root<R>>, MismatchedRootSet> {
     if self.contains(root) {
-      Ok(unsafe {
-        mem::transmute::<Gc<'static, Root<'static, R>>, Gc<'gc, Root<'gc, R>>>(root.ptr)
-      })
+      Ok(unsafe { mem::transmute::<Gc<Root<'static, R>>, Gc<Root<R>>>(root.ptr) })
     } else {
       Err(MismatchedRootSet(()))
     }
@@ -105,9 +94,7 @@ impl<'gc> DynamicRootSet<'gc> {
     // given `DynamicRoot` points to a *dropped* root set, that `Weak::as_ptr`
     // will return a pointer that cannot possibly belong to a live `Rc`.
     let ours = unsafe {
-      mem::transmute::<*const RefCell<Slots<'gc>>, *const RefCell<Slots<'static>>>(Rc::as_ptr(
-        &self.0.slots,
-      ))
+      mem::transmute::<*const RefCell<Slots>, *const RefCell<Slots>>(Rc::as_ptr(&self.0.slots))
     };
     let theirs = Weak::as_ptr(&root.slots);
     ours == theirs
@@ -117,8 +104,8 @@ impl<'gc> DynamicRootSet<'gc> {
 /// Handle to a `Gc` pointer held inside a [`DynamicRootSet`] which is `'static`
 /// and can be held outside of the arena.
 pub struct DynamicRoot<R: for<'gc> Rootable<'gc>> {
-  ptr:   Gc<'static, Root<'static, R>>,
-  slots: Weak<RefCell<Slots<'static>>>,
+  ptr:   Gc<Root<'static, R>>,
+  slots: Weak<RefCell<Slots>>,
   index: Index,
 }
 
@@ -178,11 +165,11 @@ impl fmt::Display for MismatchedRootSet {
 #[cfg(feature = "std")]
 impl std::error::Error for MismatchedRootSet {}
 
-struct Inner<'gc> {
-  slots: Rc<RefCell<Slots<'gc>>>,
+struct Inner {
+  slots: Rc<RefCell<Slots>>,
 }
 
-unsafe impl<'gc> Collect for Inner<'gc> {
+unsafe impl Collect for Inner {
   fn trace(&self, cc: &crate::Collection) {
     let slots = self.slots.borrow();
     slots.trace(cc);
@@ -197,12 +184,12 @@ type Index = usize;
 // memory in the slots vec, which is impossible.
 const NULL_INDEX: Index = usize::MAX;
 
-enum Slot<'gc> {
+enum Slot {
   Vacant { next_free: Index },
-  Occupied { root: Gc<'gc, ()>, ref_count: usize },
+  Occupied { root: Gc<()>, ref_count: usize },
 }
 
-unsafe impl<'gc> Collect for Slot<'gc> {
+unsafe impl Collect for Slot {
   fn trace(&self, cc: &crate::Collection) {
     match self {
       Slot::Vacant { .. } => {}
@@ -211,26 +198,26 @@ unsafe impl<'gc> Collect for Slot<'gc> {
   }
 }
 
-struct Slots<'gc> {
+struct Slots {
   metrics:   Metrics,
-  slots:     Vec<Slot<'gc>>,
+  slots:     Vec<Slot>,
   next_free: Index,
 }
 
-impl<'gc> Drop for Slots<'gc> {
+impl Drop for Slots {
   fn drop(&mut self) {
     self.metrics.mark_external_deallocation(self.slots.capacity() * mem::size_of::<Slot>());
   }
 }
 
-unsafe impl<'gc> Collect for Slots<'gc> {
+unsafe impl Collect for Slots {
   fn trace(&self, cc: &crate::Collection) { self.slots.trace(cc); }
 }
 
-impl<'gc> Slots<'gc> {
+impl Slots {
   fn new(metrics: Metrics) -> Self { Self { metrics, slots: Vec::new(), next_free: NULL_INDEX } }
 
-  fn add(&mut self, p: Gc<'gc, ()>) -> Index {
+  fn add(&mut self, p: Gc<()>) -> Index {
     // Occupied slot refcount starts at 0. A refcount of 0 and a set ptr implies
     // that there is *one* live reference.
 

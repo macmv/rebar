@@ -1,4 +1,4 @@
-use core::{marker::PhantomData, ptr::NonNull};
+use core::ptr::NonNull;
 
 use crate::{types::GcBoxInner, Gc, GcWeak};
 
@@ -69,27 +69,27 @@ pub unsafe trait __CoercePtrInternal<Dst> {
     F: FnOnce(*mut Self::FromPtr) -> *mut Self::ToPtr;
 }
 
-unsafe impl<'gc, T, U: ?Sized> __CoercePtrInternal<Gc<'gc, U>> for Gc<'gc, T> {
+unsafe impl<'gc, T, U: ?Sized> __CoercePtrInternal<Gc<U>> for Gc<T> {
   type FromPtr = T;
   type ToPtr = U;
 
   #[inline(always)]
-  unsafe fn __coerce_unchecked<F>(self, coerce: F) -> Gc<'gc, U>
+  unsafe fn __coerce_unchecked<F>(self, coerce: F) -> Gc<U>
   where
     F: FnOnce(*mut T) -> *mut U,
   {
     let ptr = self.ptr.as_ptr() as *mut T;
     let ptr = NonNull::new_unchecked(coerce(ptr) as *mut GcBoxInner<U>);
-    Gc { ptr, _invariant: PhantomData }
+    Gc { ptr }
   }
 }
 
-unsafe impl<'gc, T, U: ?Sized> __CoercePtrInternal<GcWeak<'gc, U>> for GcWeak<'gc, T> {
+unsafe impl<'gc, T, U: ?Sized> __CoercePtrInternal<GcWeak<U>> for GcWeak<T> {
   type FromPtr = T;
   type ToPtr = U;
 
   #[inline(always)]
-  unsafe fn __coerce_unchecked<F>(self, coerce: F) -> GcWeak<'gc, U>
+  unsafe fn __coerce_unchecked<F>(self, coerce: F) -> GcWeak<U>
   where
     F: FnOnce(*mut T) -> *mut U,
   {

@@ -41,7 +41,7 @@ impl<'gc> Mutation<'gc> {
   /// the `parent` pointer may adopt *any* child pointer(s) before collection
   /// is next triggered.
   #[inline]
-  pub fn backward_barrier(&self, parent: Gc<'gc, ()>, child: Option<Gc<'gc, ()>>) {
+  pub fn backward_barrier(&self, parent: Gc<()>, child: Option<Gc<()>>) {
     self.context.backward_barrier(
       unsafe { GcBox::erase(parent.ptr) },
       child.map(|p| unsafe { GcBox::erase(p.ptr) }),
@@ -63,7 +63,7 @@ impl<'gc> Mutation<'gc> {
   /// ensures that the `child` pointer may be adopted by *any*
   /// parent pointer(s) before collection is next triggered.
   #[inline]
-  pub fn forward_barrier(&self, parent: Option<Gc<'gc, ()>>, child: Gc<'gc, ()>) {
+  pub fn forward_barrier(&self, parent: Option<Gc<()>>, child: Gc<()>) {
     self.context.forward_barrier(parent.map(|p| unsafe { GcBox::erase(p.ptr) }), unsafe {
       GcBox::erase(child.ptr)
     })

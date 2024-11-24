@@ -36,7 +36,7 @@ macro_rules! make_lock_wrapper {
         }
 
         #[doc = concat!("An alias for `Gc<'gc, ", stringify!($locked_type), "<T>>`.")]
-        pub type $gc_locked_type<'gc, T> = Gc<'gc, $locked_type<T>>;
+        pub type $gc_locked_type<T> = Gc<$locked_type<T>>;
 
         impl<T> $locked_type<T> {
             #[inline]
@@ -139,7 +139,7 @@ impl<T: Copy + fmt::Debug> fmt::Debug for Lock<T> {
   }
 }
 
-impl<'gc, T: Copy + 'gc> Gc<'gc, Lock<T>> {
+impl<'gc, T: Copy + 'gc> Gc<Lock<T>> {
   #[inline]
   pub fn get(self) -> T { self.cell.get() }
 
@@ -250,7 +250,7 @@ impl<T: fmt::Debug + ?Sized> fmt::Debug for RefLock<T> {
   }
 }
 
-impl<'gc, T: ?Sized + 'gc> Gc<'gc, RefLock<T>> {
+impl<'gc, T: ?Sized + 'gc> Gc<RefLock<T>> {
   #[track_caller]
   #[inline]
   pub fn borrow(self) -> Ref<'gc, T> { RefLock::borrow(self.as_ref()) }
