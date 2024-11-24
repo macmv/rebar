@@ -53,7 +53,7 @@ fn gc_works() {
 
     // When a value like `Value::String` is created, it's inserted into the current
     // frame (note that we don't need mutable access here).
-    let v = GcValue::String("hello".into());
+    let v = GcValue::String(Gc::new(m, "hello".into()));
     thread.frames.last().unwrap().borrow_mut(m).values.push(Gc::new(m, v));
 
     // When a function returns, this is called.
