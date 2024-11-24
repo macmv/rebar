@@ -180,11 +180,9 @@ mod tests {
   fn foo() {
     eval(
       r#"
-        println(2 * 3 + 4 + 5)
+        assert_eq(2 * 3 + 4 + 5, 15)
         4
       "#,
     );
-
-    panic!();
   }
 }
