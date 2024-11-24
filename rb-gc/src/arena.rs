@@ -158,35 +158,22 @@ impl<R> Arena<R>
 where
   R: for<'a> Rootable<'a>,
 {
-  /// The primary means of interacting with a garbage collected arena. Accepts a
-  /// callback which receives a `&Mutation<'gc>` and a reference to the root,
-  /// and can return any non garbage collected value. The callback may
-  /// "mutate" any part of the object graph during this call, but no garbage
-  /// collection will take place during this method.
-  #[inline]
-  pub fn mutate<F, T>(&self, f: F) -> T
-  where
-    F: for<'gc> FnOnce(&'gc Mutation, &'gc Root<'gc, R>) -> T,
-  {
-    unsafe {
-      let mc: &'static Mutation = &*(self.context.mutation_context() as *const _);
-      let root: &'static Root<'_, R> = &*(&self.root as *const _);
-      f(mc, root)
-    }
-  }
+  /// The primary means of interacting with a garbage collected arena. Returns a
+  /// `&Mutation`, which can be used to mutate any part of the object graph.
+  /// Garbage collection may not take place until the `&Mutation` is done
+  /// being used.
+  pub fn mutate(&self) -> &Mutation { unsafe { &*(self.context.mutation_context() as *const _) } }
+  pub fn root(&self) -> &Root<'_, R> { unsafe { std::mem::transmute(&*(&self.root as *const _)) } }
 
   /// An alternative version of [`Arena::mutate`] which allows mutating the root
   /// set, at the cost of an extra write barrier.
-  #[inline]
-  pub fn mutate_root<F, T>(&mut self, f: F) -> T
-  where
-    F: for<'gc> FnOnce(&'gc Mutation, &'gc mut Root<'gc, R>) -> T,
-  {
+  pub fn mutate_root(&mut self) -> (&Mutation, &mut Root<'_, R>) {
     self.context.root_barrier();
     unsafe {
-      let mc: &'static Mutation = &*(self.context.mutation_context() as *const _);
-      let root: &'static mut Root<'_, R> = &mut *(&mut self.root as *mut _);
-      f(mc, root)
+      (
+        &*(self.context.mutation_context() as *const _),
+        std::mem::transmute(&mut *(&mut self.root as *mut _)),
+      )
     }
   }
 

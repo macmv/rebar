@@ -45,18 +45,17 @@ fn gc_works() {
 
   let tid = 3; // I am thread 3 (FIXME: use `ThreadId`)
 
-  arena.mutate_root(|m, root| {
-    let thread = root.threads.entry(tid).or_insert_with(Stack::default);
+  let (m, root) = arena.mutate_root();
+  let thread = root.threads.entry(tid).or_insert_with(Stack::default);
 
-    // When a function begins, this is called.
-    thread.frames.push(Gc::new(m, RefLock::new(Frame::default())));
+  // When a function begins, this is called.
+  thread.frames.push(Gc::new(m, RefLock::new(Frame::default())));
 
-    // When a value like `Value::String` is created, it's inserted into the current
-    // frame (note that we don't need mutable access here).
-    let v = GcValue::String(Gc::new(m, "hello".into()));
-    thread.frames.last().unwrap().borrow_mut(m).values.push(Gc::new(m, v));
+  // When a value like `Value::String` is created, it's inserted into the current
+  // frame (note that we don't need mutable access here).
+  let v = GcValue::String(Gc::new(m, "hello".into()));
+  thread.frames.last().unwrap().borrow_mut(m).values.push(Gc::new(m, v));
 
-    // When a function returns, this is called.
-    thread.frames.pop().unwrap();
-  });
+  // When a function returns, this is called.
+  thread.frames.pop().unwrap();
 }

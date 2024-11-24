@@ -71,14 +71,15 @@ impl Environment {
   }
 
   fn track_value(&self, value: GcValue) {
-    self.gc.mutate(|m, root| {
-      let tid = 3; // FIXME: Use ThreadId.
+    let m = self.gc.mutate();
+    let root = self.gc.root();
 
-      let thread = root.threads.get(&tid).unwrap();
-      let frame = thread.frames.last().unwrap();
+    let tid = 3; // FIXME: Use ThreadId.
 
-      frame.borrow_mut(m).values.push(Gc::new(&m, value));
-    });
+    let thread = root.threads.get(&tid).unwrap();
+    let frame = thread.frames.last().unwrap();
+
+    frame.borrow_mut(m).values.push(Gc::new(&m, value));
   }
 
   fn dyn_call_ptr(func: i64, arg: *const RebarArgs, ret: *mut RebarArgs) {
@@ -114,7 +115,7 @@ impl Environment {
           Type::Literal(Literal::String) => {
             let mut str = String::from(ret_value.as_str());
             str.shrink_to_fit();
-            let gc: Gc<String> = env.gc.mutate(|m, _| ::std::mem::transmute(Gc::new(m, str)));
+            let gc: Gc<String> = Gc::new(env.gc.mutate(), str);
 
             ret.ret(0, Gc::as_ptr(gc) as i64);
 
@@ -129,26 +130,27 @@ impl Environment {
   fn push_frame() {
     ENV.with(|env| {
       let mut env = env.borrow_mut();
-      env.as_mut().unwrap().gc.mutate_root(|m, root| {
-        let tid = 3; // FIXME: Use ThreadId.
+      let env = env.as_mut().unwrap();
 
-        let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
+      let (m, root) = env.gc.mutate_root();
+      let tid = 3; // FIXME: Use ThreadId.
 
-        thread.frames.push(Gc::new(m, RefLock::new(crate::gc::Frame::default())));
-      });
+      let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
+
+      thread.frames.push(Gc::new(m, RefLock::new(crate::gc::Frame::default())));
     });
   }
 
   fn pop_frame() {
     ENV.with(|env| {
       let mut env = env.borrow_mut();
-      env.as_mut().unwrap().gc.mutate_root(|_, root| {
-        let tid = 3; // FIXME: Use ThreadId.
 
-        let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
+      let (_, root) = env.as_mut().unwrap().gc.mutate_root();
+      let tid = 3; // FIXME: Use ThreadId.
 
-        thread.frames.pop().unwrap();
-      });
+      let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
+
+      thread.frames.pop().unwrap();
     });
   }
 
@@ -170,14 +172,13 @@ impl Environment {
 
       let mut env = env.borrow_mut();
 
-      env.as_mut().unwrap().gc.mutate_root(|m, root| {
-        let tid = 3; // FIXME: Use ThreadId.
+      let (m, root) = env.as_mut().unwrap().gc.mutate_root();
+      let tid = 3; // FIXME: Use ThreadId.
 
-        let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
-        let mut frame = thread.frames.last_mut().unwrap().borrow_mut(m);
+      let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());
+      let mut frame = thread.frames.last_mut().unwrap().borrow_mut(m);
 
-        frame.values.push(Gc::new(&m, ManuallyDrop::into_inner(value)));
-      });
+      frame.values.push(Gc::new(&m, ManuallyDrop::into_inner(value)));
     });
   }
 
@@ -215,9 +216,10 @@ impl Environment {
 
   fn string_new() -> *const String {
     ENV.with(|env| {
-      let mut env = env.borrow_mut();
+      let env = env.borrow();
 
-      env.as_mut().unwrap().gc.mutate(|m, _| Gc::as_ptr(Gc::new(m, String::new())))
+      let m = env.as_ref().unwrap().gc.mutate();
+      Gc::as_ptr(Gc::new(m, String::new()))
     })
   }
 
@@ -228,15 +230,14 @@ impl Environment {
 
       let vt = DynamicValueType::decode(vt);
 
-      env.gc.mutate(|m, _| {
-        Gc::as_ptr(Gc::new(
-          m,
-          GcArray {
-            arr: UnsafeCell::new(RbArray::new_with_len(len as usize * vt.len() as usize)),
-            vt,
-          },
-        )) as *const u8
-      })
+      let m = env.gc.mutate();
+      Gc::as_ptr(Gc::new(
+        m,
+        GcArray {
+          arr: UnsafeCell::new(RbArray::new_with_len(len as usize * vt.len() as usize)),
+          vt,
+        },
+      )) as *const u8
     })
   }
 
