@@ -332,7 +332,7 @@ impl ValueType {
       ValueType::Int => 1,
       ValueType::Bool => 1,
       ValueType::String => 1,
-      ValueType::Array => 2,
+      ValueType::Array => 1,
 
       ValueType::Function => 1,
       ValueType::UserFunction => 1,

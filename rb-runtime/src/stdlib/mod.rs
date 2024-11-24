@@ -295,7 +295,11 @@ pub enum GcValue<'gc> {
   Array(Gc<'gc, GcArray>),
 }
 
+// SAFETY: Must be `#[repr(C)]`, so that rebar can access fields in it. Rebar
+// will never access the `vt` field (as that's captured in the static type
+// information), but it needs the `arr` field to be at the start of the struct.
 #[derive(Debug)]
+#[repr(C)]
 pub struct GcArray {
   arr: UnsafeCell<RbArray>,
   vt:  DynamicValueType,
@@ -532,12 +536,9 @@ impl<'a> RebarArgsParser<'a> {
       }
       ValueType::Array => {
         let ptr = self.next();
-        let vt = self.next();
+        let arr = Gc::from_ptr(ptr as *const GcArray);
 
-        let arr = &*(ptr as *const RbArray) as &RbArray;
-        let vt = DynamicValueType::decode(vt);
-
-        Value::Array(RbSlice::new(arr, vt))
+        Value::Array(RbSlice::new(&*arr.arr.get(), arr.vt))
       }
       v => unimplemented!("{v:?}"),
     }
@@ -554,11 +555,7 @@ impl<'a> RebarArgsParser<'a> {
       }
       ValueType::Array => {
         let ptr = self.next();
-        let vt = self.next();
 
-        let vt = DynamicValueType::decode(vt);
-
-        // FIXME: No.
         ManuallyDrop::new(GcValue::Array(Gc::from_ptr(ptr as *const GcArray)))
       }
       _ => unreachable!("not an owned value: {vt:?}"),

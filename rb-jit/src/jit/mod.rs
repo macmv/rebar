@@ -607,10 +607,8 @@ impl FuncBuilder<'_> {
           }
         }
 
-        let result = RValue {
-          ty:     Value::Const(ValueType::Array),
-          values: vec![Value::Dyn(result_ptr), Value::Const(vt.encode())],
-        };
+        let result =
+          RValue { ty: Value::Const(ValueType::Array), values: vec![Value::Dyn(result_ptr)] };
 
         result
       }
