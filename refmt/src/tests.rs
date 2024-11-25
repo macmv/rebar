@@ -575,3 +575,38 @@ fn nested_multiline_if() {
     "#],
   );
 }
+
+#[test]
+fn short_array() {
+  check(
+    r#"
+      let a = [1, 2,]
+    "#,
+    expect![@r#"
+      let a = [1, 2]
+    "#],
+  );
+}
+
+#[test]
+fn long_array() {
+  check(
+    r#"
+      let a = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    "#,
+    expect![@r#"
+      let a = [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+      ]
+    "#],
+  );
+}
