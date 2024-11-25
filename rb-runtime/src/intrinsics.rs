@@ -23,17 +23,8 @@ thread_local! {
 }
 
 impl RuntimeEnvironment {
-  pub fn core() -> Self {
-    RuntimeEnvironment {
-      env: Environment::core(),
-      gc:  GcArena::new(|_| GcRoot { threads: HashMap::new() }),
-    }
-  }
-  pub fn std() -> Self {
-    RuntimeEnvironment {
-      env: Environment::std(),
-      gc:  GcArena::new(|_| GcRoot { threads: HashMap::new() }),
-    }
+  pub fn new(env: Environment) -> Self {
+    RuntimeEnvironment { env, gc: GcArena::new(|_| GcRoot { threads: HashMap::new() }) }
   }
 
   pub(crate) fn intrinsics(self) -> IntrinsicImpls {

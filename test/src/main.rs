@@ -5,7 +5,7 @@ use std::{
 };
 
 use rb_diagnostic::{Source, Sources};
-use rb_runtime::RuntimeEnvironment;
+use rb_runtime::{Environment, RuntimeEnvironment};
 
 fn main() {
   let filter = std::env::args().nth(1).unwrap_or_default();
@@ -32,7 +32,8 @@ fn main() {
               let sources = Arc::new(sources);
 
               let res = catch_unwind(|| {
-                match rb_runtime::run(RuntimeEnvironment::std(), sources.clone(), id) {
+                let env = RuntimeEnvironment::new(Environment::std());
+                match rb_runtime::run(env, sources.clone(), id) {
                   Ok(_) => println!("{}... \x1b[32mok\x1b[0m", stringified),
                   Err(diagnostics) => {
                     println!("{}... \x1b[31mfail\x1b[0m", stringified);

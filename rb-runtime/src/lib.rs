@@ -9,8 +9,9 @@ pub use gc_value::{GcArray, GcValue};
 
 use gc::GcArena;
 use rb_diagnostic::{emit, Diagnostic, Source, SourceId, Sources, Span};
-use rb_std::Environment;
 use rb_syntax::cst;
+
+pub use rb_std::Environment;
 
 const NUM_CPUS: usize = 32;
 
@@ -21,7 +22,7 @@ pub struct RuntimeEnvironment {
 }
 
 pub fn eval(src: &str) {
-  let env = RuntimeEnvironment::std();
+  let env = RuntimeEnvironment::new(Environment::std());
 
   let mut sources = Sources::new();
   let id = sources.add(Source::new("inline.rbr".into(), src.into()));
