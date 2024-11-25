@@ -977,14 +977,6 @@ impl FuncBuilder<'_> {
     self.stack_slot_for_ir(ir)
   }
 
-  /// Creates a stack slot that stores a single value, sized to the given
-  /// DynamicValueType.
-  fn stack_slot_sized(&mut self, value: &RValue, vt: DynamicValueType) -> ir::Value {
-    let ir = value.to_ir(vt.param_kind(), &mut self.builder);
-
-    self.stack_slot_for_ir(ir)
-  }
-
   fn stack_slot_for_ir(&mut self, ir: Vec<ir::Value>) -> ir::Value {
     let slot = self.builder.create_sized_stack_slot(StackSlotData {
       kind: StackSlotKind::ExplicitSlot,
