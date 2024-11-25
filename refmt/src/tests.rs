@@ -610,3 +610,21 @@ fn long_array() {
     "#],
   );
 }
+
+#[test]
+fn multiline_in_array() {
+  check(
+    r#"
+      let a = [if true { 1
+        2 }]
+    "#,
+    expect![@r#"
+      let a = [
+        if true {
+          1
+          2
+        },
+      ]
+    "#],
+  );
+}
