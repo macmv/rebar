@@ -177,11 +177,7 @@ impl RuntimeEnvironment {
   fn string_append_value(str: *const String, args: *const RebarArgs) {
     ENV.with(|_env| {
       let str_value = unsafe { Gc::from_ptr(str as *const UnsafeCell<String>) };
-
-      let arg_value = unsafe {
-        let mut parser = RebarArgsParser::new(args);
-        parser.value_unsized()
-      };
+      let arg_value = unsafe { RebarArgsParser::new(args).value_unsized() };
 
       let str = unsafe { &mut *str_value.get() };
 
@@ -235,15 +231,8 @@ impl RuntimeEnvironment {
 
   fn value_equals(a: *const RebarArgs, b: *const RebarArgs) -> i8 {
     ENV.with(|_env| {
-      let a_value = unsafe {
-        let mut parser = RebarArgsParser::new(a);
-        parser.value_unsized()
-      };
-
-      let b_value = unsafe {
-        let mut parser = RebarArgsParser::new(b);
-        parser.value_unsized()
-      };
+      let a_value = unsafe { RebarArgsParser::new(a).value_unsized() };
+      let b_value = unsafe { RebarArgsParser::new(b).value_unsized() };
 
       (a_value == b_value) as i8
     })
