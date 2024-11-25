@@ -99,20 +99,11 @@ impl TryFrom<i64> for ValueType {
   }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum CompactValues<T> {
-  None,
-  One(T),
-  Two(T, T),
-}
-
 /// The parameter kind for passing a value around. This is most commonly used
 /// for local variables. Compact values have their static type known, wheras
 /// extended types have a static type that is a union or unknown.
 #[derive(Clone, Copy)]
 pub enum ParamKind {
-  /// The compact format. This will returns in a `CompactValues` containing one
-  /// value.
   Compact,
 
   /// The extended format of a value. This includes an i64 at the start for the
@@ -124,59 +115,6 @@ pub enum ParamKind {
   /// unset (for dynamic rust calls), the RValue must produce exactly the
   /// number of values for the current value.
   Extended(Option<NonZero<u32>>),
-}
-
-impl<T> CompactValues<T> {
-  pub fn map<U>(self, mut f: impl FnMut(T) -> U) -> CompactValues<U> {
-    match self {
-      CompactValues::None => CompactValues::None,
-      CompactValues::One(a) => CompactValues::One(f(a)),
-      CompactValues::Two(a, b) => CompactValues::Two(f(a), f(b)),
-    }
-  }
-
-  pub fn with_slice<R>(self, f: impl FnOnce(&[T]) -> R) -> R {
-    match self {
-      CompactValues::None => f(&[]),
-      CompactValues::One(a) => f(&[a]),
-      CompactValues::Two(a, b) => f(&[a, b]),
-    }
-  }
-
-  pub fn first(self) -> Option<T> {
-    match self {
-      CompactValues::None => None,
-      CompactValues::One(a) => Some(a),
-      CompactValues::Two(a, _) => Some(a),
-    }
-  }
-
-  pub fn second(self) -> Option<T> {
-    match self {
-      CompactValues::None => None,
-      CompactValues::One(_) => None,
-      CompactValues::Two(_, b) => Some(b),
-    }
-  }
-
-  pub fn len(&self) -> u32 {
-    match self {
-      CompactValues::None => 0,
-      CompactValues::One(_) => 1,
-      CompactValues::Two(_, _) => 2,
-    }
-  }
-}
-
-impl<T: Copy> CompactValues<T> {
-  pub fn from_slice(elems: &[T]) -> Self {
-    match elems {
-      [] => CompactValues::None,
-      [a] => CompactValues::One(*a),
-      [a, b] => CompactValues::Two(*a, *b),
-      _ => panic!("expected 0..=2 values"),
-    }
-  }
 }
 
 impl ValueType {
