@@ -12,7 +12,7 @@ use rb_typer::{Literal, Type};
 use std::collections::HashMap;
 
 use rb_value::{
-  CompactValues, DynamicValueType, IntrinsicImpls, ParamKind, RValue, Value, ValueType,
+  CompactValues, DynamicValueType, IRValue, IntrinsicImpls, ParamKind, RValue, ValueType,
 };
 
 pub struct JIT {
@@ -378,13 +378,13 @@ fn use_var(builder: &mut FunctionBuilder, var: &[Variable], ty: &Type) -> RValue
 
   match dvt {
     DynamicValueType::Const(ty) => RValue {
-      ty:     Value::Const(ty),
-      values: var.iter().map(|v| Value::Dyn(builder.use_var(*v))).collect::<Vec<_>>(),
+      ty:     IRValue::Const(ty),
+      values: var.iter().map(|v| IRValue::Dyn(builder.use_var(*v))).collect::<Vec<_>>(),
     },
 
     DynamicValueType::Union(_) => RValue {
-      ty:     Value::Dyn(builder.use_var(var[0])),
-      values: var[1..].iter().map(|v| Value::Dyn(builder.use_var(*v))).collect::<Vec<_>>(),
+      ty:     IRValue::Dyn(builder.use_var(var[0])),
+      values: var[1..].iter().map(|v| IRValue::Dyn(builder.use_var(*v))).collect::<Vec<_>>(),
     },
   }
 }
@@ -480,7 +480,7 @@ impl FuncBuilder<'_> {
 
           self.builder.ins().call(self.intrinsics.string_append_str, &[str, ptr, len]);
 
-          RValue { ty: Value::Const(ValueType::String), values: vec![Value::from(str)] }
+          RValue { ty: IRValue::Const(ValueType::String), values: vec![IRValue::from(str)] }
         }
       },
 
@@ -530,7 +530,7 @@ impl FuncBuilder<'_> {
         }
 
         let result =
-          RValue { ty: Value::Const(ValueType::String), values: vec![Value::Dyn(str)] };
+          RValue { ty: IRValue::Const(ValueType::String), values: vec![IRValue::Dyn(str)] };
 
         result
       }
@@ -566,8 +566,10 @@ impl FuncBuilder<'_> {
           }
         }
 
-        let result =
-          RValue { ty: Value::Const(ValueType::Array), values: vec![Value::Dyn(result_ptr)] };
+        let result = RValue {
+          ty:     IRValue::Const(ValueType::Array),
+          values: vec![IRValue::Dyn(result_ptr)],
+        };
 
         result
       }
@@ -575,8 +577,8 @@ impl FuncBuilder<'_> {
       mir::Expr::Local(id, ref ty) => use_var(&mut self.builder, &self.locals[&id], ty),
 
       mir::Expr::UserFunction(id, _) => RValue {
-        ty:     Value::Const(ValueType::UserFunction),
-        values: vec![Value::Const(id.0 as i64)],
+        ty:     IRValue::Const(ValueType::UserFunction),
+        values: vec![IRValue::Const(id.0 as i64)],
       },
 
       mir::Expr::Native(ref id, _) => {
@@ -628,7 +630,7 @@ impl FuncBuilder<'_> {
 
           Some(ValueType::UserFunction) => {
             let id = match lhs.values[0] {
-              Value::Const(v) => UserFunctionId(v as u64),
+              IRValue::Const(v) => UserFunctionId(v as u64),
               _ => todo!(),
             };
 
@@ -806,10 +808,10 @@ impl FuncBuilder<'_> {
 
         match ret_dvt {
           DynamicValueType::Const(vt) => RValue {
-            ty:     Value::Const(vt),
+            ty:     IRValue::Const(vt),
             values: (0..vt.len())
               .map(|i| {
-                Value::from(self.builder.ins().load(
+                IRValue::from(self.builder.ins().load(
                   ir::types::I64,
                   MemFlags::new(),
                   element_ptr,
@@ -819,7 +821,7 @@ impl FuncBuilder<'_> {
               .collect(),
           },
           DynamicValueType::Union(len) => RValue {
-            ty:     Value::Dyn(self.builder.ins().load(
+            ty:     IRValue::Dyn(self.builder.ins().load(
               ir::types::I64,
               MemFlags::new(),
               element_ptr,
@@ -829,7 +831,7 @@ impl FuncBuilder<'_> {
             // above.
             values: (0..len)
               .map(|i| {
-                Value::Dyn(self.builder.ins().load(
+                IRValue::Dyn(self.builder.ins().load(
                   ir::types::I64,
                   MemFlags::new(),
                   element_ptr,
@@ -947,19 +949,19 @@ impl FuncBuilder<'_> {
 
     match ret_dvt {
       DynamicValueType::Const(vt) => RValue {
-        ty:     Value::Const(ValueType::String),
+        ty:     IRValue::Const(ValueType::String),
         values: (0..vt.len())
           .map(|i| {
-            Value::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, i as i32 * 8))
+            IRValue::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, i as i32 * 8))
           })
           .collect(),
       },
       DynamicValueType::Union(len) => RValue {
-        ty:     Value::Dyn(self.builder.ins().stack_load(ir::types::I64, ret_slot, 0)),
+        ty:     IRValue::Dyn(self.builder.ins().stack_load(ir::types::I64, ret_slot, 0)),
         // NB: Use `len`, not `ret_dvt.len()`, because we're reading the union tag by hand above.
         values: (0..len)
           .map(|i| {
-            Value::Dyn(self.builder.ins().stack_load(ir::types::I64, ret_slot, i as i32 * 8 + 8))
+            IRValue::Dyn(self.builder.ins().stack_load(ir::types::I64, ret_slot, i as i32 * 8 + 8))
           })
           .collect(),
       },

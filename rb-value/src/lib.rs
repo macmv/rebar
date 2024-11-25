@@ -29,12 +29,12 @@ pub struct IntrinsicImpls {
 
 #[derive(Debug, Clone)]
 pub struct RValue {
-  pub ty:     Value<ValueType>,
-  pub values: Vec<Value<i64>>,
+  pub ty:     IRValue<ValueType>,
+  pub values: Vec<IRValue<i64>>,
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum Value<T: AsIR> {
+pub enum IRValue<T: AsIR> {
   Const(T),
   Dyn(ir::Value),
 }
@@ -84,11 +84,11 @@ impl DynamicValueType {
   }
 }
 
-impl<T: AsIR> From<T> for Value<T> {
-  fn from(t: T) -> Self { Value::Const(t) }
+impl<T: AsIR> From<T> for IRValue<T> {
+  fn from(t: T) -> Self { IRValue::Const(t) }
 }
-impl<T: AsIR> From<ir::Value> for Value<T> {
-  fn from(t: ir::Value) -> Self { Value::Dyn(t) }
+impl<T: AsIR> From<ir::Value> for IRValue<T> {
+  fn from(t: ir::Value) -> Self { IRValue::Dyn(t) }
 }
 
 pub trait AsIR {
@@ -139,52 +139,52 @@ impl TryFrom<i64> for ValueType {
   }
 }
 
-impl<T: AsIR> Value<T> {
+impl<T: AsIR> IRValue<T> {
   pub fn to_ir(&self, builder: &mut FunctionBuilder) -> ir::Value {
     match self {
-      Value::Const(t) => builder.ins().iconst(t.ty(), t.as_i64()),
-      Value::Dyn(v) => *v,
+      IRValue::Const(t) => builder.ins().iconst(t.ty(), t.as_i64()),
+      IRValue::Dyn(v) => *v,
     }
   }
 }
 
-impl<T: AsIR + Copy> Value<T> {
+impl<T: AsIR + Copy> IRValue<T> {
   pub fn as_const(&self) -> Option<T> {
     match self {
-      Value::Const(t) => Some(*t),
-      Value::Dyn(_) => None,
+      IRValue::Const(t) => Some(*t),
+      IRValue::Dyn(_) => None,
     }
   }
 }
 
 impl RValue {
-  pub fn nil() -> Self { RValue { ty: Value::Const(ValueType::Nil), values: vec![] } }
+  pub fn nil() -> Self { RValue { ty: IRValue::Const(ValueType::Nil), values: vec![] } }
 
   pub fn bool<T>(v: T) -> Self
   where
-    Value<i64>: From<T>,
+    IRValue<i64>: From<T>,
   {
-    RValue { ty: Value::Const(ValueType::Bool), values: vec![Value::from(v)] }
+    RValue { ty: IRValue::Const(ValueType::Bool), values: vec![IRValue::from(v)] }
   }
 
   pub fn int<T>(v: T) -> Self
   where
-    Value<i64>: From<T>,
+    IRValue<i64>: From<T>,
   {
-    RValue { ty: Value::Const(ValueType::Int), values: vec![Value::from(v)] }
+    RValue { ty: IRValue::Const(ValueType::Int), values: vec![IRValue::from(v)] }
   }
 
   pub fn function<T>(v: T) -> Self
   where
-    Value<i64>: From<T>,
+    IRValue<i64>: From<T>,
   {
-    RValue { ty: Value::Const(ValueType::Function), values: vec![Value::from(v)] }
+    RValue { ty: IRValue::Const(ValueType::Function), values: vec![IRValue::from(v)] }
   }
 
   pub fn string(v: &str) -> Self {
     RValue {
-      ty:     Value::Const(ValueType::String),
-      values: vec![Value::from(v.len() as i64), Value::from(v.as_ptr() as i64)],
+      ty:     IRValue::Const(ValueType::String),
+      values: vec![IRValue::from(v.len() as i64), IRValue::from(v.as_ptr() as i64)],
     }
   }
 }
@@ -333,13 +333,13 @@ impl RValue {
 
     match dty {
       DynamicValueType::Const(ty) => RValue {
-        ty:     Value::Const(ty),
-        values: ir.iter().map(|v| Value::Dyn(*v)).collect::<Vec<_>>(),
+        ty:     IRValue::Const(ty),
+        values: ir.iter().map(|v| IRValue::Dyn(*v)).collect::<Vec<_>>(),
       },
 
       DynamicValueType::Union(_) => RValue {
-        ty:     Value::Dyn(ir[0]),
-        values: ir[1..].iter().map(|v| Value::Dyn(*v)).collect::<Vec<_>>(),
+        ty:     IRValue::Dyn(ir[0]),
+        values: ir[1..].iter().map(|v| IRValue::Dyn(*v)).collect::<Vec<_>>(),
       },
     }
   }
