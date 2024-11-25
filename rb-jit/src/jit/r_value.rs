@@ -1,8 +1,9 @@
 use std::num::NonZero;
 
+use super::IRValue;
 use cranelift::prelude::{FunctionBuilder, InstBuilder};
 use rb_typer::Type;
-use rb_value::{DynamicValueType, IRValue, ParamKind, ValueType};
+use rb_value::{DynamicValueType, ParamKind, ValueType};
 
 #[derive(Debug, Clone)]
 pub struct RValue {
@@ -32,13 +33,6 @@ impl RValue {
     IRValue<i64>: From<T>,
   {
     RValue { ty: IRValue::Const(ValueType::Function), values: vec![IRValue::from(v)] }
-  }
-
-  pub fn string(v: &str) -> Self {
-    RValue {
-      ty:     IRValue::Const(ValueType::String),
-      values: vec![IRValue::from(v.len() as i64), IRValue::from(v.as_ptr() as i64)],
-    }
   }
 }
 

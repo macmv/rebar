@@ -1,16 +1,13 @@
 use std::num::NonZero;
 
 use cranelift::{frontend::FunctionBuilder, prelude::Block};
-use ir::AsIR;
 use rb_typer::{Literal, Type};
 
 mod arg;
 mod array;
-mod ir;
 
 pub use arg::RebarArgs;
 pub use array::RbArray;
-pub use ir::IRValue;
 
 pub struct IntrinsicImpls {
   pub call: fn(i64, *const RebarArgs, *mut RebarArgs),
@@ -67,6 +64,20 @@ impl DynamicValueType {
       DynamicValueType::Const(ValueType::try_from(value).unwrap())
     } else {
       DynamicValueType::Union(-value as u32)
+    }
+  }
+}
+
+impl ValueType {
+  fn as_i64(&self) -> i64 {
+    match self {
+      ValueType::Nil => 0,
+      ValueType::Bool => 1,
+      ValueType::Int => 2,
+      ValueType::Function => 3,
+      ValueType::UserFunction => 4,
+      ValueType::String => 5,
+      ValueType::Array => 6,
     }
   }
 }

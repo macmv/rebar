@@ -3,7 +3,7 @@ use cranelift::{
   prelude::{FunctionBuilder, InstBuilder},
 };
 
-use crate::ValueType;
+use rb_value::ValueType;
 
 #[derive(Debug, Clone, Copy)]
 pub enum IRValue<T: AsIR> {
