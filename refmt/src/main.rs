@@ -6,6 +6,9 @@ use clap::Parser;
 
 mod fmt;
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Parser)]
 struct Args {
   #[clap(short, long)]
