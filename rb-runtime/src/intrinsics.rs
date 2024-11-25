@@ -225,17 +225,6 @@ impl RuntimeEnvironment {
     })
   }
 
-  pub fn typer_env(&self) -> rb_typer::Environment {
-    rb_typer::Environment {
-      names: self
-        .env
-        .static_functions
-        .iter()
-        .map(|(k, v)| (k.clone(), Type::Function(v.args.clone(), Box::new(v.ret.clone()))))
-        .collect(),
-    }
-  }
-
   pub fn mir_env(&self) -> rb_mir_lower::Env {
     rb_mir_lower::Env {
       items: self

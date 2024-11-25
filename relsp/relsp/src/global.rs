@@ -423,7 +423,7 @@ fn check(src: &str) -> Vec<Diagnostic> {
   };
 
   let env = rb_runtime::RuntimeEnvironment::std();
-  let typer_env = env.typer_env();
+  let typer_env = env.env.typer_env();
 
   let res = rb_diagnostic::run(sources, || {
     let (hir, span_maps) = hir;

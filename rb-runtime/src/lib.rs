@@ -45,7 +45,7 @@ pub fn eval(src: &str) {
   // and then split out to a thread pool to typecheck and lower each function.
   let mut functions = vec![];
 
-  let typer_env = env.typer_env();
+  let typer_env = env.env.typer_env();
   let mut mir_env = env.mir_env();
   for (id, f) in hir.0.functions.values().enumerate() {
     mir_env.declare_user_function(id as u64, f);
@@ -99,7 +99,7 @@ pub fn run(
   // and then split out to a thread pool to typecheck and lower each function.
   let mut functions = vec![];
 
-  let typer_env = env.typer_env();
+  let typer_env = env.env.typer_env();
   let mut mir_env = env.mir_env();
   for (id, f) in hir.0.functions.values().enumerate() {
     mir_env.declare_user_function(id as u64, f);
