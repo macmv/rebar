@@ -321,9 +321,7 @@ pub fn format(cst: &cst::SourceFile) -> String { format_opts(cst, Formatter::def
 
 // TODO: Hook up formatter options to the CLI.
 pub fn format_opts(cst: &cst::SourceFile, fmt: Formatter) -> String {
-  let mut out = String::new();
-
-  out += &fmt.fmt(&cst);
+  let mut out = fmt.fmt(&cst);
 
   while out.ends_with('\n') {
     out.pop();
