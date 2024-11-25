@@ -253,12 +253,23 @@ impl FormatterContext<'_> {
                 self.out += ",\n";
               }
             }
+            (T![']'], ARRAY_EXPR) if self.multiline => {
+              if self.before(t).kind() != T![,] {
+                self.out += ",";
+              }
+            }
             // Remove trailing commas on non-multiline calls.
             (T![,], ARG_LIST) if !self.multiline => {
               if self.after(t).kind() == T![')'] {
                 continue;
               }
             }
+            (T![,], ARRAY_EXPR) if !self.multiline => {
+              if self.after(t).kind() == T![']'] {
+                continue;
+              }
+            }
+
             // Add indents to multiline binary ops.
             (_, BINARY_OP) if self.multiline => {
               self.out += "\n  ";
