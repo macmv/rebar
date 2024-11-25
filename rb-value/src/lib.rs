@@ -1,17 +1,19 @@
 use std::num::NonZero;
 
 use cranelift::{
-  codegen::ir,
   frontend::FunctionBuilder,
   prelude::{Block, InstBuilder},
 };
+use ir::AsIR;
 use rb_typer::{Literal, Type};
 
 mod arg;
 mod array;
+mod ir;
 
 pub use arg::RebarArgs;
 pub use array::RbArray;
+pub use ir::IRValue;
 
 pub struct IntrinsicImpls {
   pub call: fn(i64, *const RebarArgs, *mut RebarArgs),
@@ -31,12 +33,6 @@ pub struct IntrinsicImpls {
 pub struct RValue {
   pub ty:     IRValue<ValueType>,
   pub values: Vec<IRValue<i64>>,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum IRValue<T: AsIR> {
-  Const(T),
-  Dyn(ir::Value),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -84,44 +80,6 @@ impl DynamicValueType {
   }
 }
 
-impl<T: AsIR> From<T> for IRValue<T> {
-  fn from(t: T) -> Self { IRValue::Const(t) }
-}
-impl<T: AsIR> From<ir::Value> for IRValue<T> {
-  fn from(t: ir::Value) -> Self { IRValue::Dyn(t) }
-}
-
-pub trait AsIR {
-  fn ty(&self) -> ir::Type;
-  fn as_i64(&self) -> i64;
-}
-
-impl AsIR for i64 {
-  fn ty(&self) -> ir::Type { ir::types::I64 }
-  fn as_i64(&self) -> i64 { *self }
-}
-
-impl AsIR for i8 {
-  fn ty(&self) -> ir::Type { ir::types::I8 }
-  fn as_i64(&self) -> i64 { (*self).into() }
-}
-
-impl AsIR for ValueType {
-  fn ty(&self) -> ir::Type { ir::types::I64 }
-
-  fn as_i64(&self) -> i64 {
-    match self {
-      ValueType::Nil => 0,
-      ValueType::Bool => 1,
-      ValueType::Int => 2,
-      ValueType::Function => 3,
-      ValueType::UserFunction => 4,
-      ValueType::String => 5,
-      ValueType::Array => 6,
-    }
-  }
-}
-
 impl TryFrom<i64> for ValueType {
   type Error = ();
 
@@ -135,24 +93,6 @@ impl TryFrom<i64> for ValueType {
       5 => Ok(ValueType::String),
       6 => Ok(ValueType::Array),
       _ => Err(()),
-    }
-  }
-}
-
-impl<T: AsIR> IRValue<T> {
-  pub fn to_ir(&self, builder: &mut FunctionBuilder) -> ir::Value {
-    match self {
-      IRValue::Const(t) => builder.ins().iconst(t.ty(), t.as_i64()),
-      IRValue::Dyn(v) => *v,
-    }
-  }
-}
-
-impl<T: AsIR + Copy> IRValue<T> {
-  pub fn as_const(&self) -> Option<T> {
-    match self {
-      IRValue::Const(t) => Some(*t),
-      IRValue::Dyn(_) => None,
     }
   }
 }
@@ -278,7 +218,7 @@ impl RValue {
     &self,
     builder: &mut FunctionBuilder,
     len: Option<NonZero<u32>>,
-  ) -> Vec<ir::Value> {
+  ) -> Vec<cranelift::codegen::ir::Value> {
     let mut ret = vec![];
 
     ret.push(self.ty.to_ir(builder));
@@ -288,7 +228,7 @@ impl RValue {
 
     if let Some(l) = len {
       while ret.len() < l.get() as usize {
-        ret.push(builder.ins().iconst(ir::types::I64, 0));
+        ret.push(builder.ins().iconst(cranelift::codegen::ir::types::I64, 0));
       }
 
       assert_eq!(
@@ -305,7 +245,7 @@ impl RValue {
   /// type of the value is simple (ie, not a union), and when the number of
   /// values can change depending on the type (so this works for function
   /// arguments, but not for block arguments).
-  fn to_compact_ir(&self, builder: &mut FunctionBuilder) -> Vec<ir::Value> {
+  fn to_compact_ir(&self, builder: &mut FunctionBuilder) -> Vec<cranelift::codegen::ir::Value> {
     let mut ret = vec![];
 
     for v in &self.values {
@@ -319,7 +259,11 @@ impl RValue {
   /// whenever the length of arguments can change (for example in a function
   /// call). For block arguments, which must have a consistent size, use
   /// `to_sized_ir`.
-  pub fn to_ir(&self, kind: ParamKind, builder: &mut FunctionBuilder) -> Vec<ir::Value> {
+  pub fn to_ir(
+    &self,
+    kind: ParamKind,
+    builder: &mut FunctionBuilder,
+  ) -> Vec<cranelift::codegen::ir::Value> {
     match kind {
       ParamKind::Compact => self.to_compact_ir(builder),
       ParamKind::Extended(len) => self.to_extended_ir(builder, len),
@@ -327,7 +271,7 @@ impl RValue {
   }
 
   // TODO: Need to actually use this with a function return.
-  pub fn from_ir(ir: &[ir::Value], ty: &Type) -> RValue {
+  pub fn from_ir(ir: &[cranelift::codegen::ir::Value], ty: &Type) -> RValue {
     let dty = DynamicValueType::for_type(ty);
     assert_eq!(ir.len() as u32, dty.len(), "variable length mismatch");
 
@@ -370,7 +314,7 @@ impl DynamicValueType {
 
   pub fn append_block_params(&self, builder: &mut FunctionBuilder, block: Block) {
     for _ in 0..self.len() {
-      builder.append_block_param(block, ir::types::I64);
+      builder.append_block_param(block, cranelift::codegen::ir::types::I64);
     }
   }
 
