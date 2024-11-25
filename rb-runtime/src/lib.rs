@@ -117,7 +117,7 @@ pub fn run(env: Environment, sources: Arc<Sources>, id: SourceId) -> Result<(), 
 }
 
 fn eval_mir(env: Environment, functions: Vec<rb_mir::ast::Function>) {
-  let mut jit = rb_jit::jit::JIT::new(env.intrinsics());
+  let mut jit = rb_jit::JIT::new(env.intrinsics());
 
   for func in &functions {
     jit.declare_function(func);
