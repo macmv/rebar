@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
 mod gc;
+mod gc_value;
 mod intrinsics;
 mod owned_arg_parser;
+
+pub use gc_value::{GcArray, GcValue};
 
 use gc::GcArena;
 use rb_diagnostic::{emit, Diagnostic, Source, SourceId, Sources, Span};

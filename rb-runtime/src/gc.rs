@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use rb_gc::{lock::GcRefLock, Arena, Collect, Collection, Gc};
 
-use crate::intrinsics::GcValue;
+use crate::GcValue;
 
 pub struct GcRoot {
   /// Stores all the GC'able objects on each thread's stack.

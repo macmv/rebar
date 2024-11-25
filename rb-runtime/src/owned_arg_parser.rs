@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use rb_gc::Gc;
 use rb_value::{RebarArgs, ValueType};
 
-use crate::intrinsics::{GcArray, GcValue};
+use crate::{GcArray, GcValue};
 
 pub struct OwnedRebarArgsParser<'a> {
   args:   *const RebarArgs,
