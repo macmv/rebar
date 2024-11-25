@@ -804,7 +804,16 @@ dependencies = [
  "rb-jit",
  "rb-mir",
  "rb-mir-lower",
+ "rb-std",
  "rb-syntax",
+ "rb-typer",
+ "rb-value",
+]
+
+[[package]]
+name = "rb-std"
+version = "0.1.0"
+dependencies = [
  "rb-typer",
  "rb-value",
 ]

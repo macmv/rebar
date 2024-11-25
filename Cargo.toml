@@ -14,6 +14,7 @@ members = [
   "rb-value",
   "rb-jit",
   "rb-gc",
+  "rb-std",
   "rb-runtime",
 
   "test",
@@ -37,4 +38,5 @@ rb-mir-lower = { path = "rb-mir-lower" }
 rb-value = { path = "rb-value" }
 rb-jit = { path = "rb-jit" }
 rb-gc = { path = "rb-gc" }
+rb-std = { path = "rb-std" }
 rb-runtime = { path = "rb-runtime" }

@@ -14,3 +14,4 @@ rb-mir.workspace = true
 rb-value.workspace = true
 rb-jit.workspace = true
 rb-gc.workspace = true
+rb-std.workspace = true
