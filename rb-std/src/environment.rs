@@ -115,3 +115,15 @@ impl FunctionRet for () {
   fn static_type() -> Type { Type::Literal(Literal::Unit) }
   fn into_value(self) -> OwnedValue { OwnedValue::Nil }
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn constructs_signatures() {
+    let mut env = Environment::empty();
+
+    env.add_fn("foo", (|a: i64, b: i64| -> i64 { a + b }) as fn(i64, i64) -> i64);
+  }
+}
