@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use rb_gc::{lock::RefLock, Collect, Gc};
 use rb_mir::ast::{self as mir};
-use rb_std::{Environment, RbSlice, Value};
+use rb_std::{Environment, RbSlice, RebarArgsParser, Value};
 use rb_typer::{Literal, Type};
 use rb_value::{DynamicValueType, IntrinsicImpls, RbArray, RebarArgs};
 
@@ -15,7 +15,7 @@ use crate::gc::{GcArena, GcRoot};
 
 mod arg_parser;
 
-use arg_parser::RebarArgsParser;
+use arg_parser::OwnedRebarArgsParser;
 
 pub struct RuntimeEnvironment {
   pub env: Environment,
@@ -158,7 +158,7 @@ impl RuntimeEnvironment {
   fn track(args: *const RebarArgs) {
     ENV.with(|env| {
       let value = unsafe {
-        let mut parser = RebarArgsParser::new(args);
+        let mut parser = OwnedRebarArgsParser::new(args);
         parser.value_owned_unsized()
       };
 
