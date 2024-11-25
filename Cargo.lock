@@ -848,7 +848,6 @@ dependencies = [
 name = "rb-value"
 version = "0.1.0"
 dependencies = [
- "cranelift",
  "rb-typer",
 ]
 

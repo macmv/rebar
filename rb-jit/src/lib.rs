@@ -875,7 +875,9 @@ impl FuncBuilder<'_> {
         let merge_block = self.builder.create_block();
 
         let dvt = DynamicValueType::for_type(&ty);
-        dvt.append_block_params(&mut self.builder, merge_block);
+        for _ in 0..dvt.len() {
+          self.builder.append_block_param(merge_block, cranelift::codegen::ir::types::I64);
+        }
         let param_kind = dvt.param_kind();
 
         // Test the if condition and conditionally branch.

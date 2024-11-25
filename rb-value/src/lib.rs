@@ -1,6 +1,5 @@
 use std::num::NonZero;
 
-use cranelift::{frontend::FunctionBuilder, prelude::Block};
 use rb_typer::{Literal, Type};
 
 mod arg;
@@ -141,12 +140,6 @@ impl DynamicValueType {
     match self {
       DynamicValueType::Const(ty) => ty.len(),
       DynamicValueType::Union(len) => *len + 1, // Add 1 for the type tag.
-    }
-  }
-
-  pub fn append_block_params(&self, builder: &mut FunctionBuilder, block: Block) {
-    for _ in 0..self.len() {
-      builder.append_block_param(block, cranelift::codegen::ir::types::I64);
     }
   }
 
