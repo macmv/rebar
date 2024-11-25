@@ -93,7 +93,8 @@ impl RValue {
   ) -> Vec<cranelift::codegen::ir::Value> {
     match kind {
       ParamKind::Compact => self.to_compact_ir(builder),
-      ParamKind::Extended(len) => self.to_extended_ir(builder, len),
+      ParamKind::Extended(len) => self.to_extended_ir(builder, Some(len)),
+      ParamKind::Unsized => self.to_extended_ir(builder, None),
     }
   }
 

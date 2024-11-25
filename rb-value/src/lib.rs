@@ -114,7 +114,11 @@ pub enum ParamKind {
   /// rebar calls), an RValue must produce exactly that number of values. When
   /// unset (for dynamic rust calls), the RValue must produce exactly the
   /// number of values for the current value.
-  Extended(Option<NonZero<u32>>),
+  Extended(NonZero<u32>),
+
+  /// Used when passing a value to rust, where the length will be inferred by
+  /// the parser.
+  Unsized,
 }
 
 impl ValueType {
@@ -149,7 +153,7 @@ impl DynamicValueType {
   pub fn param_kind(&self) -> ParamKind {
     match self {
       DynamicValueType::Const(_) => ParamKind::Compact,
-      DynamicValueType::Union(_) => ParamKind::Extended(Some(NonZero::new(self.len()).unwrap())),
+      DynamicValueType::Union(_) => ParamKind::Extended(NonZero::new(self.len()).unwrap()),
     }
   }
 

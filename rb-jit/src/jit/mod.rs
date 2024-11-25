@@ -972,7 +972,7 @@ impl FuncBuilder<'_> {
   /// Creates a stack slot that stores a single unsized value, and returns the
   /// address to that slot. Used when calling native functions.
   fn stack_slot_unsized(&mut self, value: &RValue) -> ir::Value {
-    let ir = value.to_ir(ParamKind::Extended(None), &mut self.builder);
+    let ir = value.to_ir(ParamKind::Unsized, &mut self.builder);
 
     self.stack_slot_for_ir(ir)
   }
