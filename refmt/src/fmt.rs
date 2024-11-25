@@ -48,9 +48,16 @@ enum Spacing {
 }
 
 impl FormatterContext<'_> {
-  fn indent(&mut self, kind: SyntaxKind) {
+  fn increase_indent(&mut self, kind: SyntaxKind) {
     match kind {
       T!['{'] | T!['('] => self.indent += 1,
+
+      _ => {}
+    }
+  }
+
+  fn decrease_indent(&mut self, kind: SyntaxKind) {
+    match kind {
       T!['}'] | T![')'] => self.indent -= 1,
 
       _ => {}
@@ -150,7 +157,9 @@ impl FormatterContext<'_> {
     next
   }
 
-  fn fmt_syntax(&mut self, node: &SyntaxNode, parent_can_retry: bool) {
+  fn fmt_syntax(&mut self, node: &SyntaxNode, parent_can_retry: bool) -> bool {
+    let mut parent_needs_retry = false;
+
     for node in node.children_with_tokens() {
       match node {
         NodeOrToken::Node(ref n) => {
@@ -197,26 +206,32 @@ impl FormatterContext<'_> {
             self.multiline = false;
           }
           if always_multiline {
+            parent_needs_retry = true;
             self.multiline = true;
           }
-          self.fmt_syntax(n, retry.is_some() || parent_can_retry);
+          let needs_retry = self.fmt_syntax(n, retry.is_some() || parent_can_retry);
           self.multiline = old_multiline;
 
           if let Some(retry) = retry {
-            if self.over_line_limit() && !parent_can_retry {
+            if (self.over_line_limit() && !parent_can_retry) || needs_retry {
               self.reset(retry);
               self.multiline = true;
               self.fmt_syntax(n, parent_can_retry);
               self.multiline = false;
             }
+          } else if needs_retry {
+            // If we cannot retry this node, propogate the `needs_retry` flag up to the
+            // parent.
+            parent_needs_retry = true;
           }
         }
         NodeOrToken::Token(ref t) => {
           let (left, right) = self.spacing(t);
-          self.indent(t.kind());
 
           let text = t.text().to_string();
           if text.trim().is_empty() && !text.contains('\n') {
+            self.increase_indent(t.kind());
+            self.decrease_indent(t.kind());
             continue;
           }
 
@@ -251,6 +266,10 @@ impl FormatterContext<'_> {
             }
           }
 
+          // Decrease indent before writing the actual indent, and increase indent after.
+          // This makes blocks line up correctly.
+          self.decrease_indent(t.kind());
+
           if !text.trim().is_empty() {
             if self.out.ends_with('\n') {
               for _ in 0..self.indent * self.formatter.indent {
@@ -258,6 +277,8 @@ impl FormatterContext<'_> {
               }
             }
           }
+
+          self.increase_indent(t.kind());
 
           self.out += &text.trim();
 
@@ -274,6 +295,8 @@ impl FormatterContext<'_> {
         }
       }
     }
+
+    parent_needs_retry
   }
 
   fn reset(&mut self, retry: FormatterContext) {
@@ -818,6 +841,27 @@ mod tests {
           let b = [1, 2]
           b
         }
+      "#],
+    );
+  }
+
+  #[test]
+  fn nested_multiline_call() {
+    check(
+      r#"
+        assert_eq({
+            1
+            2
+          }, 2)
+      "#,
+      expect![@r#"
+        assert_eq(
+          {
+            1
+            2
+          },
+          2,
+        )
       "#],
     );
   }
