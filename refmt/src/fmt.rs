@@ -95,7 +95,13 @@ impl FormatterContext<'_> {
       }
       (T![nl], _) => (None, None),
 
-      (T![')'], _) if self.multiline => (None, None),
+      (T![')'], _) if self.multiline => {
+        if self.before(token).kind() == T![,] {
+          (None, None)
+        } else {
+          (Newline, None)
+        }
+      }
       (T!['('], _) if self.multiline => (None, Newline),
 
       (T!['('] | T![')'] | IDENT, _) => (None, None),
@@ -250,7 +256,7 @@ impl FormatterContext<'_> {
             // Add trailing commas on mutliline calls.
             (T![')'], ARG_LIST) if self.multiline => {
               if self.before(t).kind() != T![,] {
-                self.out += ",\n";
+                self.out += ",";
               }
             }
             (T![']'], ARRAY_EXPR) if self.multiline => {
