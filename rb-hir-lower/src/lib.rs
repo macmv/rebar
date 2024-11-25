@@ -283,6 +283,14 @@ impl FunctionLower<'_, '_> {
 
         self.span_map.unary_ops.insert(id, span);
       }
+      cst::Expr::IfExpr(ref expr) => {
+        let if_span =
+          Span { file: self.source.source, range: expr.if_token().unwrap().text_range() };
+        let else_span =
+          expr.else_token().map(|t| Span { file: self.source.source, range: t.text_range() });
+
+        self.span_map.if_exprs.insert(id, (if_span, else_span));
+      }
 
       _ => {}
     }

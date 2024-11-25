@@ -100,10 +100,22 @@ impl Highlighter<'_> {
         }
       }
 
+      // TODO: Name resolution.
+      hir::Expr::Name(_) => self.token(expr, HighlightKind::Variable),
+
       hir::Expr::Array(ref items) => {
         for i in items {
           self.visit_expr(*i);
         }
+      }
+      hir::Expr::Block(ref stmts) => {
+        for stmt in stmts {
+          self.visit_stmt(*stmt);
+        }
+      }
+      hir::Expr::Assign { lhs, rhs } => {
+        self.visit_expr(lhs);
+        self.visit_expr(rhs);
       }
 
       hir::Expr::Call(lhs, ref args) => {
@@ -144,7 +156,29 @@ impl Highlighter<'_> {
         self.visit_expr(rhs);
       }
 
-      _ => {}
+      hir::Expr::If { cond, then, els } => {
+        let (if_span, els_span) = self.span_map.if_exprs[&expr];
+        self.hl.tokens.push(HighlightToken {
+          range:      if_span.range,
+          kind:       HighlightKind::Keyword,
+          modifierst: 0,
+        });
+
+        self.visit_expr(cond);
+        self.visit_expr(then);
+
+        if let Some(els) = els_span {
+          self.hl.tokens.push(HighlightToken {
+            range:      els.range,
+            kind:       HighlightKind::Keyword,
+            modifierst: 0,
+          });
+        }
+
+        if let Some(els) = els {
+          self.visit_expr(els);
+        }
+      }
     }
   }
 

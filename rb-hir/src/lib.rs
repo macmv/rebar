@@ -14,4 +14,5 @@ pub struct SpanMap {
 
   pub binary_ops: HashMap<ExprId, Span>,
   pub unary_ops:  HashMap<ExprId, Span>,
+  pub if_exprs:   HashMap<ExprId, (Span, Option<Span>)>,
 }
