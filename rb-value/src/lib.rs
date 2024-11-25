@@ -7,8 +7,10 @@ use cranelift::{
 };
 use rb_typer::{Literal, Type};
 
+mod arg;
 mod array;
 
+pub use arg::RebarArgs;
 pub use array::RbArray;
 
 #[derive(Debug, Clone)]

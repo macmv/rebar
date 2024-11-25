@@ -1,7 +1,6 @@
 use std::fmt;
 
-use rb_jit::jit::RebarArgs;
-use rb_value::{DynamicValueType, RbArray};
+use rb_value::{DynamicValueType, RbArray, RebarArgs};
 
 use super::{RebarArgsParser, Value};
 
