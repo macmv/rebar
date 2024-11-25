@@ -180,13 +180,7 @@ impl RuntimeEnvironment {
       let arg_value = unsafe { RebarArgsParser::new(args).value_unsized() };
 
       let str = unsafe { &mut *str_value.get() };
-
-      match arg_value {
-        Value::Int(i) => write!(str, "{}", i).unwrap(),
-        Value::String(s) => str.push_str(s),
-        Value::Array(v) => write!(str, "{v:?}").unwrap(),
-        _ => panic!("expected string"),
-      }
+      write!(str, "{}", arg_value).unwrap();
     });
   }
 

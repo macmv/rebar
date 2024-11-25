@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::slice::RbSlice;
 
 /// A value with references to rebar values. This typically has the lifetime of
@@ -63,6 +65,27 @@ impl OwnedValue {
     match self {
       OwnedValue::String(s) => s,
       _ => panic!("expected str"),
+    }
+  }
+}
+
+impl fmt::Display for Value<'_> {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Value::Nil => write!(f, "nil"),
+      Value::Int(i) => write!(f, "{}", i),
+      Value::Bool(b) => write!(f, "{}", b),
+      Value::String(s) => write!(f, "{}", s),
+      Value::Array(arr) => {
+        write!(f, "[")?;
+        for (i, elem) in arr.iter().enumerate() {
+          if i != 0 {
+            write!(f, ", ")?;
+          }
+          write!(f, "{elem}")?;
+        }
+        write!(f, "]")
+      }
     }
   }
 }
