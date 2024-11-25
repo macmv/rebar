@@ -50,7 +50,7 @@ enum Spacing {
 impl FormatterContext<'_> {
   fn increase_indent(&mut self, kind: SyntaxKind) {
     match kind {
-      T!['{'] | T!['('] => self.indent += 1,
+      T!['{'] | T!['['] | T!['('] => self.indent += 1,
 
       _ => {}
     }
@@ -58,7 +58,7 @@ impl FormatterContext<'_> {
 
   fn decrease_indent(&mut self, kind: SyntaxKind) {
     match kind {
-      T!['}'] | T![')'] => self.indent -= 1,
+      T!['}'] | T![']'] | T![')'] => self.indent -= 1,
 
       _ => {}
     }
@@ -108,6 +108,11 @@ impl FormatterContext<'_> {
       }
 
       (T!['{'] | T!['}'], INTERPOLATION) => (None, None),
+
+      (T![']'], _) if self.multiline => (Newline, None),
+      (T!['['], _) if self.multiline => (None, Newline),
+      (T![']'], _) => (None, None),
+      (T!['['], _) => (None, None),
 
       (T!['}'], _) if self.multiline => (Newline, None),
       (T!['{'], _) if self.multiline => (None, Newline),
