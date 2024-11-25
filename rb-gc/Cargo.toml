@@ -7,11 +7,10 @@ edition = "2021"
 default = ["std"]
 std = []
 tracing = ["dep:tracing"]
-allocator-api2 = ["dep:allocator-api2", "hashbrown?/allocator-api2"]
+allocator-api2 = ["dep:allocator-api2"]
 
 [dependencies]
 allocator-api2 = { version = "0.2", optional = true, default-features = false, features = ["alloc"] }
-hashbrown = { version = "0.14", optional = true, default-features = false }
 sptr = "0.3.2"
 tracing = { version = "0.1.37", optional = true, default-features = false }
 

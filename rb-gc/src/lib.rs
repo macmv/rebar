@@ -23,9 +23,6 @@ mod unsize;
 #[cfg(feature = "allocator-api2")]
 pub mod allocator_api;
 
-#[cfg(feature = "hashbrown")]
-mod hashbrown;
-
 #[doc(hidden)]
 pub use self::{arena::__DynRootable, unsize::__CoercePtrInternal};
 
