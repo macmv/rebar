@@ -212,17 +212,23 @@ impl FormatterContext<'_> {
           let needs_retry = self.fmt_syntax(n, retry.is_some() || parent_can_retry);
           self.multiline = old_multiline;
 
+          if needs_retry {
+            // If we cannot retry this node, propogate the `needs_retry` flag up to the
+            // parent.
+            parent_needs_retry = true;
+          }
+
           if let Some(retry) = retry {
             if (self.over_line_limit() && !parent_can_retry) || needs_retry {
               self.reset(retry);
               self.multiline = true;
               self.fmt_syntax(n, parent_can_retry);
-              self.multiline = false;
+
+              match n.kind() {
+                BINARY_EXPR => self.multiline = false,
+                _ => {}
+              }
             }
-          } else if needs_retry {
-            // If we cannot retry this node, propogate the `needs_retry` flag up to the
-            // parent.
-            parent_needs_retry = true;
           }
         }
         NodeOrToken::Token(ref t) => {
@@ -859,6 +865,49 @@ mod tests {
           {
             1
             2
+          },
+          2,
+        )
+      "#],
+    );
+
+    check(
+      r#"
+        assert_eq({{
+            1
+            2
+          }}, 2)
+      "#,
+      expect![@r#"
+        assert_eq(
+          {
+            {
+              1
+              2
+            }
+          },
+          2,
+        )
+      "#],
+    );
+  }
+
+  #[test]
+  fn nested_multiline_if() {
+    check(
+      r#"
+        assert_eq(if true {
+            1
+            2
+          } else { 3 }, 2)
+      "#,
+      expect![@r#"
+        assert_eq(
+          if true {
+            1
+            2
+          } else {
+            3
           },
           2,
         )
