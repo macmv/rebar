@@ -11,7 +11,7 @@ use rb_mir::ast::{self as mir, UserFunctionId};
 use rb_typer::{Literal, Type};
 use std::{collections::HashMap, marker::PhantomPinned};
 
-use crate::value::{CompactValues, DynamicValueType, ParamKind, RValue, Value, ValueType};
+use rb_value::{CompactValues, DynamicValueType, ParamKind, RValue, Value, ValueType};
 
 mod array;
 

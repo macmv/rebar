@@ -1,0 +1,9 @@
+[package]
+name = "rb-value"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rb-typer.workspace = true
+
+cranelift = "0.108.1"

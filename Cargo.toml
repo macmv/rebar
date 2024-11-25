@@ -11,6 +11,7 @@ members = [
   "rb-typer",
   "rb-mir",
   "rb-mir-lower",
+  "rb-value",
   "rb-jit",
   "rb-gc",
   "rb-runtime",
@@ -33,6 +34,7 @@ rb-hir-lower = { path = "rb-hir-lower" }
 rb-typer = { path = "rb-typer" }
 rb-mir = { path = "rb-mir" }
 rb-mir-lower = { path = "rb-mir-lower" }
+rb-value = { path = "rb-value" }
 rb-jit = { path = "rb-jit" }
 rb-gc = { path = "rb-gc" }
 rb-runtime = { path = "rb-runtime" }

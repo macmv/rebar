@@ -761,6 +761,7 @@ dependencies = [
  "cranelift-native",
  "rb-mir",
  "rb-typer",
+ "rb-value",
 ]
 
 [[package]]
@@ -805,6 +806,7 @@ dependencies = [
  "rb-mir-lower",
  "rb-syntax",
  "rb-typer",
+ "rb-value",
 ]
 
 [[package]]
@@ -831,6 +833,14 @@ dependencies = [
  "la-arena",
  "rb-diagnostic",
  "rb-hir",
+]
+
+[[package]]
+name = "rb-value"
+version = "0.1.0"
+dependencies = [
+ "cranelift",
+ "rb-typer",
 ]
 
 [[package]]
