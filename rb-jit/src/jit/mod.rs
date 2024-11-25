@@ -11,9 +11,11 @@ use rb_mir::ast::{self as mir, UserFunctionId};
 use rb_typer::{Literal, Type};
 use std::collections::HashMap;
 
-use rb_value::{
-  CompactValues, DynamicValueType, IRValue, IntrinsicImpls, ParamKind, RValue, ValueType,
-};
+mod r_value;
+
+use r_value::RValue;
+
+use rb_value::{CompactValues, DynamicValueType, IRValue, IntrinsicImpls, ParamKind, ValueType};
 
 pub struct JIT {
   module: JITModule,
