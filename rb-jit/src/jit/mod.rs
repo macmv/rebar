@@ -42,7 +42,6 @@ pub struct ThreadCtx<'a> {
 
 #[derive(Clone, Copy)]
 struct IntrinsicDecl<'a> {
-  id:   FuncId,
   decl: &'a FunctionDeclaration,
 }
 
@@ -166,7 +165,7 @@ impl JIT {
   fn intrinsics(&self) -> Intrinsics<IntrinsicDecl> {
     self
       .intrinsics
-      .map(|id| IntrinsicDecl { id, decl: self.module.declarations().get_function_decl(id) })
+      .map(|id| IntrinsicDecl { decl: self.module.declarations().get_function_decl(id) })
   }
 
   pub fn finalize(&mut self) { self.module.finalize_definitions().unwrap(); }
