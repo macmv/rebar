@@ -1,4 +1,4 @@
-use core::{alloc::Layout, cell::Cell, marker::PhantomData, mem, ptr, ptr::NonNull};
+use core::{alloc::Layout, cell::Cell, mem, ptr, ptr::NonNull};
 
 use crate::collect::Collect;
 
