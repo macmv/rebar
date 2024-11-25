@@ -45,7 +45,7 @@ pub fn eval(src: &str) {
   // and then split out to a thread pool to typecheck and lower each function.
   let mut functions = vec![];
 
-  let static_env = env.static_env();
+  let typer_env = env.typer_env();
   let mut mir_env = env.mir_env();
   for (id, f) in hir.0.functions.values().enumerate() {
     mir_env.declare_user_function(id as u64, f);
@@ -57,7 +57,7 @@ pub fn eval(src: &str) {
     for (idx, function) in hir.functions {
       let span_map = &span_maps[idx.into_raw().into_u32() as usize];
 
-      let typer = rb_typer::Typer::check(&static_env, &function, &span_map);
+      let typer = rb_typer::Typer::check(&typer_env, &function, &span_map);
       if rb_diagnostic::is_ok() {
         let mut func = rb_mir_lower::lower_function(&mir_env, &typer, &function);
         func.id = rb_mir::ast::UserFunctionId(idx.into_raw().into_u32() as u64);
@@ -99,7 +99,7 @@ pub fn run(
   // and then split out to a thread pool to typecheck and lower each function.
   let mut functions = vec![];
 
-  let static_env = env.static_env();
+  let typer_env = env.typer_env();
   let mut mir_env = env.mir_env();
   for (id, f) in hir.0.functions.values().enumerate() {
     mir_env.declare_user_function(id as u64, f);
@@ -111,7 +111,7 @@ pub fn run(
     for (idx, function) in hir.functions {
       let span_map = &span_maps[idx.into_raw().into_u32() as usize];
 
-      let typer = rb_typer::Typer::check(&static_env, &function, &span_map);
+      let typer = rb_typer::Typer::check(&typer_env, &function, &span_map);
       if rb_diagnostic::is_ok() {
         let mut func = rb_mir_lower::lower_function(&mir_env, &typer, &function);
         func.id = rb_mir::ast::UserFunctionId(idx.into_raw().into_u32() as u64);

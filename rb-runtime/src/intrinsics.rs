@@ -225,7 +225,7 @@ impl RuntimeEnvironment {
     })
   }
 
-  pub fn static_env(&self) -> rb_typer::Environment {
+  pub fn typer_env(&self) -> rb_typer::Environment {
     rb_typer::Environment {
       names: self
         .env

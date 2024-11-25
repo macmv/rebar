@@ -423,7 +423,7 @@ fn check(src: &str) -> Vec<Diagnostic> {
   };
 
   let env = rb_runtime::RuntimeEnvironment::std();
-  let static_env = env.static_env();
+  let typer_env = env.typer_env();
 
   let res = rb_diagnostic::run(sources, || {
     let (hir, span_maps) = hir;
@@ -431,7 +431,7 @@ fn check(src: &str) -> Vec<Diagnostic> {
     for (idx, function) in hir.functions {
       let span_map = &span_maps[idx.into_raw().into_u32() as usize];
 
-      rb_typer::Typer::check(&static_env, &function, &span_map);
+      rb_typer::Typer::check(&typer_env, &function, &span_map);
     }
   });
 
