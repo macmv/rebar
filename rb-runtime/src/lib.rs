@@ -1,14 +1,21 @@
 use std::sync::Arc;
 
 mod gc;
-mod stdlib;
+mod intrinsics;
+mod owned_arg_parser;
 
-pub use stdlib::*;
-
+use gc::GcArena;
 use rb_diagnostic::{emit, Diagnostic, Source, SourceId, Sources, Span};
+use rb_std::Environment;
 use rb_syntax::cst;
 
 const NUM_CPUS: usize = 32;
+
+pub struct RuntimeEnvironment {
+  pub env: Environment,
+
+  gc: GcArena,
+}
 
 pub fn eval(src: &str) {
   let env = RuntimeEnvironment::std();

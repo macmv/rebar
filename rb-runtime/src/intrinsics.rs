@@ -11,17 +11,11 @@ use rb_std::{Environment, RbSlice, RebarArgsParser, Value};
 use rb_typer::{Literal, Type};
 use rb_value::{DynamicValueType, IntrinsicImpls, RbArray, RebarArgs};
 
-use crate::gc::{GcArena, GcRoot};
-
-mod arg_parser;
-
-use arg_parser::OwnedRebarArgsParser;
-
-pub struct RuntimeEnvironment {
-  pub env: Environment,
-
-  gc: GcArena,
-}
+use crate::{
+  gc::{GcArena, GcRoot},
+  owned_arg_parser::OwnedRebarArgsParser,
+  RuntimeEnvironment,
+};
 
 // This works pretty well, but it would be nice to support multithreading, and
 // multiple environments on one thread. Probably something for later though.
