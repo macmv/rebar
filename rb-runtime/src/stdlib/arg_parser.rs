@@ -1,8 +1,12 @@
 use std::marker::PhantomData;
 
-use crate::{RbSlice, Value};
+use rb_gc::Gc;
+use rb_std::{RbSlice, Value};
 use rb_value::{DynamicValueType, RbArray, RebarArgs, ValueType};
 
+use super::{GcArray, GcValue};
+
+// FIXME: Dedupe with `rb-std`, which doesn't have `rb-gc` in scope.
 pub struct RebarArgsParser<'a> {
   args:   *const RebarArgs,
   offset: usize,
@@ -58,6 +62,24 @@ impl<'a> RebarArgsParser<'a> {
     }
   }
 
+  unsafe fn value_owned(&mut self, vt: ValueType) -> GcValue {
+    match vt {
+      ValueType::String => {
+        let ptr = self.next();
+
+        let gc = Gc::from_ptr(ptr as *const String);
+
+        GcValue::String(gc)
+      }
+      ValueType::Array => {
+        let ptr = self.next();
+
+        GcValue::Array(Gc::from_ptr(ptr as *const GcArray))
+      }
+      _ => unreachable!("not an owned value: {vt:?}"),
+    }
+  }
+
   pub unsafe fn value(&mut self, dvt: DynamicValueType) -> Value<'a> {
     let start = self.offset;
     let v = match dvt {
@@ -91,5 +113,12 @@ impl<'a> RebarArgsParser<'a> {
     let ty = self.next();
     let vt = ValueType::try_from(ty).unwrap();
     self.value_const(vt)
+  }
+
+  /// Parses a value to get tracked by the GC. This value should not be dropped!
+  pub unsafe fn value_owned_unsized(&mut self) -> GcValue {
+    let ty = self.next();
+    let vt = ValueType::try_from(ty).unwrap();
+    self.value_owned(vt)
   }
 }

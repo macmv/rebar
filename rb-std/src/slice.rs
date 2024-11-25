@@ -2,19 +2,21 @@ use std::fmt;
 
 use rb_value::{DynamicValueType, RbArray, RebarArgs};
 
-use super::{RebarArgsParser, Value};
+use crate::RebarArgsParser;
+
+use super::Value;
 
 /// The rust-friendly version of an `RbArray`.
 pub struct RbSlice<'a> {
   // SAFETY: This `&RbArray` is quite special: the value of this reference is garunteed to also be
   // a valid `Box<RbArray>` pointer, and that pointer is used as a key in the garbage collector to
   // determine if the array is referenced or not.
-  pub(super) elems: &'a RbArray,
-  pub(super) vt:    DynamicValueType,
+  pub elems: &'a RbArray,
+  pub vt:    DynamicValueType,
 }
 
 impl<'a> RbSlice<'a> {
-  pub(crate) fn new(elems: &'a RbArray, vt: DynamicValueType) -> Self {
+  pub fn new(elems: &'a RbArray, vt: DynamicValueType) -> Self {
     assert!(
       elems.len() % vt.len() as usize == 0,
       "array length {} must be a multiple of the slot size {} for the type {:?}",

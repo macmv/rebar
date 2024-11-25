@@ -11,7 +11,7 @@ use rb_syntax::cst;
 const NUM_CPUS: usize = 32;
 
 pub fn eval(src: &str) {
-  let env = Environment::std();
+  let env = RuntimeEnvironment::std();
 
   let mut sources = Sources::new();
   let id = sources.add(Source::new("inline.rbr".into(), src.into()));
@@ -64,7 +64,11 @@ pub fn eval(src: &str) {
   eval_mir(env, functions);
 }
 
-pub fn run(env: Environment, sources: Arc<Sources>, id: SourceId) -> Result<(), Vec<Diagnostic>> {
+pub fn run(
+  env: RuntimeEnvironment,
+  sources: Arc<Sources>,
+  id: SourceId,
+) -> Result<(), Vec<Diagnostic>> {
   let src = sources.get(id);
 
   let hir = rb_diagnostic::run(sources.clone(), || {
@@ -116,7 +120,7 @@ pub fn run(env: Environment, sources: Arc<Sources>, id: SourceId) -> Result<(), 
   Ok(())
 }
 
-fn eval_mir(env: Environment, functions: Vec<rb_mir::ast::Function>) {
+fn eval_mir(env: RuntimeEnvironment, functions: Vec<rb_mir::ast::Function>) {
   let mut jit = rb_jit::JIT::new(env.intrinsics());
 
   for func in &functions {

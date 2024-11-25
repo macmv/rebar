@@ -5,14 +5,14 @@ use crate::{OwnedValue, Value};
 
 pub struct Environment {
   pub static_functions: HashMap<String, Function>,
-  ids:                  Vec<String>,
+  pub ids:              Vec<String>,
 }
 
 pub struct Function {
-  args: Vec<Type>,
-  ret:  Type,
+  pub args: Vec<Type>,
+  pub ret:  Type,
 
-  imp: Box<dyn Fn(Vec<Value>) -> OwnedValue>,
+  pub imp: Box<dyn Fn(Vec<Value>) -> OwnedValue>,
 }
 
 impl Environment {

@@ -422,7 +422,7 @@ fn check(src: &str) -> Vec<Diagnostic> {
     Err(errs) => return errs,
   };
 
-  let env = rb_runtime::Environment::std();
+  let env = rb_runtime::RuntimeEnvironment::std();
   let static_env = env.static_env();
 
   let res = rb_diagnostic::run(sources, || {

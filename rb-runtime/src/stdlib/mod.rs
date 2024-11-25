@@ -1,50 +1,45 @@
 use ::std::{
   cell::{RefCell, UnsafeCell},
-  collections::HashMap,
   fmt::Write,
-  marker::PhantomData,
   mem::ManuallyDrop,
 };
-
-mod core;
-mod std;
+use std::collections::HashMap;
 
 use rb_gc::{lock::RefLock, Collect, Gc};
 use rb_mir::ast::{self as mir};
+use rb_std::{Environment, RbSlice, Value};
 use rb_typer::{Literal, Type};
-use rb_value::{DynamicValueType, IntrinsicImpls, RbArray, RebarArgs, ValueType};
+use rb_value::{DynamicValueType, IntrinsicImpls, RbArray, RebarArgs};
 
 use crate::gc::{GcArena, GcRoot};
 
-mod slice;
-use slice::RbSlice;
+mod arg_parser;
 
-pub struct Environment {
-  pub static_functions: HashMap<String, Function>,
-  ids:                  Vec<String>,
+use arg_parser::RebarArgsParser;
+
+pub struct RuntimeEnvironment {
+  pub env: Environment,
 
   gc: GcArena,
-}
-
-pub struct Function {
-  args: Vec<Type>,
-  ret:  Type,
-
-  imp: Box<dyn Fn(Vec<Value>) -> OwnedValue>,
 }
 
 // This works pretty well, but it would be nice to support multithreading, and
 // multiple environments on one thread. Probably something for later though.
 thread_local! {
-  static ENV: RefCell<Option<Environment>> = RefCell::new(None);
+  static ENV: RefCell<Option<RuntimeEnvironment>> = RefCell::new(None);
 }
 
-impl Environment {
-  fn empty() -> Self {
-    Environment {
-      static_functions: HashMap::new(),
-      ids:              vec![],
-      gc:               GcArena::new(|_| GcRoot { threads: HashMap::new() }),
+impl RuntimeEnvironment {
+  pub fn core() -> Self {
+    RuntimeEnvironment {
+      env: Environment::core(),
+      gc:  GcArena::new(|_| GcRoot { threads: HashMap::new() }),
+    }
+  }
+  pub fn std() -> Self {
+    RuntimeEnvironment {
+      env: Environment::std(),
+      gc:  GcArena::new(|_| GcRoot { threads: HashMap::new() }),
     }
   }
 
@@ -84,7 +79,7 @@ impl Environment {
       let env = env.borrow();
       let env = env.as_ref().unwrap();
 
-      let f = &env.static_functions[&env.ids[func as usize]];
+      let f = &env.env.static_functions[&env.env.ids[func as usize]];
 
       let ret = unsafe { &mut *ret };
 
@@ -257,6 +252,7 @@ impl Environment {
   pub fn static_env(&self) -> rb_typer::Environment {
     rb_typer::Environment {
       names: self
+        .env
         .static_functions
         .iter()
         .map(|(k, v)| (k.clone(), Type::Function(v.args.clone(), Box::new(v.ret.clone()))))
@@ -267,6 +263,7 @@ impl Environment {
   pub fn mir_env(&self) -> rb_mir_lower::Env {
     rb_mir_lower::Env {
       items: self
+        .env
         .ids
         .iter()
         .enumerate()
@@ -276,10 +273,6 @@ impl Environment {
         .collect(),
     }
   }
-}
-
-pub trait DynFunction<T> {
-  fn into_function(self) -> Function;
 }
 
 /// An owned, garbage collected value. This is created from the rebar values, so
@@ -355,273 +348,6 @@ impl Drop for GcArray {
         }
       }
     }
-  }
-}
-
-/// A value with references to rebar values. This typically has the lifetime of
-/// the native rust function that is being passed this value.
-#[derive(Debug, PartialEq)]
-pub enum Value<'a> {
-  Nil,
-  Int(i64),
-  Bool(bool),
-  String(&'a str),
-  Array(RbSlice<'a>),
-}
-
-/// An owned value, created from rust, that will be passed back to rebar.
-#[derive(Debug, PartialEq)]
-pub enum OwnedValue {
-  Nil,
-  Int(i64),
-  Bool(bool),
-  String(String),
-  Array(Vec<i64>),
-}
-
-impl Value<'_> {
-  pub fn as_int(&self) -> i64 {
-    match self {
-      Value::Int(i) => *i,
-      _ => panic!("expected int"),
-    }
-  }
-
-  pub fn as_bool(&self) -> bool {
-    match self {
-      Value::Bool(b) => *b,
-      _ => panic!("expected bool"),
-    }
-  }
-
-  pub fn as_str(&self) -> &str {
-    match self {
-      Value::String(s) => s,
-      _ => panic!("expected str"),
-    }
-  }
-}
-
-impl OwnedValue {
-  pub fn as_int(&self) -> i64 {
-    match self {
-      OwnedValue::Int(i) => *i,
-      _ => panic!("expected int"),
-    }
-  }
-
-  pub fn as_bool(&self) -> bool {
-    match self {
-      OwnedValue::Bool(b) => *b,
-      _ => panic!("expected bool"),
-    }
-  }
-
-  pub fn as_str(&self) -> &str {
-    match self {
-      OwnedValue::String(s) => s,
-      _ => panic!("expected str"),
-    }
-  }
-}
-
-impl Environment {
-  pub fn add_fn<T>(&mut self, name: impl Into<String>, function: impl DynFunction<T>) {
-    let name = name.into();
-    self.static_functions.insert(name.clone(), function.into_function());
-    self.ids.push(name);
-  }
-}
-
-trait FunctionArg {
-  fn static_type() -> Type;
-  fn from_value(v: Value) -> Self;
-}
-
-trait FunctionRet {
-  fn static_type() -> Type;
-  fn into_value(self) -> OwnedValue;
-}
-
-// Write a macro to generate the following From for Function impls:
-macro_rules! impl_from_function {
-  ($($arg:ident),*) => {
-    impl<F, R, $($arg: FunctionArg + 'static),*> DynFunction<($($arg,)*)> for F
-    where
-      F: (Fn($($arg),*) -> R) + 'static,
-      R: FunctionRet + 'static,
-    {
-      fn into_function(self) -> Function {
-        Function {
-          args: vec![$($arg::static_type()),*],
-          ret:  R::static_type(),
-          imp:  Box::new(move |args: Vec<Value>| {
-            #[allow(unused_mut, unused_variables)]
-            let mut iter = args.into_iter();
-            self($($arg::from_value(iter.next().unwrap())),*).into_value()
-          }),
-        }
-      }
-    }
-  };
-}
-
-impl_from_function!();
-impl_from_function!(A);
-impl_from_function!(A, B);
-impl_from_function!(A, B, C);
-impl_from_function!(A, B, C, D);
-
-impl FunctionArg for i64 {
-  fn static_type() -> Type { Type::Literal(Literal::Int) }
-  fn from_value(v: Value) -> Self {
-    match v {
-      Value::Int(i) => i,
-      _ => panic!("expected int"),
-    }
-  }
-}
-impl FunctionRet for i64 {
-  fn static_type() -> Type { Type::Literal(Literal::Int) }
-  fn into_value(self) -> OwnedValue { OwnedValue::Int(self) }
-}
-
-impl FunctionArg for bool {
-  fn static_type() -> Type { Type::Literal(Literal::Bool) }
-  fn from_value(v: Value) -> Self {
-    match v {
-      Value::Bool(i) => i,
-      _ => panic!("expected bool"),
-    }
-  }
-}
-impl FunctionRet for bool {
-  fn static_type() -> Type { Type::Literal(Literal::Bool) }
-  fn into_value(self) -> OwnedValue { OwnedValue::Bool(self) }
-}
-
-impl FunctionArg for String {
-  fn static_type() -> Type { Type::Literal(Literal::String) }
-  fn from_value(v: Value) -> Self {
-    match v {
-      Value::String(s) => s.into(),
-      _ => panic!("expected string"),
-    }
-  }
-}
-
-impl FunctionRet for String {
-  fn static_type() -> Type { Type::Literal(Literal::String) }
-  fn into_value(self) -> OwnedValue { OwnedValue::String(self) }
-}
-
-impl FunctionRet for () {
-  fn static_type() -> Type { Type::Literal(Literal::Unit) }
-  fn into_value(self) -> OwnedValue { OwnedValue::Nil }
-}
-
-pub struct RebarArgsParser<'a> {
-  args:   *const RebarArgs,
-  offset: usize,
-
-  _phantom: PhantomData<&'a ()>,
-}
-
-impl<'a> RebarArgsParser<'a> {
-  pub fn new(args: *const RebarArgs) -> Self {
-    RebarArgsParser { args, offset: 0, _phantom: PhantomData }
-  }
-
-  unsafe fn next(&mut self) -> i64 {
-    let v = *(&*self.args).arg(self.offset) as i64;
-    self.offset += 1;
-    v
-  }
-
-  unsafe fn value_const(&mut self, vt: ValueType) -> Value<'a> {
-    match vt {
-      ValueType::Nil => Value::Nil,
-      // Booleans only use 8 bits, so cast the value to a u8 and just compare that.
-      ValueType::Bool => {
-        // The value will always take up 8 bytes, even if less bytes are used.
-        Value::Bool(self.next() as u8 != 0)
-      }
-      ValueType::Int => Value::Int(self.next()),
-      ValueType::String => {
-        let ptr = self.next();
-
-        let gc = Gc::from_ptr(ptr as *const String);
-
-        Value::String(::std::mem::transmute(gc.as_str()))
-      }
-      ValueType::Array => {
-        let ptr = self.next();
-        let arr = Gc::from_ptr(ptr as *const GcArray);
-
-        Value::Array(RbSlice::new(&*arr.arr.get(), arr.vt))
-      }
-      v => unimplemented!("{v:?}"),
-    }
-  }
-
-  unsafe fn value_owned(&mut self, vt: ValueType) -> GcValue {
-    match vt {
-      ValueType::String => {
-        let ptr = self.next();
-
-        let gc = Gc::from_ptr(ptr as *const String);
-
-        GcValue::String(gc)
-      }
-      ValueType::Array => {
-        let ptr = self.next();
-
-        GcValue::Array(Gc::from_ptr(ptr as *const GcArray))
-      }
-      _ => unreachable!("not an owned value: {vt:?}"),
-    }
-  }
-
-  pub unsafe fn value(&mut self, dvt: DynamicValueType) -> Value<'a> {
-    let start = self.offset;
-    let v = match dvt {
-      DynamicValueType::Const(vt) => self.value_const(vt),
-      DynamicValueType::Union(_) => {
-        // A nil will only take up one slot, so we must check for that to avoid reading
-        // out of bounds.
-        let dyn_ty = self.next();
-
-        let vt = ValueType::try_from(dyn_ty).unwrap();
-
-        self.value_const(vt)
-      }
-    };
-
-    let expected_end = start + dvt.len() as usize;
-    if self.offset < expected_end {
-      self.offset = expected_end;
-    } else if self.offset > expected_end {
-      panic!("read too many slots while parsing argument of type {dvt:?}");
-    }
-
-    v
-  }
-
-  /// Parses a single value, and renders the current parser unusable. If the
-  /// value passed in changes type, the amount of slots parsed could change,
-  /// which makes this inconsistent. So, after calling this, a subsequent
-  /// value cannot be parsed.
-  pub unsafe fn value_unsized(&mut self) -> Value<'a> {
-    let ty = self.next();
-    let vt = ValueType::try_from(ty).unwrap();
-    self.value_const(vt)
-  }
-
-  /// Parses a value to get tracked by the GC. This value should not be dropped!
-  pub unsafe fn value_owned_unsized(&mut self) -> GcValue {
-    let ty = self.next();
-    let vt = ValueType::try_from(ty).unwrap();
-    self.value_owned(vt)
   }
 }
 
