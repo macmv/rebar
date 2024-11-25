@@ -17,7 +17,7 @@ mod r_value;
 use ir_value::IRValue;
 use r_value::RValue;
 
-use rb_value::{CompactValues, DynamicValueType, IntrinsicImpls, ParamKind, ValueType};
+use rb_value::{DynamicValueType, IntrinsicImpls, ParamKind, ValueType};
 
 pub struct JIT {
   module: JITModule,
@@ -276,17 +276,15 @@ impl FuncBuilder<'_> {
     let mut param_values = vec![];
 
     for ty in self.mir.params.iter() {
-      match DynamicValueType::for_type(ty) {
-        DynamicValueType::Const(_) => {
-          let value = self.builder.append_block_param(entry_block, ir::types::I64);
-          param_values.push(CompactValues::One(value));
-        }
-        DynamicValueType::Union(_) => {
-          let v0 = self.builder.append_block_param(entry_block, ir::types::I64);
-          let v1 = self.builder.append_block_param(entry_block, ir::types::I64);
-          param_values.push(CompactValues::Two(v0, v1));
-        }
+      let vt = DynamicValueType::for_type(ty);
+
+      let mut values = vec![];
+      for _ in 0..vt.len() {
+        let value = self.builder.append_block_param(entry_block, ir::types::I64);
+        values.push(value);
       }
+
+      param_values.push(values);
     }
 
     if let Some(ref ty) = self.mir.ret {
@@ -305,10 +303,9 @@ impl FuncBuilder<'_> {
 
     self.builder.ins().call(self.intrinsics.push_frame, &[]);
 
-    for (id, param) in param_values.into_iter().enumerate() {
-      let len = param.len();
+    for (id, values) in param_values.into_iter().enumerate() {
+      let len = values.len();
       let variables = (0..len).map(|_| self.new_variable()).collect::<Vec<_>>();
-      let values = param.with_slice(|s| s.to_vec());
 
       self.locals.insert(mir::VarId(id as u32), variables.clone());
       self.set_var(&variables, &values);
