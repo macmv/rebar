@@ -13,6 +13,20 @@ mod array;
 pub use arg::RebarArgs;
 pub use array::RbArray;
 
+pub struct IntrinsicImpls {
+  pub call: fn(i64, *const RebarArgs, *mut RebarArgs),
+
+  pub push_frame:          fn(),
+  pub pop_frame:           fn(),
+  pub gc_collect:          fn(),
+  pub track:               fn(*const RebarArgs),
+  pub string_append_value: fn(*const String, *const RebarArgs),
+  pub string_append_str:   fn(*const String, *const u8, i64),
+  pub string_new:          fn() -> *const String,
+  pub array_new:           fn(i64, i64) -> *const u8,
+  pub value_equals:        fn(*const RebarArgs, *const RebarArgs) -> i8,
+}
+
 #[derive(Debug, Clone)]
 pub struct RValue {
   pub ty:     Value<ValueType>,

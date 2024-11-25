@@ -11,7 +11,9 @@ use rb_mir::ast::{self as mir, UserFunctionId};
 use rb_typer::{Literal, Type};
 use std::collections::HashMap;
 
-use rb_value::{CompactValues, DynamicValueType, ParamKind, RValue, RebarArgs, Value, ValueType};
+use rb_value::{
+  CompactValues, DynamicValueType, IntrinsicImpls, ParamKind, RValue, Value, ValueType,
+};
 
 pub struct JIT {
   module: JITModule,
@@ -115,20 +117,6 @@ pub struct FuncBuilder<'a> {
 
   // A map of user-defined function calls to function refs.
   user_funcs: HashMap<mir::UserFunctionId, FuncRef>,
-}
-
-pub struct IntrinsicImpls {
-  pub call: fn(i64, *const RebarArgs, *mut RebarArgs),
-
-  pub push_frame:          fn(),
-  pub pop_frame:           fn(),
-  pub gc_collect:          fn(),
-  pub track:               fn(*const RebarArgs),
-  pub string_append_value: fn(*const String, *const RebarArgs),
-  pub string_append_str:   fn(*const String, *const u8, i64),
-  pub string_new:          fn() -> *const String,
-  pub array_new:           fn(i64, i64) -> *const u8,
-  pub value_equals:        fn(*const RebarArgs, *const RebarArgs) -> i8,
 }
 
 const DEBUG: bool = false;
