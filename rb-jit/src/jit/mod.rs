@@ -13,10 +13,6 @@ use std::{collections::HashMap, marker::PhantomPinned};
 
 use rb_value::{CompactValues, DynamicValueType, ParamKind, RValue, Value, ValueType};
 
-mod array;
-
-pub use array::RbArray;
-
 pub struct JIT {
   module: JITModule,
 

@@ -7,6 +7,10 @@ use cranelift::{
 };
 use rb_typer::{Literal, Type};
 
+mod array;
+
+pub use array::RbArray;
+
 #[derive(Debug, Clone)]
 pub struct RValue {
   pub ty:     Value<ValueType>,

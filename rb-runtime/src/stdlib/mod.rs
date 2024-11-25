@@ -10,10 +10,10 @@ mod core;
 mod std;
 
 use rb_gc::{lock::RefLock, Collect, Gc};
-use rb_jit::jit::{IntrinsicImpls, RbArray, RebarArgs};
+use rb_jit::jit::{IntrinsicImpls, RebarArgs};
 use rb_mir::ast::{self as mir};
 use rb_typer::{Literal, Type};
-use rb_value::{DynamicValueType, ValueType};
+use rb_value::{DynamicValueType, RbArray, ValueType};
 
 use crate::gc::{GcArena, GcRoot};
 
