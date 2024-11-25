@@ -424,7 +424,9 @@ impl FuncBuilder<'_> {
         self.locals.insert(id, variables);
 
         if self.type_needs_gc(ty) {
-          self.track_value(&value);
+          let arg_ptr = self.stack_slot_unsized(&value);
+
+          self.builder.ins().call(self.intrinsics.track, &[arg_ptr]);
         }
 
         self.builder.ins().call(self.intrinsics.gc_collect, &[]);
@@ -432,14 +434,6 @@ impl FuncBuilder<'_> {
         RValue::nil()
       }
     }
-  }
-
-  /// Track a value in the GC stack. When the current function returns, the
-  /// value will be untracked.
-  fn track_value(&mut self, value: &RValue) {
-    let arg_ptr = self.stack_slot_unsized(&value);
-
-    self.builder.ins().call(self.intrinsics.track, &[arg_ptr]);
   }
 
   fn type_needs_gc(&self, ty: &Type) -> bool {
