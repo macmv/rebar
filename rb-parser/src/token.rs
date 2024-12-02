@@ -205,6 +205,7 @@ impl<'a> Lexer<'a> {
           "true" => T![true],
           "false" => T![false],
           "nil" => T![nil],
+          "struct" => T![struct],
           _ => r,
         })
       }

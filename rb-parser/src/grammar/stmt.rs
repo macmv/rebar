@@ -61,10 +61,24 @@ pub fn stmt(p: &mut Parser) {
       p.expect(T![ident]);
 
       params(p);
-
       block(p);
 
       m.complete(p, DEF);
+    }
+
+    // test ok
+    // struct Foo {
+    //   a: int
+    //   b: int
+    // }
+    T![struct] => {
+      let m = p.start();
+      p.eat(T![struct]);
+      p.expect(T![ident]);
+
+      struct_def(p);
+
+      m.complete(p, STRUCT);
     }
 
     _ => {
@@ -126,6 +140,82 @@ fn params(p: &mut Parser) {
   }
 
   m.complete(p, PARAMS);
+}
+
+fn struct_def(p: &mut Parser) -> CompletedMarker {
+  let m = p.start();
+  p.expect(T!['{']);
+
+  while !p.at(EOF) && !p.at(T!['}']) {
+    struct_item(p);
+    while p.at(T![nl]) {
+      p.eat(T![nl]);
+    }
+  }
+
+  p.expect(T!['}']);
+  m.complete(p, STRUCT_BLOCK)
+}
+
+fn struct_item(p: &mut Parser) {
+  while p.at(T![nl]) {
+    p.eat(T![nl]);
+  }
+
+  match p.current() {
+    // test ok
+    // struct Foo {
+    //   def bar() {}
+    // }
+    T![def] => {
+      let m = p.start();
+      p.eat(T![def]);
+      p.expect(T![ident]);
+
+      params(p);
+      block(p);
+
+      m.complete(p, DEF);
+    }
+
+    // test ok
+    // struct Foo {
+    //   a: int
+    // }
+    T![ident] => {
+      let m = p.start();
+      p.eat(T![ident]);
+      p.expect(T![:]);
+      super::types::ty(p);
+      m.complete(p, FIELD);
+    }
+
+    _ => {
+      p.error("expected a definition");
+    }
+  }
+
+  match p.current() {
+    T![nl] => p.eat(T![nl]),
+    T!['}'] => {}
+    _ => {
+      // test err
+      // struct Foo {
+      //   a: int foo
+      // }
+      p.error("expected end of statement");
+
+      while !p.at(EOF) && !p.at(T![nl]) && !p.at(T!['}']) {
+        p.bump();
+      }
+
+      match p.current() {
+        T![nl] => p.eat(T![nl]),
+        T!['}'] => {}
+        _ => {}
+      }
+    }
+  }
 }
 
 #[cfg(test)]
