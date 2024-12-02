@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::slice::RbSlice;
+use crate::{slice::RbSlice, RbStruct};
 
 /// A value with references to rebar values. This typically has the lifetime of
 /// the native rust function that is being passed this value.
@@ -11,6 +11,7 @@ pub enum Value<'a> {
   Bool(bool),
   String(&'a str),
   Array(RbSlice<'a>),
+  Struct(RbStruct<'a>),
 }
 
 /// An owned value, created from rust, that will be passed back to rebar.
@@ -86,6 +87,7 @@ impl fmt::Display for Value<'_> {
         }
         write!(f, "]")
       }
+      Value::Struct(s) => write!(f, "{s:?}"),
     }
   }
 }

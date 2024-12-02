@@ -1,4 +1,4 @@
-use crate::{RbSlice, Value};
+use crate::{RbSlice, RbStruct, Value};
 use rb_mir::MirContext;
 use rb_value::{DynamicValueType, RbArray, RebarArgs, ValueType};
 
@@ -53,6 +53,20 @@ impl<'a> RebarArgsParser<'a> {
 
         Value::Array(RbSlice::new(self.ctx, &arr.arr, arr.vt))
       }
+
+      ValueType::Struct(id) => {
+        let strct = &self.ctx.structs[&id];
+
+        let ptr = (&*self.args).arg(self.offset);
+
+        // Parse all the values, so we can parse the next value.
+        for field in strct.fields.iter() {
+          let _ = self.value(DynamicValueType::for_type(self.ctx, &field.1));
+        }
+
+        Value::Struct(RbStruct::new(self.ctx, id, ptr))
+      }
+
       v => unimplemented!("{v:?}"),
     }
   }
