@@ -945,7 +945,7 @@ impl FuncBuilder<'_> {
 
     match ret_dvt {
       DynamicValueType::Const(vt) => RValue {
-        ty:     IRValue::Const(ValueType::String),
+        ty:     IRValue::Const(vt),
         values: (0..vt.len())
           .map(|i| {
             IRValue::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, i as i32 * 8))
