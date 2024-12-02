@@ -659,3 +659,34 @@ fn structs() {
     "#],
   );
 }
+
+#[test]
+fn struct_init() {
+  check(
+    r#"
+      Foo { a: 2, b: 3 }
+    "#,
+    expect![@r#"
+      Foo { a: 2, b: 3 }
+    "#],
+  );
+}
+
+#[test]
+fn struct_init_multiline() {
+  check(
+    r#"
+      Foo { a: 2, b: 3, c: 4, d: 5, e: 6, f: 7 }
+    "#,
+    expect![@r#"
+      Foo {
+        a: 2,
+        b: 3,
+        c: 4,
+        d: 5,
+        e: 6,
+        f: 7
+      }
+    "#],
+  );
+}

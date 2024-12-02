@@ -113,6 +113,7 @@ impl FormatterContext<'_> {
         (Space, if self.multiline { Newline } else { Space })
       }
       (T!['{'], STRUCT_BLOCK) => (Space, if self.multiline { Newline } else { Space }),
+      (T!['{'], STRUCT_EXPR) => (Space, if self.multiline { Newline } else { Space }),
 
       (T!['{'] | T!['}'], INTERPOLATION) => (None, None),
 
@@ -203,7 +204,7 @@ impl FormatterContext<'_> {
 
           let retry = match n.kind() {
             // Expressions that can toggle the multiline flag.
-            CALL_EXPR | BINARY_EXPR | IF_EXPR | ARRAY_EXPR => Some(self.clone()),
+            CALL_EXPR | BINARY_EXPR | IF_EXPR | ARRAY_EXPR | STRUCT_EXPR => Some(self.clone()),
             _ => None,
           };
 

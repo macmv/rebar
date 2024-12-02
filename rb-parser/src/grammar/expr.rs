@@ -84,13 +84,13 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
         T!['{'] => {
           let strct = lhs.precede(p);
 
-          let m = p.start();
           arg_list(p, T!['{'], T!['}'], |p| {
+            let m = p.start();
             p.expect(T![ident]);
             p.expect(T![:]);
             expr(p);
+            m.complete(p, FIELD_INIT);
           });
-          m.complete(p, ARG_LIST);
 
           Some(strct.complete(p, STRUCT_EXPR))
         }
