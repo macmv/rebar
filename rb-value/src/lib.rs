@@ -71,7 +71,7 @@ impl DynamicValueType {
 }
 
 impl ValueType {
-  fn as_i64(&self) -> i64 {
+  pub fn as_i64(&self) -> i64 {
     match self {
       ValueType::Nil => 0,
       ValueType::Bool => 1,
@@ -81,7 +81,7 @@ impl ValueType {
       ValueType::String => 5,
       ValueType::Array => 6,
 
-      ValueType::Struct(id) => -(id.0 as i64),
+      ValueType::Struct(id) => !id.0 as i64,
     }
   }
 }
@@ -99,7 +99,7 @@ impl TryFrom<i64> for ValueType {
       5 => Ok(ValueType::String),
       6 => Ok(ValueType::Array),
 
-      v if v < 0 => Ok(ValueType::Struct(StructId(-v as u64))),
+      v if v < 0 => Ok(ValueType::Struct(StructId(!v as u64))),
 
       _ => Err(()),
     }

@@ -36,18 +36,7 @@ impl AsIR for i8 {
 impl AsIR for ValueType {
   fn ty(&self) -> ir::Type { ir::types::I64 }
 
-  fn as_i64(&self) -> i64 {
-    match self {
-      ValueType::Nil => 0,
-      ValueType::Bool => 1,
-      ValueType::Int => 2,
-      ValueType::Function => 3,
-      ValueType::UserFunction => 4,
-      ValueType::String => 5,
-      ValueType::Array => 6,
-      ValueType::Struct(id) => -(id.0 as i64),
-    }
-  }
+  fn as_i64(&self) -> i64 { self.as_i64() }
 }
 
 impl<T: AsIR> IRValue<T> {
