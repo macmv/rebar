@@ -78,7 +78,7 @@ impl Highlighter<'_> {
 
         self.visit_expr(expr)
       }
-      hir::Stmt::Def(_, _, _) => {}
+      _ => {}
     }
   }
 
