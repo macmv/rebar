@@ -1,18 +1,17 @@
-use std::marker::PhantomData;
-
 use crate::{RbSlice, Value};
+use rb_mir::MirContext;
 use rb_value::{DynamicValueType, RbArray, RebarArgs, ValueType};
 
 pub struct RebarArgsParser<'a> {
+  ctx: &'a MirContext,
+
   args:   *const RebarArgs,
   offset: usize,
-
-  _phantom: PhantomData<&'a ()>,
 }
 
 impl<'a> RebarArgsParser<'a> {
-  pub fn new(args: *const RebarArgs) -> Self {
-    RebarArgsParser { args, offset: 0, _phantom: PhantomData }
+  pub fn new(ctx: &'a MirContext, args: *const RebarArgs) -> Self {
+    RebarArgsParser { ctx, args, offset: 0 }
   }
 
   unsafe fn next(&mut self) -> i64 {
@@ -52,7 +51,7 @@ impl<'a> RebarArgsParser<'a> {
 
         let arr = &*(ptr as *const GcArrayTmp);
 
-        Value::Array(RbSlice::new(&arr.arr, arr.vt))
+        Value::Array(RbSlice::new(self.ctx, &arr.arr, arr.vt))
       }
       v => unimplemented!("{v:?}"),
     }
@@ -73,7 +72,7 @@ impl<'a> RebarArgsParser<'a> {
       }
     };
 
-    let expected_end = start + dvt.len() as usize;
+    let expected_end = start + dvt.len(self.ctx) as usize;
     if self.offset < expected_end {
       self.offset = expected_end;
     } else if self.offset > expected_end {

@@ -1,6 +1,7 @@
 use std::{cell::UnsafeCell, mem::ManuallyDrop};
 
 use rb_gc::{Collect, Gc};
+use rb_mir::MirContext;
 use rb_std::{RbSlice, Value};
 use rb_value::{DynamicValueType, RbArray};
 
@@ -42,11 +43,20 @@ impl GcValue {
 }
 
 impl PartialEq for GcArray {
-  fn eq(&self, other: &Self) -> bool { self.as_slice() == other.as_slice() }
+  fn eq(&self, other: &Self) -> bool {
+    crate::intrinsics::ENV.with(|env| {
+      let env = env.borrow();
+      let env = env.as_ref().unwrap();
+
+      self.as_slice(&env.env.mir_ctx) == other.as_slice(&env.env.mir_ctx)
+    })
+  }
 }
 
 impl GcArray {
-  pub fn as_slice(&self) -> RbSlice { unsafe { RbSlice::new(&*self.arr.get(), self.vt) } }
+  pub fn as_slice<'a>(&'a self, ctx: &'a MirContext) -> RbSlice<'a> {
+    unsafe { RbSlice::new(ctx, &*self.arr.get(), self.vt) }
+  }
 }
 
 unsafe impl Collect for GcValue {
@@ -60,22 +70,32 @@ unsafe impl Collect for GcValue {
 
 unsafe impl Collect for GcArray {
   fn trace(&self, cc: &rb_gc::Collection) {
-    for value in self.as_slice().iter() {
-      if let Some(v) = GcValue::from_value(&value) {
-        v.trace(cc);
+    crate::intrinsics::ENV.with(|env| {
+      let env = env.borrow();
+      let env = env.as_ref().unwrap();
+
+      for value in self.as_slice(&env.env.mir_ctx).iter() {
+        if let Some(v) = GcValue::from_value(&value) {
+          v.trace(cc);
+        }
       }
-    }
+    });
   }
 }
 
 impl Drop for GcArray {
   fn drop(&mut self) {
-    for value in self.as_slice().iter() {
-      if let Some(mut v) = GcValue::from_value(&value) {
-        unsafe {
-          ManuallyDrop::drop(&mut v);
+    crate::intrinsics::ENV.with(|env| {
+      let env = env.borrow();
+      let env = env.as_ref().unwrap();
+
+      for value in self.as_slice(&env.env.mir_ctx).iter() {
+        if let Some(mut v) = GcValue::from_value(&value) {
+          unsafe {
+            ManuallyDrop::drop(&mut v);
+          }
         }
       }
-    }
+    });
   }
 }

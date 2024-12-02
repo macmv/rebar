@@ -129,7 +129,7 @@ pub enum ParamKind {
 }
 
 impl ValueType {
-  pub fn len(&self) -> u32 {
+  pub fn len(&self, ctx: &MirContext) -> u32 {
     match self {
       ValueType::Nil => 0,
       ValueType::Int => 1,
@@ -146,17 +146,17 @@ impl ValueType {
 }
 
 impl DynamicValueType {
-  pub fn len(&self) -> u32 {
+  pub fn len(&self, ctx: &MirContext) -> u32 {
     match self {
-      DynamicValueType::Const(ty) => ty.len(),
+      DynamicValueType::Const(ty) => ty.len(ctx),
       DynamicValueType::Union(len) => *len + 1, // Add 1 for the type tag.
     }
   }
 
-  pub fn param_kind(&self) -> ParamKind {
+  pub fn param_kind(&self, ctx: &MirContext) -> ParamKind {
     match self {
       DynamicValueType::Const(_) => ParamKind::Compact,
-      DynamicValueType::Union(_) => ParamKind::Extended(NonZero::new(self.len()).unwrap()),
+      DynamicValueType::Union(_) => ParamKind::Extended(NonZero::new(self.len(ctx)).unwrap()),
     }
   }
 
@@ -171,7 +171,7 @@ impl DynamicValueType {
         tys
           .iter()
           .map(|ty| match DynamicValueType::for_type(ctx, ty) {
-            DynamicValueType::Const(ty) => ty.len(),
+            DynamicValueType::Const(ty) => ty.len(ctx),
             DynamicValueType::Union(len) => len,
           })
           .max()

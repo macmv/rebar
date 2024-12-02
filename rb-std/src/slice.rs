@@ -1,5 +1,6 @@
 use std::fmt;
 
+use rb_mir::MirContext;
 use rb_value::{DynamicValueType, RbArray, RebarArgs};
 
 use crate::RebarArgsParser;
@@ -8,6 +9,8 @@ use super::Value;
 
 /// The rust-friendly version of an `RbArray`.
 pub struct RbSlice<'a> {
+  ctx: &'a MirContext,
+
   // SAFETY: This `&RbArray` is quite special: the value of this reference is garunteed to also be
   // a valid `Box<RbArray>` pointer, and that pointer is used as a key in the garbage collector to
   // determine if the array is referenced or not.
@@ -16,23 +19,23 @@ pub struct RbSlice<'a> {
 }
 
 impl<'a> RbSlice<'a> {
-  pub fn new(elems: &'a RbArray, vt: DynamicValueType) -> Self {
+  pub fn new(ctx: &'a MirContext, elems: &'a RbArray, vt: DynamicValueType) -> Self {
     assert!(
-      elems.len() % vt.len() as usize == 0,
+      elems.len() % vt.len(ctx) as usize == 0,
       "array length {} must be a multiple of the slot size {} for the type {:?}",
       elems.len(),
-      vt.len(),
+      vt.len(ctx),
       vt
     );
 
-    Self { elems, vt }
+    Self { ctx, elems, vt }
   }
 
   pub fn as_ptr(&self) -> *const i64 { self.elems.as_ptr() }
 
   pub fn iter(&self) -> ValueIter {
     ValueIter {
-      parser: RebarArgsParser::new(self.elems.as_ptr() as *const RebarArgs),
+      parser: RebarArgsParser::new(self.ctx, self.elems.as_ptr() as *const RebarArgs),
       vt:     self.vt,
 
       idx: 0,
@@ -40,7 +43,7 @@ impl<'a> RbSlice<'a> {
     }
   }
 
-  pub fn len(&self) -> usize { self.elems.len() / self.vt.len() as usize }
+  pub fn len(&self) -> usize { self.elems.len() / self.vt.len(self.ctx) as usize }
 }
 
 impl PartialEq for RbSlice<'_> {

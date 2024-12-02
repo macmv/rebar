@@ -102,7 +102,7 @@ impl RValue {
   // TODO: Need to actually use this with a function return.
   pub fn from_ir(ctx: &MirContext, ir: &[cranelift::codegen::ir::Value], ty: &Type) -> RValue {
     let dty = DynamicValueType::for_type(ctx, ty);
-    assert_eq!(ir.len() as u32, dty.len(), "variable length mismatch");
+    assert_eq!(ir.len() as u32, dty.len(ctx), "variable length mismatch");
 
     match dty {
       DynamicValueType::Const(ty) => RValue {

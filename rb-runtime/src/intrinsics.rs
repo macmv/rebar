@@ -18,7 +18,7 @@ use crate::{
 // This works pretty well, but it would be nice to support multithreading, and
 // multiple environments on one thread. Probably something for later though.
 thread_local! {
-  static ENV: RefCell<Option<RuntimeEnvironment>> = RefCell::new(None);
+  pub static ENV: RefCell<Option<RuntimeEnvironment>> = RefCell::new(None);
 }
 
 impl RuntimeEnvironment {
@@ -67,7 +67,7 @@ impl RuntimeEnvironment {
       let ret = unsafe { &mut *ret };
 
       let args = unsafe {
-        let mut parser = RebarArgsParser::new(arg);
+        let mut parser = RebarArgsParser::new(&env.env.mir_ctx, arg);
 
         let mut args = vec![];
         for ty in f.args.iter() {
@@ -158,9 +158,12 @@ impl RuntimeEnvironment {
   }
 
   fn string_append_value(str: *const String, args: *const RebarArgs) {
-    ENV.with(|_env| {
+    ENV.with(|env| {
+      let env = env.borrow();
+      let env = env.as_ref().unwrap();
+
       let str_value = unsafe { Gc::from_ptr(str as *const UnsafeCell<String>) };
-      let arg_value = unsafe { RebarArgsParser::new(args).value_unsized() };
+      let arg_value = unsafe { RebarArgsParser::new(&env.env.mir_ctx, args).value_unsized() };
 
       let str = unsafe { &mut *str_value.get() };
       write!(str, "{}", arg_value).unwrap();
@@ -199,7 +202,9 @@ impl RuntimeEnvironment {
       Gc::as_ptr(Gc::new(
         m,
         GcArray {
-          arr: UnsafeCell::new(RbArray::new_with_len(len as usize * vt.len() as usize)),
+          arr: UnsafeCell::new(RbArray::new_with_len(
+            len as usize * vt.len(&env.env.mir_ctx) as usize,
+          )),
           vt,
         },
       )) as *const u8
@@ -207,9 +212,12 @@ impl RuntimeEnvironment {
   }
 
   fn value_equals(a: *const RebarArgs, b: *const RebarArgs) -> i8 {
-    ENV.with(|_env| {
-      let a_value = unsafe { RebarArgsParser::new(a).value_unsized() };
-      let b_value = unsafe { RebarArgsParser::new(b).value_unsized() };
+    ENV.with(|env| {
+      let env = env.borrow();
+      let env = env.as_ref().unwrap();
+
+      let a_value = unsafe { RebarArgsParser::new(&env.env.mir_ctx, a).value_unsized() };
+      let b_value = unsafe { RebarArgsParser::new(&env.env.mir_ctx, b).value_unsized() };
 
       (a_value == b_value) as i8
     })

@@ -288,7 +288,7 @@ impl FuncBuilder<'_> {
       let vt = DynamicValueType::for_type(self.ctx, ty);
 
       let mut values = vec![];
-      for _ in 0..vt.len() {
+      for _ in 0..vt.len(self.ctx) {
         let value = self.builder.append_block_param(entry_block, ir::types::I64);
         values.push(value);
       }
@@ -347,7 +347,7 @@ impl JIT {
     sig.call_conv = CallConv::Fast;
     for ty in func.params.iter() {
       let dvt = DynamicValueType::for_type(&self.mir_ctx, ty);
-      for _ in 0..dvt.len() {
+      for _ in 0..dvt.len(&self.mir_ctx) {
         sig.params.push(AbiParam::new(ir::types::I64));
       }
     }
@@ -384,7 +384,7 @@ pub enum Error {
 // FIXME: Wrap `InstBuilder` so this is easier.
 fn use_var(ctx: &MirContext, builder: &mut FunctionBuilder, var: &[Variable], ty: &Type) -> RValue {
   let dvt = DynamicValueType::for_type(ctx, ty);
-  assert_eq!(var.len() as u32, dvt.len(), "variable length mismatch for type {ty:?}");
+  assert_eq!(var.len() as u32, dvt.len(ctx), "variable length mismatch for type {ty:?}");
 
   match dvt {
     DynamicValueType::Const(ty) => RValue {
@@ -426,8 +426,8 @@ impl FuncBuilder<'_> {
       mir::Stmt::Expr(expr) => self.compile_expr(expr),
       mir::Stmt::Let(id, ref ty, expr) => {
         let value = self.compile_expr(expr);
-        let ir =
-          value.to_ir(DynamicValueType::for_type(self.ctx, &ty).param_kind(), &mut self.builder);
+        let ir = value
+          .to_ir(DynamicValueType::for_type(self.ctx, &ty).param_kind(self.ctx), &mut self.builder);
 
         let variables = ir.iter().map(|_| self.new_variable()).collect::<Vec<_>>();
 
@@ -545,7 +545,7 @@ impl FuncBuilder<'_> {
 
       mir::Expr::Array(ref exprs, ref ty) => {
         let vt = DynamicValueType::for_type(self.ctx, ty);
-        let slot_size = vt.len();
+        let slot_size = vt.len(self.ctx);
 
         let result_ptr = {
           let vt = self.builder.ins().iconst(ir::types::I64, vt.encode());
@@ -562,7 +562,7 @@ impl FuncBuilder<'_> {
 
         for (i, expr) in exprs.iter().enumerate() {
           let to_append = self.compile_expr(*expr);
-          let ir = to_append.to_ir(vt.param_kind(), &mut self.builder);
+          let ir = to_append.to_ir(vt.param_kind(self.ctx), &mut self.builder);
           assert_eq!(ir.len(), slot_size as usize);
 
           let offset = self.builder.ins().iconst(ir::types::I64, i as i64 * slot_size as i64 * 8);
@@ -622,7 +622,7 @@ impl FuncBuilder<'_> {
               let arg = self.compile_expr(arg);
 
               let v = arg.to_ir(
-                DynamicValueType::for_type(self.ctx, &arg_ty).param_kind(),
+                DynamicValueType::for_type(self.ctx, &arg_ty).param_kind(self.ctx),
                 &mut self.builder,
               );
               arg_values.push(v);
@@ -657,7 +657,7 @@ impl FuncBuilder<'_> {
               let arg = self.compile_expr(arg);
 
               let v = arg.to_ir(
-                DynamicValueType::for_type(self.ctx, &arg_ty).param_kind(),
+                DynamicValueType::for_type(self.ctx, &arg_ty).param_kind(self.ctx),
                 &mut self.builder,
               );
               for v in v {
@@ -810,7 +810,7 @@ impl FuncBuilder<'_> {
 
         let first_ptr = self.builder.ins().load(ir::types::I64, MemFlags::new(), array_ptr, 0);
 
-        let slot_size = ret_dvt.len();
+        let slot_size = ret_dvt.len(self.ctx);
         let slot_size = self.builder.ins().iconst(ir::types::I64, slot_size as i64 * 8);
 
         let index = rhs.values[0].to_ir(&mut self.builder);
@@ -821,7 +821,7 @@ impl FuncBuilder<'_> {
         match ret_dvt {
           DynamicValueType::Const(vt) => RValue {
             ty:     IRValue::Const(vt),
-            values: (0..vt.len())
+            values: (0..vt.len(self.ctx))
               .map(|i| {
                 IRValue::from(self.builder.ins().load(
                   ir::types::I64,
@@ -887,10 +887,10 @@ impl FuncBuilder<'_> {
         let merge_block = self.builder.create_block();
 
         let dvt = DynamicValueType::for_type(self.ctx, &ty);
-        for _ in 0..dvt.len() {
+        for _ in 0..dvt.len(self.ctx) {
           self.builder.append_block_param(merge_block, cranelift::codegen::ir::types::I64);
         }
-        let param_kind = dvt.param_kind();
+        let param_kind = dvt.param_kind(self.ctx);
 
         // Test the if condition and conditionally branch.
         self.builder.ins().brif(cond, then_block, &[], else_block, &[]);
@@ -931,7 +931,7 @@ impl FuncBuilder<'_> {
               self.ctx,
               &struct_ty.fields.iter().find(|(n, _)| n == field).unwrap().1,
             )
-            .param_kind(),
+            .param_kind(self.ctx),
             &mut self.builder,
           );
 
@@ -968,7 +968,7 @@ impl FuncBuilder<'_> {
     let ret_slot = self.builder.create_sized_stack_slot(StackSlotData {
       kind: StackSlotKind::ExplicitSlot,
       // Each return value is 8 bytes wide.
-      size: ret_dvt.len() * 8,
+      size: ret_dvt.len(self.ctx) * 8,
     });
 
     let mut slot_index = 0;
@@ -987,7 +987,7 @@ impl FuncBuilder<'_> {
     match ret_dvt {
       DynamicValueType::Const(vt) => RValue {
         ty:     IRValue::Const(vt),
-        values: (0..vt.len())
+        values: (0..vt.len(self.ctx))
           .map(|i| {
             IRValue::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, i as i32 * 8))
           })
