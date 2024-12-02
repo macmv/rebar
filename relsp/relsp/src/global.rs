@@ -423,7 +423,14 @@ fn check(src: &str) -> Vec<Diagnostic> {
   };
 
   let env = rb_std::Environment::std();
-  let typer_env = env.typer_env();
+  let mut typer_env = env.typer_env();
+
+  for s in hir.0.structs.values() {
+    typer_env.structs.insert(
+      s.name.clone(),
+      s.fields.iter().map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te))).collect(),
+    );
+  }
 
   let res = rb_diagnostic::run(sources, || {
     let (hir, span_maps) = hir;
