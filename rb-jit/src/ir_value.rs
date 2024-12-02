@@ -45,6 +45,7 @@ impl AsIR for ValueType {
       ValueType::UserFunction => 4,
       ValueType::String => 5,
       ValueType::Array => 6,
+      ValueType::Struct(id) => -(id.0 as i64),
     }
   }
 }

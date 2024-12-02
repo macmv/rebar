@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 mod gc;
 mod gc_value;
@@ -68,7 +68,7 @@ pub fn eval(src: &str) {
   // cranelift IR. Collect all the functions, split them into chunks, and compile
   // them on a thread pool.
 
-  eval_mir(env, functions);
+  eval_mir(mir_env.ctx, env, functions);
 }
 
 pub fn run(
@@ -118,13 +118,17 @@ pub fn run(
   // cranelift IR. Collect all the functions, split them into chunks, and compile
   // them on a thread pool.
 
-  eval_mir(env, functions);
+  eval_mir(mir_env.ctx, env, functions);
 
   Ok(())
 }
 
-fn eval_mir(env: RuntimeEnvironment, functions: Vec<rb_mir::ast::Function>) {
-  let mut jit = rb_jit::JIT::new(env.intrinsics());
+fn eval_mir(
+  mir_ctx: rb_mir::MirContext,
+  env: RuntimeEnvironment,
+  functions: Vec<rb_mir::ast::Function>,
+) {
+  let mut jit = rb_jit::JIT::new(mir_ctx, env.intrinsics());
 
   for func in &functions {
     jit.declare_function(func);
@@ -150,11 +154,23 @@ impl RuntimeEnvironment {
       mir_env.declare_user_function(id as u64, f);
     }
     for (id, s) in hir.structs.values().enumerate() {
+      let id = rb_mir::ast::StructId(id as u64);
+
       typer_env.structs.insert(
         s.name.clone(),
         s.fields.iter().map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te))).collect(),
       );
-      mir_env.structs.insert(s.name.clone(), rb_mir::ast::StructId(id as u64));
+      mir_env.structs.insert(s.name.clone(), id);
+      mir_env.ctx.structs.insert(
+        id,
+        rb_mir::Struct {
+          fields: s
+            .fields
+            .iter()
+            .map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te)))
+            .collect(),
+        },
+      );
     }
 
     (typer_env, mir_env)
@@ -162,6 +178,7 @@ impl RuntimeEnvironment {
 
   fn mir_env(&self) -> rb_mir_lower::Env {
     rb_mir_lower::Env {
+      ctx:     rb_mir::MirContext { structs: HashMap::new() },
       items:   self
         .env
         .ids

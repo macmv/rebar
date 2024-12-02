@@ -7,7 +7,10 @@ use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, FuncId, FunctionDeclaration, Linkage, Module};
 use isa::{CallConv, TargetIsa};
-use rb_mir::ast::{self as mir, UserFunctionId};
+use rb_mir::{
+  ast::{self as mir, UserFunctionId},
+  MirContext,
+};
 use rb_typer::{Literal, Type};
 use std::collections::HashMap;
 
@@ -20,7 +23,8 @@ use r_value::RValue;
 use rb_value::{DynamicValueType, IntrinsicImpls, ParamKind, ValueType};
 
 pub struct JIT {
-  module: JITModule,
+  mir_ctx: MirContext,
+  module:  JITModule,
 
   // TODO: Use this for string literals at the very least.
   #[allow(dead_code)]
@@ -31,6 +35,7 @@ pub struct JIT {
 }
 
 pub struct ThreadCtx<'a> {
+  mir_ctx:         &'a MirContext,
   builder_context: FunctionBuilderContext,
   ctx:             codegen::Context,
 
@@ -107,6 +112,8 @@ intrinsics!(
 );
 
 pub struct FuncBuilder<'a> {
+  ctx: &'a MirContext,
+
   builder:    FunctionBuilder<'a>,
   mir:        &'a mir::Function,
   intrinsics: Intrinsics<FuncRef>,
@@ -126,7 +133,7 @@ const DEBUG: bool = false;
 
 impl JIT {
   #[allow(clippy::new_without_default)]
-  pub fn new(intrinsics: IntrinsicImpls) -> Self {
+  pub fn new(mir_ctx: MirContext, intrinsics: IntrinsicImpls) -> Self {
     let mut flag_builder = settings::builder();
     flag_builder.set("use_colocated_libcalls", "false").unwrap();
     flag_builder.set("is_pic", "false").unwrap();
@@ -142,6 +149,7 @@ impl JIT {
     let mut module = JITModule::new(builder);
 
     JIT {
+      mir_ctx,
       data_description: DataDescription::new(),
       intrinsics: Intrinsics::build(&mut module),
       module,
@@ -153,6 +161,7 @@ impl JIT {
     let ctx = self.module.make_context();
 
     ThreadCtx {
+      mir_ctx: &self.mir_ctx,
       builder_context: FunctionBuilderContext::new(),
       ctx,
       isa: self.module.isa(),
@@ -216,6 +225,7 @@ impl ThreadCtx<'_> {
     }
 
     FuncBuilder {
+      ctx: self.mir_ctx,
       builder,
       mir,
       intrinsics: funcs,
@@ -903,6 +913,28 @@ impl FuncBuilder<'_> {
         // Read the value of the if-else by reading the merge block
         // parameter.
         RValue::from_ir(self.builder.block_params(merge_block), ty)
+      }
+
+      mir::Expr::StructInit(id, ref fields) => {
+        let struct_ty = self.ctx.structs.get(&id).unwrap();
+        let mut values = vec![];
+
+        for (field, expr) in fields.iter() {
+          let value = self.compile_expr(*expr);
+          let ir = value.to_ir(
+            DynamicValueType::for_type(
+              &struct_ty.fields.iter().find(|(n, _)| n == field).unwrap().1,
+            )
+            .param_kind(),
+            &mut self.builder,
+          );
+
+          values.extend(ir);
+        }
+
+        let slot = self.stack_slot_for_ir(values);
+
+        RValue { ty: IRValue::Const(ValueType::Struct(id)), values: vec![IRValue::Dyn(slot)] }
       }
 
       ref v => unimplemented!("expr: {v:?}"),

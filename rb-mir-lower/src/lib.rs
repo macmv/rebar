@@ -3,12 +3,16 @@
 use std::collections::HashMap;
 
 use rb_hir::ast as hir;
-use rb_mir::ast::{self as mir, StructId, UserFunctionId};
+use rb_mir::{
+  ast::{self as mir, StructId, UserFunctionId},
+  MirContext,
+};
 use rb_typer::{Type, Typer};
 
 /// The environment for lowering to MIR. This stores a tree of namespaces to
 /// native IDs, that are stored directly in the MIR.
 pub struct Env {
+  pub ctx:     MirContext,
   pub items:   HashMap<String, Item>,
   pub structs: HashMap<String, StructId>,
 }
