@@ -65,6 +65,9 @@ ArgList = Expr (',' Expr)*
 
 IndexExpr = Expr '[' Expr ']'
 
+StructExpr = Expr '{' FieldInit* '}'
+FieldInit = 'ident' ':' Expr
+
 ExprStmt = Expr
 Stmt = Let | Assign | Def | Struct | ExprStmt
 

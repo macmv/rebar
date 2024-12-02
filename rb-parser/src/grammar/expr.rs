@@ -75,7 +75,27 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
     // hello
     T![ident] => {
       p.eat(T![ident]);
-      Some(m.complete(p, NAME))
+      let lhs = m.complete(p, NAME);
+
+      // Special case for struct literals.
+      match p.current() {
+        // test ok
+        // Foo { a: 2 }
+        T!['{'] => {
+          let strct = lhs.precede(p);
+
+          let m = p.start();
+          arg_list(p, T!['{'], T!['}'], |p| {
+            p.expect(T![ident]);
+            p.expect(T![:]);
+            expr(p);
+          });
+          m.complete(p, ARG_LIST);
+
+          Some(strct.complete(p, STRUCT_EXPR))
+        }
+        _ => Some(lhs),
+      }
     }
 
     // test ok
