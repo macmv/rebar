@@ -5,7 +5,6 @@ use ::std::{
 use std::collections::HashMap;
 
 use rb_gc::{lock::RefLock, Gc};
-use rb_mir::ast::{self as mir};
 use rb_std::{Environment, RebarArgsParser};
 use rb_typer::{Literal, Type};
 use rb_value::{DynamicValueType, IntrinsicImpls, RbArray, RebarArgs};
@@ -214,19 +213,5 @@ impl RuntimeEnvironment {
 
       (a_value == b_value) as i8
     })
-  }
-
-  pub fn mir_env(&self) -> rb_mir_lower::Env {
-    rb_mir_lower::Env {
-      items: self
-        .env
-        .ids
-        .iter()
-        .enumerate()
-        .map(|(k, v)| {
-          (v.clone(), rb_mir_lower::Item::NativeFunction(mir::NativeFunctionId(k as u64)))
-        })
-        .collect(),
-    }
   }
 }

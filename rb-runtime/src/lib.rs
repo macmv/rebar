@@ -46,11 +46,7 @@ pub fn eval(src: &str) {
   // and then split out to a thread pool to typecheck and lower each function.
   let mut functions = vec![];
 
-  let typer_env = env.env.typer_env();
-  let mut mir_env = env.mir_env();
-  for (id, f) in hir.0.functions.values().enumerate() {
-    mir_env.declare_user_function(id as u64, f);
-  }
+  let (typer_env, mir_env) = env.build(&hir.0);
 
   rb_diagnostic::run_or_exit(sources, || {
     let (hir, span_maps) = hir;
@@ -100,11 +96,7 @@ pub fn run(
   // and then split out to a thread pool to typecheck and lower each function.
   let mut functions = vec![];
 
-  let typer_env = env.env.typer_env();
-  let mut mir_env = env.mir_env();
-  for (id, f) in hir.0.functions.values().enumerate() {
-    mir_env.declare_user_function(id as u64, f);
-  }
+  let (typer_env, mir_env) = env.build(&hir.0);
 
   rb_diagnostic::run(sources, || {
     let (hir, span_maps) = hir;
@@ -147,6 +139,39 @@ fn eval_mir(env: RuntimeEnvironment, functions: Vec<rb_mir::ast::Function>) {
 
   jit.finalize();
   jit.eval(*function_ids.last().unwrap());
+}
+
+impl RuntimeEnvironment {
+  fn build(&self, hir: &rb_hir::ast::SourceFile) -> (rb_typer::Environment, rb_mir_lower::Env) {
+    let mut typer_env = self.env.typer_env();
+    let mut mir_env = self.mir_env();
+    for (id, f) in hir.functions.values().enumerate() {
+      mir_env.declare_user_function(id as u64, f);
+    }
+    for (_, s) in hir.structs.values().enumerate() {
+      typer_env.structs.insert(
+        s.name.clone(),
+        s.fields.iter().map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te))).collect(),
+      );
+      // mir_env.structs.insert(s.name.clone(), s.clone());
+    }
+
+    (typer_env, mir_env)
+  }
+
+  fn mir_env(&self) -> rb_mir_lower::Env {
+    rb_mir_lower::Env {
+      items: self
+        .env
+        .ids
+        .iter()
+        .enumerate()
+        .map(|(k, v)| {
+          (v.clone(), rb_mir_lower::Item::NativeFunction(rb_mir::ast::NativeFunctionId(k as u64)))
+        })
+        .collect(),
+    }
+  }
 }
 
 pub fn run_parallel<I: Send + Sync, C: Send, O: Send + Sync>(
