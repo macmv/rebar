@@ -937,12 +937,10 @@ impl FuncBuilder<'_> {
             &mut self.builder,
           );
 
-          values.extend(ir);
+          values.extend(ir.into_iter().map(IRValue::Dyn));
         }
 
-        let slot = self.stack_slot_for_ir(values);
-
-        RValue { ty: IRValue::Const(ValueType::Struct(id)), values: vec![IRValue::Dyn(slot)] }
+        RValue { ty: IRValue::Const(ValueType::Struct(id)), values }
       }
 
       ref v => unimplemented!("expr: {v:?}"),
