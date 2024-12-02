@@ -38,6 +38,7 @@ Expr =
   IfExpr |
   ParenExpr |
   ArrayExpr |
+  StructExpr |
   Block
 
 String = '"' 'char'* Escape* Interpolation* '"'

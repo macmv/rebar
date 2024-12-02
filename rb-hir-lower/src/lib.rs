@@ -168,6 +168,7 @@ impl FunctionLower<'_, '_> {
     id
   }
 
+  #[track_caller]
   fn expr_opt(&mut self, cst: Option<cst::Expr>) -> hir::ExprId {
     match cst {
       Some(expr) => self.expr(expr),
