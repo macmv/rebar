@@ -923,21 +923,37 @@ impl FuncBuilder<'_> {
       }
 
       mir::Expr::StructInit(id, ref fields) => {
-        let struct_ty = self.ctx.structs.get(&id).unwrap();
-        let mut values = vec![];
+        let strct = self.ctx.structs.get(&id).unwrap();
+        let mut values = vec![IRValue::Const(0); strct.fields.len()];
 
+        // Insert instructions in order of `fields`, but fill in `values` in order of
+        // `strct.fields`.
         for (field, expr) in fields.iter() {
           let value = self.compile_expr(*expr);
           let ir = value.to_ir(
             DynamicValueType::for_type(
               self.ctx,
-              &struct_ty.fields.iter().find(|(n, _)| n == field).unwrap().1,
+              &strct.fields.iter().find(|(n, _)| n == field).unwrap().1,
             )
             .param_kind(self.ctx),
             &mut self.builder,
           );
 
-          values.extend(ir.into_iter().map(IRValue::Dyn));
+          let offset = strct
+            .fields
+            .iter()
+            .try_fold(0, |o, f| {
+              if f.0 == *field {
+                Err(o)
+              } else {
+                Ok(o + DynamicValueType::for_type(self.ctx, &f.1).len(self.ctx))
+              }
+            })
+            .unwrap_err() as usize;
+
+          for v in values[offset..offset + ir.len()].iter_mut().zip(ir.into_iter()) {
+            *v.0 = IRValue::Dyn(v.1);
+          }
         }
 
         RValue { ty: IRValue::Const(ValueType::Struct(id)), values }
