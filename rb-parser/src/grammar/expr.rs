@@ -128,7 +128,7 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
     // []
     // [1, 2, 3]
     T!['['] => {
-      arg_list(p, T!['['], T![']']);
+      arg_list(p, T!['['], T![']'], expr);
       Some(m.complete(p, ARRAY_EXPR))
     }
 
@@ -193,7 +193,7 @@ fn postfix_expr(p: &mut Parser, mut lhs: CompletedMarker) -> CompletedMarker {
         let call = lhs.precede(p);
 
         let m = p.start();
-        arg_list(p, T!['('], T![')']);
+        arg_list(p, T!['('], T![')'], expr);
         m.complete(p, ARG_LIST);
 
         call.complete(p, CALL_EXPR)
@@ -235,7 +235,7 @@ fn postfix_expr(p: &mut Parser, mut lhs: CompletedMarker) -> CompletedMarker {
   lhs
 }
 
-fn arg_list(p: &mut Parser, open: SyntaxKind, close: SyntaxKind) {
+fn arg_list(p: &mut Parser, open: SyntaxKind, close: SyntaxKind, elem: impl Fn(&mut Parser)) {
   p.eat(open);
 
   while !p.at(EOF) && !p.at(close) {
@@ -246,7 +246,7 @@ fn arg_list(p: &mut Parser, open: SyntaxKind, close: SyntaxKind) {
       p.eat(T![nl]);
     }
 
-    expr(p);
+    elem(p);
 
     // test ok
     // foo(
