@@ -49,7 +49,7 @@ impl SourceLower<'_> {
 
     for arg in cst.params().unwrap().params() {
       let name = arg.ident_token().unwrap().to_string();
-      let ty = lower.type_expr(&arg.ty().unwrap());
+      let ty = type_expr(lower.source.source, &arg.ty().unwrap());
 
       lower.f.args.push((name, ty));
     }
@@ -61,6 +61,26 @@ impl SourceLower<'_> {
 
     self.span_maps.push(span_map);
     self.out.functions.alloc(f)
+  }
+
+  fn strct(&mut self, cst: &cst::Struct) -> hir::StructId {
+    let mut s = hir::Struct::default();
+
+    s.name = cst.ident_token().unwrap().to_string();
+
+    for item in cst.struct_block().unwrap().struct_items() {
+      match item {
+        cst::StructItem::Field(ref field) => {
+          let name = field.ident_token().unwrap().to_string();
+          let ty = type_expr(self.source, &field.ty().unwrap());
+
+          s.fields.push((name, ty));
+        }
+        _ => {}
+      }
+    }
+
+    self.out.structs.alloc(s)
   }
 }
 
@@ -111,10 +131,21 @@ impl FunctionLower<'_, '_> {
           .params()
           .unwrap()
           .params()
-          .map(|p| (p.ident_token().unwrap().text().to_string(), self.type_expr(&p.ty().unwrap())))
+          .map(|p| {
+            (
+              p.ident_token().unwrap().text().to_string(),
+              type_expr(self.source.source, &p.ty().unwrap()),
+            )
+          })
           .collect();
 
         hir::Stmt::Def(name, params, None)
+      }
+
+      cst::Stmt::Struct(ref strct) => {
+        self.source.strct(strct);
+
+        hir::Stmt::Struct
       }
 
       _ => unimplemented!("lowering for {:?}", cst),
@@ -297,35 +328,36 @@ impl FunctionLower<'_, '_> {
 
     id
   }
-  fn type_expr(&self, cst: &cst::Type) -> hir::TypeExpr {
-    match cst {
-      cst::Type::NameType(cst) => {
-        if let Some(_) = cst.nil_token() {
-          hir::TypeExpr::Nil
-        } else {
-          let name = cst.ident_token().unwrap().text().to_string();
+}
 
-          match name.as_str() {
-            "nil" => hir::TypeExpr::Nil,
-            "bool" => hir::TypeExpr::Bool,
-            "int" => hir::TypeExpr::Int,
-            _ => {
-              emit!(
-                "unknown type {name}",
-                Span { file: self.source.source, range: cst.ident_token().unwrap().text_range() }
-              );
-              hir::TypeExpr::Nil
-            }
+fn type_expr(source: SourceId, cst: &cst::Type) -> hir::TypeExpr {
+  match cst {
+    cst::Type::NameType(cst) => {
+      if let Some(_) = cst.nil_token() {
+        hir::TypeExpr::Nil
+      } else {
+        let name = cst.ident_token().unwrap().text().to_string();
+
+        match name.as_str() {
+          "nil" => hir::TypeExpr::Nil,
+          "bool" => hir::TypeExpr::Bool,
+          "int" => hir::TypeExpr::Int,
+          _ => {
+            emit!(
+              "unknown type {name}",
+              Span { file: source, range: cst.ident_token().unwrap().text_range() }
+            );
+            hir::TypeExpr::Nil
           }
         }
       }
+    }
 
-      cst::Type::BinaryType(cst) => {
-        let lhs = self.type_expr(&cst.lhs().unwrap());
-        let rhs = self.type_expr(&cst.rhs().unwrap());
+    cst::Type::BinaryType(cst) => {
+      let lhs = type_expr(source, &cst.lhs().unwrap());
+      let rhs = type_expr(source, &cst.rhs().unwrap());
 
-        hir::TypeExpr::Union(vec![lhs, rhs])
-      }
+      hir::TypeExpr::Union(vec![lhs, rhs])
     }
   }
 }

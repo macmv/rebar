@@ -3,10 +3,12 @@ use la_arena::{Arena, Idx};
 pub type ExprId = Idx<Expr>;
 pub type StmtId = Idx<Stmt>;
 pub type FunctionId = Idx<Function>;
+pub type StructId = Idx<Struct>;
 
 #[derive(Debug, Default)]
 pub struct SourceFile {
   pub functions: Arena<Function>,
+  pub structs:   Arena<Struct>,
 
   // If there are any statements outside of functions, they will be stored in a "main function,"
   // stored here.
@@ -24,6 +26,13 @@ pub struct Function {
   pub stmts: Arena<Stmt>,
 
   pub items: Vec<StmtId>,
+}
+
+#[derive(Debug, Default)]
+pub struct Struct {
+  pub name: String,
+
+  pub fields: Vec<(String, TypeExpr)>,
 }
 
 #[derive(Debug)]
@@ -69,6 +78,9 @@ pub enum Stmt {
   Let(String, ExprId),
 
   Def(String, Vec<(String, TypeExpr)>, Option<TypeExpr>),
+
+  // TODO: Do we need this?
+  Struct,
 }
 
 #[derive(Debug)]

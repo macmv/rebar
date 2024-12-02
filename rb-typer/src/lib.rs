@@ -140,6 +140,7 @@ impl<'a> Typer<'a> {
         self.locals.insert(name.clone(), res);
       }
       hir::Stmt::Def(_, _, _) => {}
+      hir::Stmt::Struct => {}
     }
   }
 
@@ -223,7 +224,7 @@ impl<'a> Typer<'a> {
         match block.last() {
           Some(stmt) => match self.function.stmts[*stmt] {
             hir::Stmt::Expr(expr) => self.type_expr(expr),
-            hir::Stmt::Let(_, _) | hir::Stmt::Def(_, _, _) => VType::Literal(ty::Literal::Unit),
+            _ => VType::Literal(ty::Literal::Unit),
           },
           None => VType::Literal(ty::Literal::Unit),
         }
