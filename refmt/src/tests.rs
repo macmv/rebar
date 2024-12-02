@@ -628,3 +628,34 @@ fn multiline_in_array() {
     "#],
   );
 }
+
+#[test]
+fn structs() {
+  check(
+    r#"
+      struct Foo {
+        a: int
+        b: str
+      }
+    "#,
+    expect![@r#"
+      struct Foo {
+        a: int
+        b: str
+      }
+    "#],
+  );
+
+  check(
+    r#"
+      struct Foo { a: int
+      b: str }
+    "#,
+    expect![@r#"
+      struct Foo {
+        a: int
+        b: str
+      }
+    "#],
+  );
+}

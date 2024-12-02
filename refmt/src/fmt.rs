@@ -85,7 +85,7 @@ impl FormatterContext<'_> {
       // example, blocks add newlines as part of the `{` token, so we want to remove user-defined
       // newlines there).
       (T![nl], SOURCE_FILE) => (None, Newline),
-      (T![nl], BLOCK) => {
+      (T![nl], STRUCT_BLOCK | BLOCK) => {
         // The newlines in the middle of blocks matter, but the first and last don't.
         if self.before(token).kind() == T!['{'] || self.after(token).kind() == T!['}'] {
           (None, None)
@@ -112,6 +112,7 @@ impl FormatterContext<'_> {
       {
         (Space, if self.multiline { Newline } else { Space })
       }
+      (T!['{'], STRUCT_BLOCK) => (Space, if self.multiline { Newline } else { Space }),
 
       (T!['{'] | T!['}'], INTERPOLATION) => (None, None),
 
@@ -125,7 +126,7 @@ impl FormatterContext<'_> {
       (T!['}'], _) => (Space, None),
       (T!['{'], _) => (None, Space),
 
-      (T![let] | T![if] | T![def], _) => (None, Space),
+      (T![let] | T![if] | T![def] | T![struct], _) => (None, Space),
       (T![else], _) => (Space, None),
 
       (_, BINARY_OP) => {
@@ -208,6 +209,7 @@ impl FormatterContext<'_> {
 
           // Any blocks with multiple expressions are always multiline.
           let always_multiline = match n.kind() {
+            STRUCT_BLOCK => true,
             BLOCK if n.children().count() > 1 => true,
             _ => false,
           };
