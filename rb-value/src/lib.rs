@@ -140,7 +140,9 @@ impl ValueType {
       ValueType::Function => 1,
       ValueType::UserFunction => 1,
 
-      ValueType::Struct(_) => todo!("need MirContext"),
+      ValueType::Struct(id) => {
+        ctx.structs[id].fields.iter().map(|f| DynamicValueType::for_type(ctx, &f.1).len(ctx)).sum()
+      }
     }
   }
 }
