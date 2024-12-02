@@ -145,15 +145,16 @@ impl RuntimeEnvironment {
   fn build(&self, hir: &rb_hir::ast::SourceFile) -> (rb_typer::Environment, rb_mir_lower::Env) {
     let mut typer_env = self.env.typer_env();
     let mut mir_env = self.mir_env();
+
     for (id, f) in hir.functions.values().enumerate() {
       mir_env.declare_user_function(id as u64, f);
     }
-    for (_, s) in hir.structs.values().enumerate() {
+    for (id, s) in hir.structs.values().enumerate() {
       typer_env.structs.insert(
         s.name.clone(),
         s.fields.iter().map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te))).collect(),
       );
-      // mir_env.structs.insert(s.name.clone(), s.clone());
+      mir_env.structs.insert(s.name.clone(), rb_mir::ast::StructId(id as u64));
     }
 
     (typer_env, mir_env)
@@ -161,7 +162,7 @@ impl RuntimeEnvironment {
 
   fn mir_env(&self) -> rb_mir_lower::Env {
     rb_mir_lower::Env {
-      items: self
+      items:   self
         .env
         .ids
         .iter()
@@ -170,6 +171,7 @@ impl RuntimeEnvironment {
           (v.clone(), rb_mir_lower::Item::NativeFunction(rb_mir::ast::NativeFunctionId(k as u64)))
         })
         .collect(),
+      structs: Default::default(),
     }
   }
 }
