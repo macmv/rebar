@@ -47,6 +47,7 @@ pub enum Expr {
   UnaryOp(ExprId, UnaryOp),
   BinaryOp(ExprId, BinaryOp, ExprId),
   Index(ExprId, ExprId),
+  StructInit(String, Vec<(String, ExprId)>),
 
   // TODO: Is this really needed?
   Paren(ExprId),

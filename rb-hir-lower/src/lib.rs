@@ -292,6 +292,24 @@ impl FunctionLower<'_, '_> {
         els:  expr.els().map(|e| self.expr(e)),
       },
 
+      cst::Expr::StructExpr(ref expr) => {
+        // TODO: Names should get resolved here.
+        let name = match expr.expr().unwrap() {
+          cst::Expr::Name(ref name) => name.ident_token().unwrap().to_string(),
+          _ => unreachable!(),
+        };
+
+        let mut fields = Vec::with_capacity(expr.field_inits().size_hint().0);
+        for field in expr.field_inits() {
+          let name = field.ident_token().unwrap().to_string();
+          let expr = self.expr(field.expr().unwrap());
+
+          fields.push((name, expr));
+        }
+
+        hir::Expr::StructInit(name, fields)
+      }
+
       _ => unimplemented!("lowering for {:?}", cst),
     };
 
