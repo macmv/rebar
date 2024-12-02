@@ -1,6 +1,6 @@
 use std::num::NonZero;
 
-use rb_mir::ast::StructId;
+use rb_mir::{ast::StructId, MirContext};
 use rb_typer::{Literal, Type};
 
 mod arg;
@@ -160,7 +160,7 @@ impl DynamicValueType {
     }
   }
 
-  pub fn for_type(ty: &Type) -> Self {
+  pub fn for_type(ctx: &MirContext, ty: &Type) -> Self {
     match ty {
       Type::Literal(Literal::Unit) => DynamicValueType::Const(ValueType::Nil),
       Type::Literal(Literal::Int) => DynamicValueType::Const(ValueType::Int),
@@ -170,7 +170,7 @@ impl DynamicValueType {
       Type::Union(tys) => DynamicValueType::Union(
         tys
           .iter()
-          .map(|ty| match DynamicValueType::for_type(ty) {
+          .map(|ty| match DynamicValueType::for_type(ctx, ty) {
             DynamicValueType::Const(ty) => ty.len(),
             DynamicValueType::Union(len) => len,
           })
@@ -180,7 +180,10 @@ impl DynamicValueType {
       Type::Function(..) => todo!("function types to values"),
 
       // This requires some type of MIR-context to resolve this.
-      Type::Struct(_) => todo!("struct types to values"),
+      Type::Struct(ref path) => {
+        let id = ctx.struct_paths[path];
+        DynamicValueType::Const(ValueType::Struct(id))
+      }
     }
   }
 }

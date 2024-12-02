@@ -963,6 +963,7 @@ dependencies = [
 name = "rb-std"
 version = "0.1.0"
 dependencies = [
+ "rb-mir",
  "rb-typer",
  "rb-value",
 ]

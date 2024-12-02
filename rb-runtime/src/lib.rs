@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 mod gc;
 mod gc_value;
@@ -178,7 +178,7 @@ impl RuntimeEnvironment {
 
   fn mir_env(&self) -> rb_mir_lower::Env {
     rb_mir_lower::Env {
-      ctx:     rb_mir::MirContext { structs: HashMap::new() },
+      ctx:     rb_mir::MirContext::default(),
       items:   self
         .env
         .ids

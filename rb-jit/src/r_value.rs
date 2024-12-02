@@ -2,6 +2,7 @@ use std::num::NonZero;
 
 use super::IRValue;
 use cranelift::prelude::{FunctionBuilder, InstBuilder};
+use rb_mir::MirContext;
 use rb_typer::Type;
 use rb_value::{DynamicValueType, ParamKind, ValueType};
 
@@ -99,8 +100,8 @@ impl RValue {
   }
 
   // TODO: Need to actually use this with a function return.
-  pub fn from_ir(ir: &[cranelift::codegen::ir::Value], ty: &Type) -> RValue {
-    let dty = DynamicValueType::for_type(ty);
+  pub fn from_ir(ctx: &MirContext, ir: &[cranelift::codegen::ir::Value], ty: &Type) -> RValue {
+    let dty = DynamicValueType::for_type(ctx, ty);
     assert_eq!(ir.len() as u32, dty.len(), "variable length mismatch");
 
     match dty {

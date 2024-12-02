@@ -285,7 +285,7 @@ impl FuncBuilder<'_> {
     let mut param_values = vec![];
 
     for ty in self.mir.params.iter() {
-      let vt = DynamicValueType::for_type(ty);
+      let vt = DynamicValueType::for_type(self.ctx, ty);
 
       let mut values = vec![];
       for _ in 0..vt.len() {
@@ -297,7 +297,7 @@ impl FuncBuilder<'_> {
     }
 
     if let Some(ref ty) = self.mir.ret {
-      match DynamicValueType::for_type(ty) {
+      match DynamicValueType::for_type(self.ctx, ty) {
         DynamicValueType::Union(_) => todo!("Extended variables not supported for parameters yet"),
         _ => {}
       }
@@ -346,7 +346,7 @@ impl JIT {
 
     sig.call_conv = CallConv::Fast;
     for ty in func.params.iter() {
-      let dvt = DynamicValueType::for_type(ty);
+      let dvt = DynamicValueType::for_type(&self.mir_ctx, ty);
       for _ in 0..dvt.len() {
         sig.params.push(AbiParam::new(ir::types::I64));
       }
@@ -382,8 +382,8 @@ pub enum Error {
 }
 
 // FIXME: Wrap `InstBuilder` so this is easier.
-fn use_var(builder: &mut FunctionBuilder, var: &[Variable], ty: &Type) -> RValue {
-  let dvt = DynamicValueType::for_type(ty);
+fn use_var(ctx: &MirContext, builder: &mut FunctionBuilder, var: &[Variable], ty: &Type) -> RValue {
+  let dvt = DynamicValueType::for_type(ctx, ty);
   assert_eq!(var.len() as u32, dvt.len(), "variable length mismatch for type {ty:?}");
 
   match dvt {
@@ -426,7 +426,8 @@ impl FuncBuilder<'_> {
       mir::Stmt::Expr(expr) => self.compile_expr(expr),
       mir::Stmt::Let(id, ref ty, expr) => {
         let value = self.compile_expr(expr);
-        let ir = value.to_ir(DynamicValueType::for_type(&ty).param_kind(), &mut self.builder);
+        let ir =
+          value.to_ir(DynamicValueType::for_type(self.ctx, &ty).param_kind(), &mut self.builder);
 
         let variables = ir.iter().map(|_| self.new_variable()).collect::<Vec<_>>();
 
@@ -543,7 +544,7 @@ impl FuncBuilder<'_> {
       }
 
       mir::Expr::Array(ref exprs, ref ty) => {
-        let vt = DynamicValueType::for_type(ty);
+        let vt = DynamicValueType::for_type(self.ctx, ty);
         let slot_size = vt.len();
 
         let result_ptr = {
@@ -581,7 +582,7 @@ impl FuncBuilder<'_> {
         result
       }
 
-      mir::Expr::Local(id, ref ty) => use_var(&mut self.builder, &self.locals[&id], ty),
+      mir::Expr::Local(id, ref ty) => use_var(self.ctx, &mut self.builder, &self.locals[&id], ty),
 
       mir::Expr::UserFunction(id, _) => RValue {
         ty:     IRValue::Const(ValueType::UserFunction),
@@ -620,8 +621,10 @@ impl FuncBuilder<'_> {
             for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
               let arg = self.compile_expr(arg);
 
-              let v =
-                arg.to_ir(DynamicValueType::for_type(&arg_ty).param_kind(), &mut self.builder);
+              let v = arg.to_ir(
+                DynamicValueType::for_type(self.ctx, &arg_ty).param_kind(),
+                &mut self.builder,
+              );
               arg_values.push(v);
             }
 
@@ -653,8 +656,10 @@ impl FuncBuilder<'_> {
             for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
               let arg = self.compile_expr(arg);
 
-              let v =
-                arg.to_ir(DynamicValueType::for_type(&arg_ty).param_kind(), &mut self.builder);
+              let v = arg.to_ir(
+                DynamicValueType::for_type(self.ctx, &arg_ty).param_kind(),
+                &mut self.builder,
+              );
               for v in v {
                 use cranelift::codegen::ir::InstBuilderBase;
 
@@ -793,7 +798,7 @@ impl FuncBuilder<'_> {
         let lhs = self.compile_expr(lhs);
         let rhs = self.compile_expr(rhs);
 
-        let ret_dvt = DynamicValueType::for_type(ret_ty);
+        let ret_dvt = DynamicValueType::for_type(self.ctx, ret_ty);
 
         // `lhs` must be an array. Arrays are represented as a `Box<RbArray>`. `RbArray`
         // stores the pointer to its elements at the start, so we can simply read at the
@@ -881,7 +886,7 @@ impl FuncBuilder<'_> {
         let else_block = self.builder.create_block();
         let merge_block = self.builder.create_block();
 
-        let dvt = DynamicValueType::for_type(&ty);
+        let dvt = DynamicValueType::for_type(self.ctx, &ty);
         for _ in 0..dvt.len() {
           self.builder.append_block_param(merge_block, cranelift::codegen::ir::types::I64);
         }
@@ -912,7 +917,7 @@ impl FuncBuilder<'_> {
 
         // Read the value of the if-else by reading the merge block
         // parameter.
-        RValue::from_ir(self.builder.block_params(merge_block), ty)
+        RValue::from_ir(self.ctx, self.builder.block_params(merge_block), ty)
       }
 
       mir::Expr::StructInit(id, ref fields) => {
@@ -923,6 +928,7 @@ impl FuncBuilder<'_> {
           let value = self.compile_expr(*expr);
           let ir = value.to_ir(
             DynamicValueType::for_type(
+              self.ctx,
               &struct_ty.fields.iter().find(|(n, _)| n == field).unwrap().1,
             )
             .param_kind(),
@@ -950,7 +956,7 @@ impl FuncBuilder<'_> {
   ) -> RValue {
     assert_eq!(args.len(), arg_types.len());
 
-    let ret_dvt = DynamicValueType::for_type(ret_ty);
+    let ret_dvt = DynamicValueType::for_type(self.ctx, ret_ty);
 
     let arg_len = args.iter().map(|v| v.len()).sum::<usize>();
 

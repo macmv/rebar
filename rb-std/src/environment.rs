@@ -1,3 +1,4 @@
+use rb_mir::MirContext;
 use rb_typer::{Literal, Type};
 use std::collections::HashMap;
 
@@ -6,6 +7,7 @@ use crate::{OwnedValue, Value};
 pub struct Environment {
   pub static_functions: HashMap<String, Function>,
   pub ids:              Vec<String>,
+  pub mir_ctx:          MirContext,
 }
 
 pub struct Function {
@@ -16,7 +18,13 @@ pub struct Function {
 }
 
 impl Environment {
-  pub fn empty() -> Self { Environment { static_functions: HashMap::new(), ids: vec![] } }
+  pub fn empty() -> Self {
+    Environment {
+      static_functions: HashMap::new(),
+      ids:              vec![],
+      mir_ctx:          MirContext::default(),
+    }
+  }
 
   pub fn typer_env(&self) -> rb_typer::Environment {
     rb_typer::Environment {

@@ -71,7 +71,7 @@ impl RuntimeEnvironment {
 
         let mut args = vec![];
         for ty in f.args.iter() {
-          let dvt = DynamicValueType::for_type(ty);
+          let dvt = DynamicValueType::for_type(&env.env.mir_ctx, ty);
           args.push(parser.value(dvt));
         }
         args
