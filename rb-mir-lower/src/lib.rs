@@ -11,8 +11,8 @@ use rb_typer::{Type, Typer};
 
 /// The environment for lowering to MIR. This stores a tree of namespaces to
 /// native IDs, that are stored directly in the MIR.
-pub struct Env {
-  pub ctx:   MirContext,
+pub struct Env<'a> {
+  pub ctx:   &'a MirContext,
   pub items: HashMap<String, Item>,
 }
 
@@ -21,7 +21,7 @@ pub enum Item {
   UserFunction(UserFunctionId),
 }
 
-impl Env {
+impl Env<'_> {
   pub fn declare_user_function(&mut self, id: u64, function: &hir::Function) {
     self.items.insert(function.name.clone(), Item::UserFunction(UserFunctionId(id)));
   }
@@ -54,7 +54,7 @@ pub fn lower_function(env: &Env, ty: &Typer, hir: &hir::Function) -> mir::Functi
 }
 
 struct Lower<'a> {
-  env: &'a Env,
+  env: &'a Env<'a>,
   ty:  &'a Typer<'a>,
   hir: &'a hir::Function,
   mir: &'a mut mir::Function,

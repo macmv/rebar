@@ -22,7 +22,7 @@ pub struct RuntimeEnvironment {
 }
 
 pub fn eval(src: &str) {
-  let env = RuntimeEnvironment::new(Environment::std());
+  let mut env = RuntimeEnvironment::new(Environment::std());
 
   let mut sources = Sources::new();
   let id = sources.add(Source::new("inline.rbr".into(), src.into()));
@@ -68,11 +68,11 @@ pub fn eval(src: &str) {
   // cranelift IR. Collect all the functions, split them into chunks, and compile
   // them on a thread pool.
 
-  eval_mir(mir_env.ctx, env, functions);
+  eval_mir(env, functions);
 }
 
 pub fn run(
-  env: RuntimeEnvironment,
+  mut env: RuntimeEnvironment,
   sources: Arc<Sources>,
   id: SourceId,
 ) -> Result<(), Vec<Diagnostic>> {
@@ -118,17 +118,16 @@ pub fn run(
   // cranelift IR. Collect all the functions, split them into chunks, and compile
   // them on a thread pool.
 
-  eval_mir(mir_env.ctx, env, functions);
+  eval_mir(env, functions);
 
   Ok(())
 }
 
-fn eval_mir(
-  mir_ctx: rb_mir::MirContext,
-  env: RuntimeEnvironment,
-  functions: Vec<rb_mir::ast::Function>,
-) {
-  let mut jit = rb_jit::JIT::new(mir_ctx, env.intrinsics());
+fn eval_mir(env: RuntimeEnvironment, functions: Vec<rb_mir::ast::Function>) {
+  // NB: We clone the `MirContext`. One copy is stored in a thread local, and the
+  // other is used by the JIT. If we made `jit.eval()` consume the `jit` before
+  // calling the native code, then we could avoid this clone.
+  let mut jit = rb_jit::JIT::new(env.env.mir_ctx.clone(), env.intrinsics());
 
   for func in &functions {
     jit.declare_function(func);
@@ -146,13 +145,9 @@ fn eval_mir(
 }
 
 impl RuntimeEnvironment {
-  fn build(&self, hir: &rb_hir::ast::SourceFile) -> (rb_typer::Environment, rb_mir_lower::Env) {
+  fn build(&mut self, hir: &rb_hir::ast::SourceFile) -> (rb_typer::Environment, rb_mir_lower::Env) {
     let mut typer_env = self.env.typer_env();
-    let mut mir_env = self.mir_env();
 
-    for (id, f) in hir.functions.values().enumerate() {
-      mir_env.declare_user_function(id as u64, f);
-    }
     for (id, s) in hir.structs.values().enumerate() {
       let id = rb_mir::ast::StructId(id as u64);
 
@@ -160,8 +155,8 @@ impl RuntimeEnvironment {
         s.name.clone(),
         s.fields.iter().map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te))).collect(),
       );
-      mir_env.ctx.struct_paths.insert(s.name.clone(), id);
-      mir_env.ctx.structs.insert(
+      self.env.mir_ctx.struct_paths.insert(s.name.clone(), id);
+      self.env.mir_ctx.structs.insert(
         id,
         rb_mir::Struct {
           fields: s
@@ -173,12 +168,17 @@ impl RuntimeEnvironment {
       );
     }
 
+    let mut mir_env = self.mir_env();
+    for (id, f) in hir.functions.values().enumerate() {
+      mir_env.declare_user_function(id as u64, f);
+    }
+
     (typer_env, mir_env)
   }
 
   fn mir_env(&self) -> rb_mir_lower::Env {
     rb_mir_lower::Env {
-      ctx:   rb_mir::MirContext::default(),
+      ctx:   &self.env.mir_ctx,
       items: self
         .env
         .ids
