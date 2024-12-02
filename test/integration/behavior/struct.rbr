@@ -1,0 +1,7 @@
+struct Foo {
+  a: int
+  b: int
+}
+
+let foo = Foo { a: 1, b: 2 }
+println("#{foo}")
