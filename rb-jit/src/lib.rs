@@ -381,24 +381,6 @@ pub enum Error {
   MissingExpr,
 }
 
-// FIXME: Wrap `InstBuilder` so this is easier.
-fn use_var(ctx: &MirContext, builder: &mut FunctionBuilder, var: &[Variable], ty: &Type) -> RValue {
-  let dvt = DynamicValueType::for_type(ctx, ty);
-  assert_eq!(var.len() as u32, dvt.len(ctx), "variable length mismatch for type {ty:?}");
-
-  match dvt {
-    DynamicValueType::Const(ty) => RValue {
-      ty:     IRValue::Const(ty),
-      values: var.iter().map(|v| IRValue::Dyn(builder.use_var(*v))).collect::<Vec<_>>(),
-    },
-
-    DynamicValueType::Union(_) => RValue {
-      ty:     IRValue::Dyn(builder.use_var(var[0])),
-      values: var[1..].iter().map(|v| IRValue::Dyn(builder.use_var(*v))).collect::<Vec<_>>(),
-    },
-  }
-}
-
 impl FuncBuilder<'_> {
   fn new_variable(&mut self) -> Variable {
     let var = Variable::new(self.next_variable);
@@ -582,7 +564,27 @@ impl FuncBuilder<'_> {
         result
       }
 
-      mir::Expr::Local(id, ref ty) => use_var(self.ctx, &mut self.builder, &self.locals[&id], ty),
+      mir::Expr::Local(id, ref ty) => {
+        let var = &self.locals[&id];
+
+        let dvt = DynamicValueType::for_type(self.ctx, ty);
+        assert_eq!(var.len() as u32, dvt.len(self.ctx), "variable length mismatch for type {ty:?}");
+
+        match dvt {
+          DynamicValueType::Const(ty) => RValue {
+            ty:     IRValue::Const(ty),
+            values: var.iter().map(|v| IRValue::Dyn(self.builder.use_var(*v))).collect::<Vec<_>>(),
+          },
+
+          DynamicValueType::Union(_) => RValue {
+            ty:     IRValue::Dyn(self.builder.use_var(var[0])),
+            values: var[1..]
+              .iter()
+              .map(|v| IRValue::Dyn(self.builder.use_var(*v)))
+              .collect::<Vec<_>>(),
+          },
+        }
+      }
 
       mir::Expr::UserFunction(id, _) => RValue {
         ty:     IRValue::Const(ValueType::UserFunction),
