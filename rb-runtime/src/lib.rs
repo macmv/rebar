@@ -160,7 +160,7 @@ impl RuntimeEnvironment {
         s.name.clone(),
         s.fields.iter().map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te))).collect(),
       );
-      mir_env.structs.insert(s.name.clone(), id);
+      mir_env.ctx.struct_paths.insert(s.name.clone(), id);
       mir_env.ctx.structs.insert(
         id,
         rb_mir::Struct {
@@ -178,8 +178,8 @@ impl RuntimeEnvironment {
 
   fn mir_env(&self) -> rb_mir_lower::Env {
     rb_mir_lower::Env {
-      ctx:     rb_mir::MirContext::default(),
-      items:   self
+      ctx:   rb_mir::MirContext::default(),
+      items: self
         .env
         .ids
         .iter()
@@ -188,7 +188,6 @@ impl RuntimeEnvironment {
           (v.clone(), rb_mir_lower::Item::NativeFunction(rb_mir::ast::NativeFunctionId(k as u64)))
         })
         .collect(),
-      structs: Default::default(),
     }
   }
 }

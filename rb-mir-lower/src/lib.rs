@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use rb_hir::ast as hir;
 use rb_mir::{
-  ast::{self as mir, StructId, UserFunctionId},
+  ast::{self as mir, UserFunctionId},
   MirContext,
 };
 use rb_typer::{Type, Typer};
@@ -12,9 +12,8 @@ use rb_typer::{Type, Typer};
 /// The environment for lowering to MIR. This stores a tree of namespaces to
 /// native IDs, that are stored directly in the MIR.
 pub struct Env {
-  pub ctx:     MirContext,
-  pub items:   HashMap<String, Item>,
-  pub structs: HashMap<String, StructId>,
+  pub ctx:   MirContext,
+  pub items: HashMap<String, Item>,
 }
 
 pub enum Item {
@@ -211,7 +210,7 @@ impl Lower<'_> {
       }
 
       hir::Expr::StructInit(ref path, ref fields) => {
-        let strct = self.env.structs[path].clone();
+        let strct = self.env.ctx.struct_paths[path].clone();
 
         let fields =
           fields.iter().map(|(name, expr)| (name.clone(), self.lower_expr(*expr))).collect();
