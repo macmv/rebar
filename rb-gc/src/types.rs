@@ -250,6 +250,7 @@ mod tagged_ptr {
   #![cfg_attr(not(miri), allow(unstable_name_collisions))]
 
   #[cfg(not(miri))]
+  #[allow(unused_imports)]
   use sptr::Strict as _;
 
   use core::cell::Cell;
