@@ -1,5 +1,6 @@
 use std::num::NonZero;
 
+use rb_mir::ast::StructId;
 use rb_typer::{Literal, Type};
 
 mod arg;
@@ -39,6 +40,8 @@ pub enum ValueType {
   /// specific operator, that can lookup the static type of the array
   /// directly).
   Array,
+
+  Struct(StructId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -77,6 +80,8 @@ impl ValueType {
       ValueType::UserFunction => 4,
       ValueType::String => 5,
       ValueType::Array => 6,
+
+      ValueType::Struct(id) => -(id.0 as i64),
     }
   }
 }
@@ -93,6 +98,9 @@ impl TryFrom<i64> for ValueType {
       4 => Ok(ValueType::UserFunction),
       5 => Ok(ValueType::String),
       6 => Ok(ValueType::Array),
+
+      v if v < 0 => Ok(ValueType::Struct(StructId(-v as u64))),
+
       _ => Err(()),
     }
   }
@@ -131,6 +139,8 @@ impl ValueType {
 
       ValueType::Function => 1,
       ValueType::UserFunction => 1,
+
+      ValueType::Struct(_) => todo!("need MirContext"),
     }
   }
 }
