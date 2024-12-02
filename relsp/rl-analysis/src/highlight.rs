@@ -179,6 +179,12 @@ impl Highlighter<'_> {
           self.visit_expr(els);
         }
       }
+
+      hir::Expr::StructInit(_, ref fields) => {
+        for (_, expr) in fields {
+          self.visit_expr(*expr);
+        }
+      }
     }
   }
 
