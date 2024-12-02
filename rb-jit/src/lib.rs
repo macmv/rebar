@@ -447,6 +447,9 @@ impl FuncBuilder<'_> {
 
       // TODO: uhhhhhhhhhh
       Type::Function(..) => false,
+
+      // Also needs MIR-context.
+      Type::Struct(_) => false,
     }
   }
 

@@ -125,6 +125,8 @@ impl<'a> Typer<'a> {
       }
 
       VType::Union(tys) => Type::Union(tys.iter().map(|ty| self.lower_type(ty)).collect()),
+
+      VType::Struct(path) => Type::Struct(path.clone()),
     }
   }
 
@@ -344,6 +346,23 @@ impl<'a> Typer<'a> {
         } else {
           then_ty
         }
+      }
+
+      hir::Expr::StructInit(ref path, ref fields) => {
+        let strct =
+          self.env.structs.get(path).unwrap_or_else(|| panic!("no struct at path {path:?}"));
+
+        for &(ref k, v) in fields {
+          let ty = self.type_expr(v);
+          let Some(field) = strct.iter().find(|(n, _)| n == k) else {
+            emit!(format!("field {k:?} not found in struct {path:?}"), self.span(v));
+            continue;
+          };
+
+          self.constrain(&ty, &VType::from(field.1.clone()), self.span(v));
+        }
+
+        VType::Struct(path.clone())
       }
 
       ref v => unimplemented!("type_expr {v:?}"),

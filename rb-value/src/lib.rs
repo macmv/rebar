@@ -168,6 +168,9 @@ impl DynamicValueType {
           .unwrap(),
       ),
       Type::Function(..) => todo!("function types to values"),
+
+      // This requires some type of MIR-context to resolve this.
+      Type::Struct(_) => todo!("struct types to values"),
     }
   }
 }

@@ -11,11 +11,14 @@ pub enum Type {
 
   Function(Vec<Type>, Box<Type>),
   Union(Vec<Type>),
+
+  Struct(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
-  pub names: HashMap<String, Type>,
+  pub names:   HashMap<String, Type>,
+  pub structs: HashMap<String, Vec<(String, Type)>>,
 }
 
 /// A type with variables in it. Internal to the typer.
@@ -42,6 +45,9 @@ pub enum VType {
 
   // TODO: Get this out of the public API.
   Var(VarId),
+
+  // FIXME: Replace with resolved Path.
+  Struct(String),
 }
 
 impl From<Type> for VType {
@@ -53,6 +59,7 @@ impl From<Type> for VType {
         VType::Function(args.into_iter().map(Into::into).collect(), Box::new((*ret).into()))
       }
       Type::Union(types) => VType::Union(types.into_iter().map(Into::into).collect()),
+      Type::Struct(name) => VType::Struct(name),
     }
   }
 }

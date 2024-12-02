@@ -20,11 +20,12 @@ impl Environment {
 
   pub fn typer_env(&self) -> rb_typer::Environment {
     rb_typer::Environment {
-      names: self
+      names:   self
         .static_functions
         .iter()
         .map(|(k, v)| (k.clone(), Type::Function(v.args.clone(), Box::new(v.ret.clone()))))
         .collect(),
+      structs: HashMap::new(),
     }
   }
 
