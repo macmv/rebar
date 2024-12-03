@@ -361,6 +361,7 @@ fn type_expr(source: SourceId, cst: &cst::Type) -> hir::TypeExpr {
           "nil" => hir::TypeExpr::Nil,
           "bool" => hir::TypeExpr::Bool,
           "int" => hir::TypeExpr::Int,
+          "str" => hir::TypeExpr::Str,
           _ => {
             emit!(
               "unknown type {name}",

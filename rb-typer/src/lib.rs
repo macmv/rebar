@@ -43,6 +43,7 @@ pub fn type_of_type_expr(te: &hir::TypeExpr) -> Type {
     hir::TypeExpr::Nil => Type::Literal(Literal::Unit),
     hir::TypeExpr::Bool => Type::Literal(Literal::Bool),
     hir::TypeExpr::Int => Type::Literal(Literal::Int),
+    hir::TypeExpr::Str => Type::Literal(Literal::String),
     hir::TypeExpr::Union(tys) => Type::Union(tys.iter().map(|ty| type_of_type_expr(&ty)).collect()),
   }
 }

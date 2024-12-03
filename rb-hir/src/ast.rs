@@ -68,6 +68,7 @@ pub enum TypeExpr {
   Nil,
   Bool,
   Int,
+  Str,
   Union(Vec<TypeExpr>),
 }
 
