@@ -1,7 +1,7 @@
 struct Foo {
   a: int
-  b: int
+  b: str
 }
 
-let foo = Foo { a: 1, b: 2 }
+let foo = Foo { a: 1, b: "hi" }
 println("#{foo}")

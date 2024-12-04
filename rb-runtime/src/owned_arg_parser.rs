@@ -1,20 +1,19 @@
-use std::marker::PhantomData;
-
 use rb_gc::Gc;
-use rb_value::{RebarArgs, ValueType};
+use rb_mir::MirContext;
+use rb_value::{DynamicValueType, RebarArgs, ValueType};
 
-use crate::{GcArray, GcValue};
+use crate::{gc_value::GcStruct, GcArray, GcValue};
 
 pub struct OwnedRebarArgsParser<'a> {
-  args:   *const RebarArgs,
-  offset: usize,
+  ctx: &'a MirContext,
 
-  _phantom: PhantomData<&'a ()>,
+  args:              *const RebarArgs,
+  pub(crate) offset: usize,
 }
 
 impl<'a> OwnedRebarArgsParser<'a> {
-  pub fn new(args: *const RebarArgs) -> Self {
-    OwnedRebarArgsParser { args, offset: 0, _phantom: PhantomData }
+  pub fn new(ctx: &'a MirContext, args: *const RebarArgs) -> Self {
+    OwnedRebarArgsParser { ctx, args, offset: 0 }
   }
 
   unsafe fn next(&mut self) -> i64 {
@@ -23,7 +22,7 @@ impl<'a> OwnedRebarArgsParser<'a> {
     v
   }
 
-  unsafe fn value_owned(&mut self, vt: ValueType) -> GcValue {
+  pub(crate) unsafe fn value_owned(&mut self, vt: ValueType) -> GcValue {
     match vt {
       ValueType::String => {
         let ptr = self.next();
@@ -35,6 +34,33 @@ impl<'a> OwnedRebarArgsParser<'a> {
 
         GcValue::Array(Gc::from_ptr(ptr as *const GcArray))
       }
+
+      ValueType::Struct(id) => {
+        let strct = &self.ctx.structs[&id];
+
+        let ptr = (&*self.args).arg(self.offset) as *const RebarArgs;
+
+        for (_, ty) in strct.fields.iter() {
+          match DynamicValueType::for_type(self.ctx, ty) {
+            DynamicValueType::Const(vt) => match vt {
+              ValueType::Int => self.offset += 1,
+
+              ValueType::String | ValueType::Array => {
+                self.value_owned(vt);
+              }
+
+              _ => todo!("skip const value: {vt:?}"),
+            },
+            DynamicValueType::Union(len) => {
+              self.offset += 1; // Type slot
+              self.offset += len as usize; // Ignore the whole value.
+            }
+          }
+        }
+
+        GcValue::Struct(GcStruct { ctx: std::mem::transmute(self.ctx), strct: strct.clone(), ptr })
+      }
+
       _ => unreachable!("not an owned value: {vt:?}"),
     }
   }

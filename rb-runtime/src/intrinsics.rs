@@ -140,14 +140,15 @@ impl RuntimeEnvironment {
 
   fn track(args: *const RebarArgs) {
     ENV.with(|env| {
+      let mut env = env.borrow_mut();
+      let env = env.as_mut().unwrap();
+
       let value = unsafe {
-        let mut parser = OwnedRebarArgsParser::new(args);
+        let mut parser = OwnedRebarArgsParser::new(&env.env.mir_ctx, args);
         parser.value_owned_unsized()
       };
 
-      let mut env = env.borrow_mut();
-
-      let (m, root) = env.as_mut().unwrap().gc.mutate_root();
+      let (m, root) = env.gc.mutate_root();
       let tid = 3; // FIXME: Use ThreadId.
 
       let thread = root.threads.entry(tid).or_insert_with(|| crate::gc::Stack::default());

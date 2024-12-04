@@ -1,9 +1,11 @@
-use std::{cell::UnsafeCell, mem::ManuallyDrop};
+use std::{cell::UnsafeCell, fmt, mem::ManuallyDrop};
 
 use rb_gc::{Collect, Gc};
 use rb_mir::MirContext;
 use rb_std::{RbSlice, Value};
-use rb_value::{DynamicValueType, RbArray};
+use rb_value::{DynamicValueType, RbArray, RebarArgs, ValueType};
+
+use crate::owned_arg_parser::OwnedRebarArgsParser;
 
 /// An owned, garbage collected value. This is created from the rebar values, so
 /// it almost always shows up as a `ManuallyDrop<GcValue>`, as we need to
@@ -15,6 +17,7 @@ use rb_value::{DynamicValueType, RbArray};
 pub enum GcValue {
   String(Gc<String>),
   Array(Gc<GcArray>),
+  Struct(GcStruct),
 }
 
 // SAFETY: Must be `#[repr(C)]`, so that rebar can access fields in it. Rebar
@@ -25,6 +28,17 @@ pub enum GcValue {
 pub struct GcArray {
   pub(crate) arr: UnsafeCell<RbArray>,
   pub(crate) vt:  DynamicValueType,
+}
+
+// This type is never created by rebar. Instead, `ptr` is a pointer to the
+// location on the stack where this struct lives. Once the rebar function
+// returns, `ptr` will be invalid. Returning from a function will pop the
+// GcStruct off the stack, and destroy the invalid pointer.
+pub struct GcStruct {
+  // FIXME: Needs a better lifetime. For the purpose of GC values, its effectively static.
+  pub(crate) ctx:   &'static MirContext,
+  pub(crate) strct: rb_mir::Struct,
+  pub(crate) ptr:   *const RebarArgs,
 }
 
 impl GcValue {
@@ -59,11 +73,22 @@ impl GcArray {
   }
 }
 
+impl fmt::Debug for GcStruct {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.debug_struct("GcStruct").field("ptr", &self.ptr).finish()
+  }
+}
+
+impl PartialEq for GcStruct {
+  fn eq(&self, other: &Self) -> bool { self.ptr == other.ptr }
+}
+
 unsafe impl Collect for GcValue {
   fn trace(&self, cc: &rb_gc::Collection) {
     match self {
       GcValue::String(s) => s.trace(cc),
       GcValue::Array(arr) => arr.trace(cc),
+      GcValue::Struct(s) => s.trace(cc),
     }
   }
 }
@@ -97,5 +122,29 @@ impl Drop for GcArray {
         }
       }
     });
+  }
+}
+
+unsafe impl Collect for GcStruct {
+  fn trace(&self, cc: &rb_gc::Collection) {
+    let mut parser = OwnedRebarArgsParser::new(self.ctx, self.ptr);
+
+    for (_, ty) in self.strct.fields.iter() {
+      match DynamicValueType::for_type(self.ctx, ty) {
+        DynamicValueType::Const(vt) => match vt {
+          ValueType::Int => parser.offset += 1,
+
+          ValueType::String | ValueType::Array => unsafe {
+            parser.value_owned(vt).trace(cc);
+          },
+
+          _ => todo!("skip const value: {vt:?}"),
+        },
+        // FIXME: Consume the rest of `len` bytes.
+        DynamicValueType::Union(_len) => unsafe {
+          parser.value_owned_unsized().trace(cc);
+        },
+      }
+    }
   }
 }

@@ -441,8 +441,10 @@ impl FuncBuilder<'_> {
       // TODO: uhhhhhhhhhh
       Type::Function(..) => false,
 
-      // Also needs MIR-context.
-      Type::Struct(_) => false,
+      Type::Struct(id) => {
+        let id = self.ctx.struct_paths[id];
+        self.ctx.structs[&id].fields.iter().any(|(_, ty)| self.type_needs_gc(ty))
+      }
     }
   }
 
