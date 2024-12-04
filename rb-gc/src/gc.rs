@@ -96,7 +96,7 @@ impl<T: 'static> Gc<T> {
   /// # fn main() {
   /// # rb_gc::arena::rootless_mutate(|mc| {
   /// struct MyStaticStruct;
-  /// let p = Gc::new(mc, Static(MyStaticStruct));
+  /// let p = Gc::new::<()>(mc, Static(MyStaticStruct));
   /// // This is allowed because `Static` is `#[repr(transparent)]`
   /// let p: Gc<MyStaticStruct> = unsafe { Gc::cast(p) };
   /// # });

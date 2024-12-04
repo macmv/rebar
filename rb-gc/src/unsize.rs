@@ -16,16 +16,16 @@ use crate::{types::GcBoxInner, Gc, GcWeak};
 /// # rb_gc::arena::rootless_mutate(|mc| {
 /// // Unsizing arrays to slices.
 /// let mut slice;
-/// slice = unsize!(Gc::new(mc, [1, 2]) => [u8]);
+/// slice = unsize!(Gc::new::<()>(mc, [1, 2]) => [u8]);
 /// assert_eq!(slice.len(), 2);
-/// slice = unsize!(Gc::new(mc, [42; 4]) => [u8]);
+/// slice = unsize!(Gc::new::<()>(mc, [42; 4]) => [u8]);
 /// assert_eq!(slice.len(), 4);
 ///
 /// // Unsizing values to trait objects.
 /// let mut display;
-/// display = unsize!(Gc::new(mc, "Hello world!".to_owned()) => dyn Display);
+/// display = unsize!(Gc::new::<()>(mc, "Hello world!".to_owned()) => dyn Display);
 /// assert_eq!(display.to_string(), "Hello world!");
-/// display = unsize!(Gc::new(mc, 123456) => dyn Display);
+/// display = unsize!(Gc::new::<()>(mc, 123456) => dyn Display);
 /// assert_eq!(display.to_string(), "123456");
 /// # })
 /// # }
