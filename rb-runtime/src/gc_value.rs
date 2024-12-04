@@ -1,6 +1,7 @@
 use std::mem::ManuallyDrop;
 
 use rb_gc::{Collect, Gc};
+use rb_mir::MirContext;
 use rb_std::{RbArray, RbStruct, Value};
 
 /// An owned, garbage collected value. This is created from the rebar values, so
@@ -42,31 +43,31 @@ impl GcValue<'_> {
   }
 }
 
-unsafe impl Collect for GcValue<'_> {
-  fn trace(&self, cc: &rb_gc::Collection) {
+unsafe impl Collect<MirContext> for GcValue<'_> {
+  fn trace(&self, ctx: &MirContext, cc: &rb_gc::Collection) {
     match self {
-      GcValue::String(s) => s.trace(cc),
-      GcValue::Array(arr) => arr.trace(cc),
-      GcValue::Struct(s) => s.trace(cc),
+      GcValue::String(s) => s.trace(ctx, cc),
+      GcValue::Array(arr) => arr.trace(ctx, cc),
+      GcValue::Struct(s) => s.trace(ctx, cc),
     }
   }
 }
 
-unsafe impl Collect for GcArray<'_> {
-  fn trace(&self, cc: &rb_gc::Collection) {
+unsafe impl Collect<MirContext> for GcArray<'_> {
+  fn trace(&self, ctx: &MirContext, cc: &rb_gc::Collection) {
     for value in self.0.as_slice().iter() {
       if let Some(v) = GcValue::from_value(&value) {
-        v.trace(cc);
+        v.trace(ctx, cc);
       }
     }
   }
 }
 
-unsafe impl Collect for GcStruct<'_> {
-  fn trace(&self, cc: &rb_gc::Collection) {
+unsafe impl Collect<MirContext> for GcStruct<'_> {
+  fn trace(&self, ctx: &MirContext, cc: &rb_gc::Collection) {
     for value in self.0.fields() {
       if let Some(v) = GcValue::from_value(&value) {
-        v.trace(cc);
+        v.trace(ctx, cc);
       }
     }
   }

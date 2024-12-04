@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use rb_gc::{lock::GcRefLock, Arena, Collect, Collection, Gc};
+use rb_mir::MirContext;
 
 use crate::GcValue;
 
@@ -11,8 +12,8 @@ pub struct GcRoot<'ctx> {
   pub threads: HashMap<u64, Stack<'ctx>>,
 }
 
-unsafe impl Collect for GcRoot<'_> {
-  fn trace(&self, cc: &Collection) { self.threads.trace(cc); }
+unsafe impl Collect<MirContext> for GcRoot<'_> {
+  fn trace(&self, ctx: &MirContext, cc: &Collection) { self.threads.trace(ctx, cc); }
 }
 
 pub type GcArena =
@@ -23,8 +24,8 @@ pub struct Stack<'ctx> {
   pub frames: Vec<GcRefLock<Frame<'ctx>>>,
 }
 
-unsafe impl Collect for Stack<'_> {
-  fn trace(&self, cc: &Collection) { self.frames.trace(cc); }
+unsafe impl Collect<MirContext> for Stack<'_> {
+  fn trace(&self, ctx: &MirContext, cc: &Collection) { self.frames.trace(ctx, cc); }
 }
 
 #[derive(Default)]
@@ -32,8 +33,8 @@ pub struct Frame<'ctx> {
   pub values: Vec<Gc<GcValue<'ctx>>>,
 }
 
-unsafe impl Collect for Frame<'_> {
-  fn trace(&self, cc: &Collection) { self.values.trace(cc); }
+unsafe impl Collect<MirContext> for Frame<'_> {
+  fn trace(&self, ctx: &MirContext, cc: &Collection) { self.values.trace(ctx, cc); }
 }
 
 #[test]
@@ -54,7 +55,7 @@ fn gc_works() {
 
   // When a value like `Value::String` is created, it's inserted into the current
   // frame (note that we don't need mutable access here).
-  let v = GcValue::String(Gc::new(m, "hello".into()));
+  let v = GcValue::String(Gc::new::<()>(m, "hello".into()));
   thread.frames.last().unwrap().borrow_mut(m).values.push(Gc::new(m, v));
 
   // When a function returns, this is called.

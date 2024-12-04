@@ -90,7 +90,7 @@ impl RuntimeEnvironment {
           Type::Literal(Literal::String) => {
             let mut str = String::from(ret_value.as_str());
             str.shrink_to_fit();
-            let gc: Gc<String> = Gc::new(env.gc.mutate(), str);
+            let gc: Gc<String> = Gc::new::<()>(env.gc.mutate(), str);
 
             ret.ret(0, Gc::as_ptr(gc) as i64);
 
@@ -132,9 +132,10 @@ impl RuntimeEnvironment {
   fn gc_collect() {
     ENV.with(|env| {
       let mut env = env.borrow_mut();
+      let env = env.as_mut().unwrap();
 
       // TODO: Use `collect_debt` instead, but while testing this is more effective.
-      env.as_mut().unwrap().gc.collect_all();
+      env.gc.collect_all(&env.env.mir_ctx);
     });
   }
 
@@ -188,7 +189,7 @@ impl RuntimeEnvironment {
       let env = env.borrow();
 
       let m = env.as_ref().unwrap().gc.mutate();
-      Gc::as_ptr(Gc::new(m, String::new()))
+      Gc::as_ptr(Gc::new::<()>(m, String::new()))
     })
   }
 
