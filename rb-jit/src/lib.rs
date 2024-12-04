@@ -19,7 +19,6 @@ mod ir_value;
 mod r_value;
 mod slot;
 
-use ir_value::IRValue;
 use r_value::RValue;
 
 use rb_value::{DynamicValueType, IntrinsicImpls, ParamKind, ValueType};
@@ -398,8 +397,7 @@ impl FuncBuilder<'_> {
       mir::Stmt::Expr(expr) => self.compile_expr(expr),
       mir::Stmt::Let(id, ref ty, expr) => {
         let value = self.compile_expr(expr);
-        let ir = value
-          .to_ir(DynamicValueType::for_type(self.ctx, &ty).param_kind(self.ctx), &mut self.builder);
+        let ir = value.to_ir(DynamicValueType::for_type(self.ctx, &ty).param_kind(self.ctx), self);
 
         let slot = Slot::<Variable>::new(self, ir.len());
 
@@ -462,7 +460,7 @@ impl FuncBuilder<'_> {
 
           self.builder.ins().call(self.intrinsics.string_append_str, &[str, ptr, len]);
 
-          RValue { ty: IRValue::Const(ValueType::String), values: vec![IRValue::from(str)] }
+          RValue::TypedDyn(ValueType::String, Slot::Single(str))
         }
       },
 
@@ -511,10 +509,7 @@ impl FuncBuilder<'_> {
           };
         }
 
-        let result =
-          RValue { ty: IRValue::Const(ValueType::String), values: vec![IRValue::Dyn(str)] };
-
-        result
+        RValue::TypedDyn(ValueType::String, Slot::Single(str))
       }
 
       mir::Expr::Array(ref exprs, ref ty) => {
@@ -536,7 +531,7 @@ impl FuncBuilder<'_> {
 
         for (i, expr) in exprs.iter().enumerate() {
           let to_append = self.compile_expr(*expr);
-          let ir = to_append.to_ir(vt.param_kind(self.ctx), &mut self.builder);
+          let ir = to_append.to_ir(vt.param_kind(self.ctx), self);
           assert_eq!(ir.len(), slot_size as usize);
 
           let offset = self.builder.ins().iconst(ir::types::I64, i as i64 * slot_size as i64 * 8);
@@ -545,12 +540,7 @@ impl FuncBuilder<'_> {
           ir.copy_to(self, element_ptr);
         }
 
-        let result = RValue {
-          ty:     IRValue::Const(ValueType::Array),
-          values: vec![IRValue::Dyn(result_ptr)],
-        };
-
-        result
+        RValue::TypedDyn(ValueType::Array, Slot::Single(result_ptr))
       }
 
       mir::Expr::Local(id, ref ty) => {
@@ -560,52 +550,26 @@ impl FuncBuilder<'_> {
         assert_eq!(var.len() as u32, dvt.len(self.ctx), "variable length mismatch for type {ty:?}");
 
         match dvt {
-          DynamicValueType::Const(ty) => RValue {
-            ty:     IRValue::Const(ty),
-            values: match var {
-              Slot::Empty => vec![],
-              Slot::Single(v) => vec![IRValue::Dyn(self.builder.use_var(*v))],
-              Slot::Multiple(len, slot) => (0..*len)
-                .map(|i| {
-                  IRValue::Dyn(self.builder.ins().stack_load(
-                    ir::types::I64,
-                    slot.clone(),
-                    i as i32 * 8,
-                  ))
-                })
-                .collect::<Vec<_>>(),
+          DynamicValueType::Const(ty) => RValue::TypedDyn(
+            ty,
+            match var {
+              Slot::Empty => Slot::Empty,
+              Slot::Single(v) => Slot::Single(self.builder.use_var(*v)),
+              Slot::Multiple(len, slot) => Slot::Multiple(*len, slot.clone()),
             },
-          },
+          ),
 
-          DynamicValueType::Union(_) => RValue {
-            ty:     IRValue::Dyn(match var {
-              Slot::Empty => unreachable!(),
-              Slot::Single(v) => self.builder.use_var(*v),
-              Slot::Multiple(_, slot) => {
-                self.builder.ins().stack_load(ir::types::I64, slot.clone(), 0)
-              }
-            }),
-            values: match var {
-              Slot::Empty => unreachable!(),
-              Slot::Single(_) => vec![],
-              Slot::Multiple(len, slot) => (1..*len)
-                .map(|i| {
-                  IRValue::Dyn(self.builder.ins().stack_load(
-                    ir::types::I64,
-                    slot.clone(),
-                    i as i32 * 8,
-                  ))
-                })
-                .collect::<Vec<_>>(),
-            },
-          },
+          DynamicValueType::Union(_) => RValue::Untyped(match var {
+            Slot::Empty => Slot::Empty,
+            Slot::Single(v) => Slot::Single(self.builder.use_var(*v)),
+            Slot::Multiple(len, slot) => Slot::Multiple(*len, slot.clone()),
+          }),
         }
       }
 
-      mir::Expr::UserFunction(id, _) => RValue {
-        ty:     IRValue::Const(ValueType::UserFunction),
-        values: vec![IRValue::Const(id.0 as i64)],
-      },
+      mir::Expr::UserFunction(id, _) => {
+        RValue::TypedConst(ValueType::UserFunction, vec![id.0 as i64])
+      }
 
       mir::Expr::Native(ref id, _) => {
         RValue::function(self.builder.ins().iconst(ir::types::I64, id.0 as i64))
@@ -627,7 +591,7 @@ impl FuncBuilder<'_> {
       mir::Expr::Call(lhs, ref sig_ty, ref args) => {
         let lhs = self.compile_expr(lhs);
 
-        match lhs.ty.as_const() {
+        match lhs.const_ty() {
           Some(ValueType::Function) => {
             let arg_types = match sig_ty {
               Type::Function(ref args, _) => args,
@@ -639,14 +603,12 @@ impl FuncBuilder<'_> {
             for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
               let arg = self.compile_expr(arg);
 
-              let v = arg.to_ir(
-                DynamicValueType::for_type(self.ctx, &arg_ty).param_kind(self.ctx),
-                &mut self.builder,
-              );
+              let v =
+                arg.to_ir(DynamicValueType::for_type(self.ctx, &arg_ty).param_kind(self.ctx), self);
               arg_values.push(v);
             }
 
-            let native = lhs.values[0].to_ir(&mut self.builder);
+            let native = lhs.unwrap_single(self);
 
             let ret_ty = match *sig_ty {
               Type::Function(_, ref ret) => ret,
@@ -657,8 +619,8 @@ impl FuncBuilder<'_> {
           }
 
           Some(ValueType::UserFunction) => {
-            let id = match lhs.values[0] {
-              IRValue::Const(v) => UserFunctionId(v as u64),
+            let id = match lhs {
+              RValue::TypedConst(_, v) => UserFunctionId(v[0] as u64),
               _ => todo!(),
             };
 
@@ -674,10 +636,8 @@ impl FuncBuilder<'_> {
             for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
               let arg = self.compile_expr(arg);
 
-              let slot = arg.to_ir(
-                DynamicValueType::for_type(self.ctx, &arg_ty).param_kind(self.ctx),
-                &mut self.builder,
-              );
+              let slot =
+                arg.to_ir(DynamicValueType::for_type(self.ctx, &arg_ty).param_kind(self.ctx), self);
               match slot {
                 Slot::Empty => {}
                 Slot::Single(v) => {
@@ -722,7 +682,7 @@ impl FuncBuilder<'_> {
 
       mir::Expr::Unary(lhs, ref op, _) => {
         let lhs = self.compile_expr(lhs);
-        let lhs = lhs.values[0].to_ir(&mut self.builder); // FIXME: Don't just grab index 0.
+        let lhs = lhs.unwrap_single(self);
 
         let res = match op {
           mir::UnaryOp::Neg => RValue::int(self.builder.ins().ineg(lhs)),
@@ -742,8 +702,8 @@ impl FuncBuilder<'_> {
           | mir::BinaryOp::Mul
           | mir::BinaryOp::Div
           | mir::BinaryOp::Mod => {
-            let lhs = lhs.values[0].to_ir(&mut self.builder);
-            let rhs = rhs.values[0].to_ir(&mut self.builder);
+            let lhs = lhs.unwrap_single(self);
+            let rhs = rhs.unwrap_single(self);
 
             let res = match op {
               mir::BinaryOp::Add => self.builder.ins().iadd(lhs, rhs),
@@ -757,14 +717,14 @@ impl FuncBuilder<'_> {
             RValue::int(res)
           }
 
-          mir::BinaryOp::Eq | mir::BinaryOp::Neq => match (lhs.ty.as_const(), rhs.ty.as_const()) {
+          mir::BinaryOp::Eq | mir::BinaryOp::Neq => match (lhs.const_ty(), rhs.const_ty()) {
             (Some(ValueType::Nil), Some(ValueType::Nil)) => {
               let tru = self.builder.ins().iconst(ir::types::I8, 1);
               RValue::bool(tru)
             }
             (Some(ValueType::Bool), Some(ValueType::Bool)) => {
-              let l = lhs.values[0].to_ir(&mut self.builder);
-              let r = rhs.values[0].to_ir(&mut self.builder);
+              let l = lhs.unwrap_single(self);
+              let r = rhs.unwrap_single(self);
 
               let res = match op {
                 mir::BinaryOp::Eq => self.builder.ins().icmp(IntCC::Equal, l, r),
@@ -775,8 +735,8 @@ impl FuncBuilder<'_> {
               RValue::bool(res)
             }
             (Some(ValueType::Int), Some(ValueType::Int)) => {
-              let l = lhs.values[0].to_ir(&mut self.builder);
-              let r = rhs.values[0].to_ir(&mut self.builder);
+              let l = lhs.unwrap_single(self);
+              let r = rhs.unwrap_single(self);
 
               let res = match op {
                 mir::BinaryOp::Eq => self.builder.ins().icmp(IntCC::Equal, l, r),
@@ -787,7 +747,7 @@ impl FuncBuilder<'_> {
               RValue::bool(res)
             }
 
-            (Some(a), Some(b)) if a != b => RValue::bool(false as i64),
+            (Some(a), Some(b)) if a != b => RValue::const_bool(false),
 
             // TODO: Theres a couple more branches we could optimize for here, but the dynamic path
             // is nice to fall back on.
@@ -802,8 +762,8 @@ impl FuncBuilder<'_> {
           },
 
           _ => {
-            let lhs = lhs.values[0].to_ir(&mut self.builder);
-            let rhs = rhs.values[0].to_ir(&mut self.builder);
+            let lhs = lhs.unwrap_single(self);
+            let rhs = rhs.unwrap_single(self);
 
             // All numbers are signed.
             let res = match op {
@@ -836,58 +796,27 @@ impl FuncBuilder<'_> {
         // pointer by the integer `rhs` times the slot_size (which can be found by
         // looking at `ret_ty`).
 
-        let array_ptr = lhs.values[0].to_ir(&mut self.builder);
+        let array_ptr = lhs.unwrap_single(self);
 
         let first_ptr = self.builder.ins().load(ir::types::I64, MemFlags::new(), array_ptr, 0);
 
         let slot_size = ret_dvt.len(self.ctx);
         let slot_size = self.builder.ins().iconst(ir::types::I64, slot_size as i64 * 8);
 
-        let index = rhs.values[0].to_ir(&mut self.builder);
+        let index = rhs.unwrap_single(self);
 
         let offset = self.builder.ins().imul(index, slot_size);
         let element_ptr = self.builder.ins().iadd(first_ptr, offset);
 
         match ret_dvt {
-          DynamicValueType::Const(vt) => RValue {
-            ty:     IRValue::Const(vt),
-            values: (0..vt.len(self.ctx))
-              .map(|i| {
-                IRValue::from(self.builder.ins().load(
-                  ir::types::I64,
-                  MemFlags::new(),
-                  element_ptr,
-                  i as i32 * 8,
-                ))
-              })
-              .collect(),
-          },
-          DynamicValueType::Union(len) => RValue {
-            ty:     IRValue::Dyn(self.builder.ins().load(
-              ir::types::I64,
-              MemFlags::new(),
-              element_ptr,
-              0,
-            )),
-            // NB: Use `len`, not `ret_dvt.len()`, because we're reading the union tag by hand
-            // above.
-            values: (0..len)
-              .map(|i| {
-                IRValue::Dyn(self.builder.ins().load(
-                  ir::types::I64,
-                  MemFlags::new(),
-                  element_ptr,
-                  i as i32 * 8 + 8,
-                ))
-              })
-              .collect(),
-          },
+          DynamicValueType::Const(vt) => RValue::TypedPtr(vt, element_ptr),
+          DynamicValueType::Union(len) => RValue::UntypedPtr(len, element_ptr),
         }
       }
 
       mir::Expr::If { cond, then, els: None, ty: _ } => {
         let cond = self.compile_expr(cond);
-        let cond = cond.values[0].to_ir(&mut self.builder);
+        let cond = cond.unwrap_single(self);
 
         let then_block = self.builder.create_block();
         let merge_block = self.builder.create_block();
@@ -910,7 +839,7 @@ impl FuncBuilder<'_> {
 
       mir::Expr::If { cond, then, els: Some(els), ref ty } => {
         let cond = self.compile_expr(cond);
-        let cond = cond.values[0].to_ir(&mut self.builder);
+        let cond = cond.unwrap_single(self);
 
         let then_block = self.builder.create_block();
         let else_block = self.builder.create_block();
@@ -925,13 +854,13 @@ impl FuncBuilder<'_> {
 
           self.builder.switch_to_block(then_block);
           self.builder.seal_block(then_block);
-          self.compile_expr(then).to_ir(param_kind, &mut self.builder);
+          self.compile_expr(then).to_ir(param_kind, self);
 
           self.builder.ins().jump(merge_block, &[]);
 
           self.builder.switch_to_block(else_block);
           self.builder.seal_block(else_block);
-          self.compile_expr(els).to_ir(param_kind, &mut self.builder);
+          self.compile_expr(els).to_ir(param_kind, self);
 
           self.builder.ins().jump(merge_block, &[]);
 
@@ -949,7 +878,7 @@ impl FuncBuilder<'_> {
 
           self.builder.switch_to_block(then_block);
           self.builder.seal_block(then_block);
-          let then_return = self.compile_expr(then).to_ir(param_kind, &mut self.builder);
+          let then_return = self.compile_expr(then).to_ir(param_kind, self);
 
           self.builder.ins().jump(
             merge_block,
@@ -961,7 +890,7 @@ impl FuncBuilder<'_> {
 
           self.builder.switch_to_block(else_block);
           self.builder.seal_block(else_block);
-          let else_return = self.compile_expr(els).to_ir(param_kind, &mut self.builder);
+          let else_return = self.compile_expr(els).to_ir(param_kind, self);
 
           self.builder.ins().jump(
             merge_block,
@@ -974,7 +903,14 @@ impl FuncBuilder<'_> {
           self.builder.switch_to_block(merge_block);
           self.builder.seal_block(merge_block);
 
-          RValue::from_ir(self.ctx, self.builder.block_params(merge_block), ty)
+          match dvt {
+            DynamicValueType::Const(vt) => {
+              RValue::TypedDyn(vt, Slot::Single(self.builder.block_params(merge_block)[0]))
+            }
+            DynamicValueType::Union(_) => {
+              RValue::Untyped(Slot::Single(self.builder.block_params(merge_block)[0]))
+            }
+          }
         } else {
           let slot = self.builder.create_sized_stack_slot(StackSlotData {
             kind: StackSlotKind::ExplicitSlot,
@@ -987,14 +923,14 @@ impl FuncBuilder<'_> {
 
           self.builder.switch_to_block(then_block);
           self.builder.seal_block(then_block);
-          let then_return = self.compile_expr(then).to_ir(param_kind, &mut self.builder);
+          let then_return = self.compile_expr(then).to_ir(param_kind, self);
           then_return.copy_to(self, addr);
 
           self.builder.ins().jump(merge_block, &[]);
 
           self.builder.switch_to_block(else_block);
           self.builder.seal_block(else_block);
-          let else_return = self.compile_expr(els).to_ir(param_kind, &mut self.builder);
+          let else_return = self.compile_expr(els).to_ir(param_kind, self);
           else_return.copy_to(self, addr);
 
           self.builder.ins().jump(merge_block, &[]);
@@ -1002,25 +938,27 @@ impl FuncBuilder<'_> {
           self.builder.switch_to_block(merge_block);
           self.builder.seal_block(merge_block);
 
-          // FIXME: Rework `RValue` to store a stack slot.
-          let mut values = vec![];
-          for i in 0..dvt.len(self.ctx) {
-            values.push(self.builder.ins().stack_load(ir::types::I64, slot.clone(), i as i32 * 8));
+          match dvt {
+            DynamicValueType::Const(vt) => {
+              RValue::TypedDyn(vt, Slot::Multiple(dvt.len(self.ctx) as usize, slot))
+            }
+            DynamicValueType::Union(_) => {
+              RValue::Untyped(Slot::Multiple(dvt.len(self.ctx) as usize, slot))
+            }
           }
-          RValue::from_ir(self.ctx, &values, ty)
         }
       }
 
       mir::Expr::StructInit(id, ref fields) => {
         let strct = self.ctx.structs.get(&id).unwrap();
-        let slot = self.builder.create_sized_stack_slot(StackSlotData {
-          kind: StackSlotKind::ExplicitSlot,
-          size: strct
-            .fields
-            .iter()
-            .map(|(_, ty)| DynamicValueType::for_type(self.ctx, ty).len(self.ctx) as u32)
-            .sum(),
-        });
+        let len = strct
+          .fields
+          .iter()
+          .map(|(_, ty)| DynamicValueType::for_type(self.ctx, ty).len(self.ctx) as u32)
+          .sum();
+        let slot = self
+          .builder
+          .create_sized_stack_slot(StackSlotData { kind: StackSlotKind::ExplicitSlot, size: len });
 
         // Insert instructions in order of `fields`, but fill in `values` in order of
         // `strct.fields`.
@@ -1032,7 +970,7 @@ impl FuncBuilder<'_> {
               &strct.fields.iter().find(|(n, _)| n == field).unwrap().1,
             )
             .param_kind(self.ctx),
-            &mut self.builder,
+            self,
           );
 
           let offset = strct
@@ -1051,22 +989,7 @@ impl FuncBuilder<'_> {
           ir.copy_to(self, addr);
         }
 
-        // FIXME: Rework `RValue` to not require this.
-        let mut values = vec![];
-        let mut i = 0;
-        for (_, ty) in &strct.fields {
-          let len = DynamicValueType::for_type(self.ctx, ty).len(self.ctx);
-          for _ in 0..len {
-            values.push(IRValue::from(self.builder.ins().stack_load(
-              ir::types::I64,
-              slot.clone(),
-              i as i32 * 8,
-            )));
-            i += 1;
-          }
-        }
-
-        RValue { ty: IRValue::Const(ValueType::Struct(id)), values }
+        RValue::TypedDyn(ValueType::Struct(id), Slot::Multiple(len as usize, slot))
       }
 
       ref v => unimplemented!("expr: {v:?}"),
@@ -1110,30 +1033,19 @@ impl FuncBuilder<'_> {
     self.builder.ins().call(self.intrinsics.call, &[native, arg_ptr, ret_ptr]);
 
     match ret_dvt {
-      DynamicValueType::Const(vt) => RValue {
-        ty:     IRValue::Const(vt),
-        values: (0..vt.len(self.ctx))
-          .map(|i| {
-            IRValue::from(self.builder.ins().stack_load(ir::types::I64, ret_slot, i as i32 * 8))
-          })
-          .collect(),
-      },
-      DynamicValueType::Union(len) => RValue {
-        ty:     IRValue::Dyn(self.builder.ins().stack_load(ir::types::I64, ret_slot, 0)),
-        // NB: Use `len`, not `ret_dvt.len()`, because we're reading the union tag by hand above.
-        values: (0..len)
-          .map(|i| {
-            IRValue::Dyn(self.builder.ins().stack_load(ir::types::I64, ret_slot, i as i32 * 8 + 8))
-          })
-          .collect(),
-      },
+      DynamicValueType::Const(vt) => {
+        RValue::TypedDyn(vt, Slot::Multiple(ret_dvt.len(self.ctx) as usize, ret_slot))
+      }
+      DynamicValueType::Union(_) => {
+        RValue::Untyped(Slot::Multiple(ret_dvt.len(self.ctx) as usize, ret_slot))
+      }
     }
   }
 
   /// Creates a stack slot that stores a single unsized value, and returns the
   /// address to that slot. Used when calling native functions.
   fn stack_slot_unsized(&mut self, value: &RValue) -> ir::Value {
-    let ir = value.to_ir(ParamKind::Unsized, &mut self.builder);
+    let ir = value.to_ir(ParamKind::Unsized, self);
 
     match ir {
       Slot::Empty => {

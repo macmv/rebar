@@ -21,6 +21,7 @@ impl<T> Slot<T> {
 }
 
 impl Slot<Value> {
+  #[track_caller]
   pub fn new_multiple(builder: &mut FunctionBuilder, len: usize) -> Self {
     assert!(len >= 2);
 
@@ -31,11 +32,32 @@ impl Slot<Value> {
     )
   }
 
+  #[track_caller]
   pub fn set(&self, builder: &mut FunctionBuilder, index: usize, value: ir::Value) {
     match self {
       Slot::Multiple(len, slot) => {
-        assert!(index < *len, "index out of bounds");
+        assert!(index < *len, "cannot set index {index} in slot with {len} elements");
         builder.ins().stack_store(value, *slot, index as i32 * 8);
+      }
+      _ => panic!("cannot set value in non-multiple slot"),
+    }
+  }
+
+  pub fn get(&self, builder: &mut FunctionBuilder, index: usize) -> ir::Value {
+    match self {
+      Slot::Multiple(len, slot) => {
+        assert!(index < *len, "index out of bounds");
+        builder.ins().stack_load(ir::types::I64, *slot, index as i32 * 8)
+      }
+      _ => panic!("cannot set value in non-multiple slot"),
+    }
+  }
+
+  pub fn addr(&self, builder: &mut FunctionBuilder, index: usize) -> ir::Value {
+    match self {
+      Slot::Multiple(len, slot) => {
+        assert!(index < *len, "index out of bounds");
+        builder.ins().stack_addr(ir::types::I64, *slot, index as i32 * 8)
       }
       _ => panic!("cannot set value in non-multiple slot"),
     }
