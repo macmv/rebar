@@ -1,6 +1,6 @@
 use crate::{RbSlice, RbStruct, Value};
 use rb_mir::MirContext;
-use rb_value::{DynamicValueType, RbArray, RebarArgs, ValueType};
+use rb_value::{DynamicValueType, RbVec, RebarArgs, ValueType};
 
 pub struct RebarArgsParser<'a> {
   ctx: &'a MirContext,
@@ -45,7 +45,7 @@ impl<'a> RebarArgsParser<'a> {
         // TODO: Get `GcArray` in here!
         #[repr(C)]
         struct GcArrayTmp<'ctx> {
-          arr:     RbArray,
+          arr:     RbVec,
           _spacer: &'ctx MirContext,
           vt:      DynamicValueType,
         }

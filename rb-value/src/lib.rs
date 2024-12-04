@@ -7,7 +7,7 @@ mod arg;
 mod array;
 
 pub use arg::RebarArgs;
-pub use array::RbArray;
+pub use array::RbVec;
 
 pub struct IntrinsicImpls {
   pub call: fn(i64, *const RebarArgs, *mut RebarArgs),

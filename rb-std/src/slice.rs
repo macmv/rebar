@@ -1,7 +1,7 @@
 use std::fmt;
 
 use rb_mir::MirContext;
-use rb_value::{DynamicValueType, RbArray, RebarArgs};
+use rb_value::{DynamicValueType, RbVec, RebarArgs};
 
 use crate::RebarArgsParser;
 
@@ -14,12 +14,12 @@ pub struct RbSlice<'a> {
   // SAFETY: This `&RbArray` is quite special: the value of this reference is garunteed to also be
   // a valid `Box<RbArray>` pointer, and that pointer is used as a key in the garbage collector to
   // determine if the array is referenced or not.
-  pub elems: &'a RbArray,
+  pub elems: &'a RbVec,
   pub vt:    DynamicValueType,
 }
 
 impl<'a> RbSlice<'a> {
-  pub fn new(ctx: &'a MirContext, elems: &'a RbArray, vt: DynamicValueType) -> Self {
+  pub fn new(ctx: &'a MirContext, elems: &'a RbVec, vt: DynamicValueType) -> Self {
     assert!(
       elems.len() % vt.len(ctx) as usize == 0,
       "array length {} must be a multiple of the slot size {} for the type {:?}",

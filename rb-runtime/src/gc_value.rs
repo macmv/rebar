@@ -33,7 +33,7 @@ impl GcValue<'_> {
       Value::String(s) => unsafe { GcValue::String(Gc::from_ptr(*s)) },
       Value::Array(arr) => unsafe {
         // This is horrible.
-        GcValue::Array(Gc::from_ptr(arr.elems as *const rb_value::RbArray as *const GcArray))
+        GcValue::Array(Gc::from_ptr(arr.elems as *const _ as *const GcArray))
       },
       Value::Struct(s) => GcValue::Struct(GcStruct(*s)),
       _ => return None,

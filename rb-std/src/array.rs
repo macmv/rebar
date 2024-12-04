@@ -1,7 +1,7 @@
 use std::{cell::UnsafeCell, fmt};
 
 use rb_mir::MirContext;
-use rb_value::DynamicValueType;
+use rb_value::{DynamicValueType, RbVec};
 
 use crate::RbSlice;
 
@@ -10,7 +10,7 @@ use crate::RbSlice;
 // information), but it needs the `arr` field to be at the start of the struct.
 #[repr(C)]
 pub struct RbArray<'ctx> {
-  pub arr: UnsafeCell<rb_value::RbArray>,
+  pub arr: UnsafeCell<RbVec>,
   pub ctx: &'ctx MirContext,
   pub vt:  DynamicValueType,
 }
