@@ -16,17 +16,17 @@ use crate::owned_arg_parser::OwnedRebarArgsParser;
 #[derive(Debug, PartialEq)]
 pub enum GcValue<'ctx> {
   String(Gc<String>),
-  Array(Gc<GcArray>),
+  Array(Gc<GcArray<'ctx>>),
   Struct(GcStruct<'ctx>),
 }
 
 // SAFETY: Must be `#[repr(C)]`, so that rebar can access fields in it. Rebar
 // will never access the `vt` field (as that's captured in the static type
 // information), but it needs the `arr` field to be at the start of the struct.
-#[derive(Debug)]
 #[repr(C)]
-pub struct GcArray {
+pub struct GcArray<'ctx> {
   pub(crate) arr: UnsafeCell<RbArray>,
+  pub(crate) ctx: &'ctx MirContext,
   pub(crate) vt:  DynamicValueType,
 }
 
@@ -55,20 +55,19 @@ impl GcValue<'_> {
   }
 }
 
-impl PartialEq for GcArray {
-  fn eq(&self, other: &Self) -> bool {
-    crate::intrinsics::ENV.with(|env| {
-      let env = env.borrow();
-      let env = env.as_ref().unwrap();
+impl PartialEq for GcArray<'_> {
+  fn eq(&self, other: &Self) -> bool { self.as_slice() == other.as_slice() }
+}
 
-      self.as_slice(&env.env.mir_ctx) == other.as_slice(&env.env.mir_ctx)
-    })
+impl GcArray<'_> {
+  pub fn as_slice<'a>(&'a self) -> RbSlice<'a> {
+    unsafe { RbSlice::new(self.ctx, &*self.arr.get(), self.vt) }
   }
 }
 
-impl GcArray {
-  pub fn as_slice<'a>(&'a self, ctx: &'a MirContext) -> RbSlice<'a> {
-    unsafe { RbSlice::new(ctx, &*self.arr.get(), self.vt) }
+impl fmt::Debug for GcArray<'_> {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    f.debug_struct("GcArray").field("arr", &self.arr).finish()
   }
 }
 
@@ -92,35 +91,25 @@ unsafe impl Collect for GcValue<'_> {
   }
 }
 
-unsafe impl Collect for GcArray {
+unsafe impl Collect for GcArray<'_> {
   fn trace(&self, cc: &rb_gc::Collection) {
-    crate::intrinsics::ENV.with(|env| {
-      let env = env.borrow();
-      let env = env.as_ref().unwrap();
-
-      for value in self.as_slice(&env.env.mir_ctx).iter() {
-        if let Some(v) = GcValue::from_value(&value) {
-          v.trace(cc);
-        }
+    for value in self.as_slice().iter() {
+      if let Some(v) = GcValue::from_value(&value) {
+        v.trace(cc);
       }
-    });
+    }
   }
 }
 
-impl Drop for GcArray {
+impl Drop for GcArray<'_> {
   fn drop(&mut self) {
-    crate::intrinsics::ENV.with(|env| {
-      let env = env.borrow();
-      let env = env.as_ref().unwrap();
-
-      for value in self.as_slice(&env.env.mir_ctx).iter() {
-        if let Some(mut v) = GcValue::from_value(&value) {
-          unsafe {
-            ManuallyDrop::drop(&mut v);
-          }
+    for value in self.as_slice().iter() {
+      if let Some(mut v) = GcValue::from_value(&value) {
+        unsafe {
+          ManuallyDrop::drop(&mut v);
         }
       }
-    });
+    }
   }
 }
 
