@@ -11,10 +11,10 @@ use rb_std::{RbArray, RbStruct, Value};
 /// Using `GcValue::gc_id`, we can check if we've already tracked a value. If we
 /// haven't then the owned value is added to the garbage collector.
 #[derive(Debug)]
-pub enum GcValue<'ctx> {
+pub enum GcValue {
   String(Gc<String>),
   Array(Gc<GcArray>),
-  Struct(GcStruct<'ctx>),
+  Struct(GcStruct),
 }
 
 #[derive(Debug)]
@@ -25,11 +25,11 @@ pub struct GcArray(pub RbArray);
 // returns, `ptr` will be invalid. Returning from a function will pop the
 // GcStruct off the stack, and destroy the invalid pointer.
 #[derive(Debug, PartialEq)]
-pub struct GcStruct<'ctx>(pub RbStruct<'ctx>);
+pub struct GcStruct(pub RbStruct);
 
-impl GcValue<'_> {
+impl GcValue {
   // NB: This `GcValue` cannot be dropped, as that will cause a double free.
-  pub(crate) fn from_value<'ctx>(value: &Value<'ctx>) -> Option<ManuallyDrop<GcValue<'ctx>>> {
+  pub(crate) fn from_value(value: &Value) -> Option<ManuallyDrop<GcValue>> {
     let gc = match value {
       Value::String(s) => unsafe { GcValue::String(Gc::from_ptr(*s)) },
       Value::Array(arr) => unsafe {
@@ -43,7 +43,7 @@ impl GcValue<'_> {
   }
 }
 
-unsafe impl Collect<MirContext> for GcValue<'_> {
+unsafe impl Collect<MirContext> for GcValue {
   fn trace(&self, ctx: &MirContext, cc: &rb_gc::Collection) {
     match self {
       GcValue::String(s) => s.trace(ctx, cc),
@@ -63,9 +63,9 @@ unsafe impl Collect<MirContext> for GcArray {
   }
 }
 
-unsafe impl Collect<MirContext> for GcStruct<'_> {
+unsafe impl Collect<MirContext> for GcStruct {
   fn trace(&self, ctx: &MirContext, cc: &rb_gc::Collection) {
-    for value in self.0.fields() {
+    for value in self.0.fields(ctx) {
       if let Some(v) = GcValue::from_value(&value) {
         v.trace(ctx, cc);
       }

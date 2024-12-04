@@ -6,8 +6,7 @@ use rb_value::DynamicValueType;
 use crate::{RebarArgsParser, Value};
 
 #[derive(Clone, Copy)]
-pub struct RbStruct<'a> {
-  pub ctx: &'a MirContext,
+pub struct RbStruct {
   pub id:  StructId,
   pub ptr: *const i64,
 }
@@ -19,18 +18,16 @@ pub struct FieldsIter<'a> {
   idx:    usize,
 }
 
-impl<'a> RbStruct<'a> {
-  pub fn new(ctx: &'a MirContext, id: StructId, ptr: *const i64) -> Self {
-    RbStruct { ctx, id, ptr }
-  }
+impl RbStruct {
+  pub fn new(id: StructId, ptr: *const i64) -> Self { RbStruct { id, ptr } }
 
-  pub fn len(&self) -> usize { self.ctx.structs[&self.id].fields.len() }
+  pub fn len(&self, ctx: &MirContext) -> usize { ctx.structs[&self.id].fields.len() }
 
-  pub fn fields(&self) -> FieldsIter<'a> {
-    let strct = &self.ctx.structs[&self.id];
-    let parser = RebarArgsParser::new(self.ctx, self.ptr as *const _);
+  pub fn fields<'a>(&self, ctx: &'a MirContext) -> FieldsIter<'a> {
+    let strct = &ctx.structs[&self.id];
+    let parser = RebarArgsParser::new(ctx, self.ptr as *const _);
 
-    FieldsIter { ctx: self.ctx, strct, parser, idx: 0 }
+    FieldsIter { ctx, strct, parser, idx: 0 }
   }
 }
 
@@ -51,9 +48,12 @@ impl<'a> Iterator for FieldsIter<'a> {
   }
 }
 
-impl fmt::Debug for RbStruct<'_> {
+impl fmt::Debug for RbStruct {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     let mut s = f.debug_struct("RbStruct");
+
+    // FIXME
+    /*
     unsafe {
       let strct = &self.ctx.structs[&self.id];
       let mut parser = RebarArgsParser::new(self.ctx, self.ptr as *const _);
@@ -62,13 +62,16 @@ impl fmt::Debug for RbStruct<'_> {
         s.field("foo", &parser.value(DynamicValueType::for_type(self.ctx, &field.1)));
       }
     }
+    */
 
     s.finish()
   }
 }
 
-impl PartialEq for RbStruct<'_> {
-  fn eq(&self, other: &Self) -> bool {
+impl PartialEq for RbStruct {
+  fn eq(&self, _other: &Self) -> bool {
+    // FIXME
+    /*
     if self.id != other.id {
       return false;
     }
@@ -78,5 +81,7 @@ impl PartialEq for RbStruct<'_> {
 
     // The length must be the same if the IDs are the same.
     a.zip(b).all(|(a, b)| a == b)
+    */
+    false
   }
 }

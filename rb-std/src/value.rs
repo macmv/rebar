@@ -11,7 +11,7 @@ pub enum Value<'a> {
   Bool(bool),
   String(&'a String),
   Array(RbSlice<'a>),
-  Struct(RbStruct<'a>),
+  Struct(RbStruct),
 }
 
 /// An owned value, created from rust, that will be passed back to rebar.

@@ -23,7 +23,7 @@ impl<'ctx> OwnedRebarArgsParser<'ctx> {
     v
   }
 
-  pub(crate) unsafe fn value_owned(&mut self, vt: ValueType) -> GcValue<'ctx> {
+  pub(crate) unsafe fn value_owned(&mut self, vt: ValueType) -> GcValue {
     match vt {
       ValueType::String => {
         let ptr = self.next();
@@ -59,7 +59,7 @@ impl<'ctx> OwnedRebarArgsParser<'ctx> {
           }
         }
 
-        GcValue::Struct(GcStruct(RbStruct { ctx: self.ctx, id, ptr: ptr as *const i64 }))
+        GcValue::Struct(GcStruct(RbStruct { id, ptr: ptr as *const i64 }))
       }
 
       _ => unreachable!("not an owned value: {vt:?}"),
@@ -67,7 +67,7 @@ impl<'ctx> OwnedRebarArgsParser<'ctx> {
   }
 
   /// Parses a value to get tracked by the GC. This value should not be dropped!
-  pub unsafe fn value_owned_unsized(&mut self) -> GcValue<'ctx> {
+  pub unsafe fn value_owned_unsized(&mut self) -> GcValue {
     let ty = self.next();
     let vt = ValueType::try_from(ty).unwrap();
     self.value_owned(vt)

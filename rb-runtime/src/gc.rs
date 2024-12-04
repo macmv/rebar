@@ -5,35 +5,34 @@ use rb_mir::MirContext;
 
 use crate::GcValue;
 
-pub struct GcRoot<'ctx> {
+pub struct GcRoot {
   /// Stores all the GC'able objects on each thread's stack.
   ///
   /// JIT compiled functions will push/pop to this stack
-  pub threads: HashMap<u64, Stack<'ctx>>,
+  pub threads: HashMap<u64, Stack>,
 }
 
-unsafe impl Collect<MirContext> for GcRoot<'_> {
+unsafe impl Collect<MirContext> for GcRoot {
   fn trace(&self, ctx: &MirContext, cc: &Collection) { self.threads.trace(ctx, cc); }
 }
 
-pub type GcArena =
-  Arena<rb_gc::__DynRootable<dyn for<'gc> rb_gc::Rootable<'gc, Root = GcRoot<'gc>>>>;
+pub type GcArena = Arena<rb_gc::__DynRootable<dyn for<'gc> rb_gc::Rootable<'gc, Root = GcRoot>>>;
 
 #[derive(Default)]
-pub struct Stack<'ctx> {
-  pub frames: Vec<GcRefLock<Frame<'ctx>>>,
+pub struct Stack {
+  pub frames: Vec<GcRefLock<Frame>>,
 }
 
-unsafe impl Collect<MirContext> for Stack<'_> {
+unsafe impl Collect<MirContext> for Stack {
   fn trace(&self, ctx: &MirContext, cc: &Collection) { self.frames.trace(ctx, cc); }
 }
 
 #[derive(Default)]
-pub struct Frame<'ctx> {
-  pub values: Vec<Gc<GcValue<'ctx>>>,
+pub struct Frame {
+  pub values: Vec<Gc<GcValue>>,
 }
 
-unsafe impl Collect<MirContext> for Frame<'_> {
+unsafe impl Collect<MirContext> for Frame {
   fn trace(&self, ctx: &MirContext, cc: &Collection) { self.values.trace(ctx, cc); }
 }
 
@@ -41,7 +40,7 @@ unsafe impl Collect<MirContext> for Frame<'_> {
 fn gc_works() {
   use rb_gc::lock::RefLock;
 
-  type MyArena = Arena<rb_gc::__DynRootable<dyn for<'gc> rb_gc::Rootable<'gc, Root = GcRoot<'gc>>>>;
+  type MyArena = Arena<rb_gc::__DynRootable<dyn for<'gc> rb_gc::Rootable<'gc, Root = GcRoot>>>;
 
   let mut arena = MyArena::new(|_| GcRoot { threads: HashMap::new() });
 
