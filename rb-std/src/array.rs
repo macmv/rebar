@@ -14,14 +14,6 @@ pub struct RbArray {
   pub vt:  DynamicValueType,
 }
 
-impl PartialEq for RbArray {
-  // FIXME
-  fn eq(&self, _other: &Self) -> bool {
-    // self.as_slice() == other.as_slice()
-    false
-  }
-}
-
 impl RbArray {
   pub fn as_slice<'a>(&'a self, ctx: &'a MirContext) -> RbSlice<'a> {
     unsafe { RbSlice::new(ctx, &*self.arr.get(), self.vt) }

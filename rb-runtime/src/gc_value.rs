@@ -10,14 +10,14 @@ use rb_std::{RbArray, RbStruct, Value};
 ///
 /// Using `GcValue::gc_id`, we can check if we've already tracked a value. If we
 /// haven't then the owned value is added to the garbage collector.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub enum GcValue<'ctx> {
   String(Gc<String>),
   Array(Gc<GcArray>),
   Struct(GcStruct<'ctx>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct GcArray(pub RbArray);
 
 // This type is never created by rebar. Instead, `ptr` is a pointer to the
