@@ -55,7 +55,7 @@ impl<'a> RebarArgsParser<'a> {
           let _ = self.value(DynamicValueType::for_type(self.ctx, &field.1));
         }
 
-        Value::Struct(RbStruct::new(id, ptr))
+        Value::Struct(RbStruct::new(self.ctx, id, ptr))
       }
 
       v => unimplemented!("{v:?}"),

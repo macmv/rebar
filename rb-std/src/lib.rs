@@ -11,5 +11,5 @@ pub use arg_parser::RebarArgsParser;
 pub use array::RbArray;
 pub use environment::Environment;
 pub use slice::RbSlice;
-pub use strct::RbStruct;
+pub use strct::{RbStruct, RbStructOwned};
 pub use value::{OwnedValue, Value};

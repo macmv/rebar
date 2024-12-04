@@ -1,6 +1,6 @@
 use rb_gc::Gc;
 use rb_mir::MirContext;
-use rb_std::RbStruct;
+use rb_std::{RbStruct, RbStructOwned};
 use rb_value::{DynamicValueType, RebarArgs, ValueType};
 
 use crate::{gc_value::GcStruct, GcArray, GcValue};
@@ -59,7 +59,7 @@ impl<'ctx> OwnedRebarArgsParser<'ctx> {
           }
         }
 
-        GcValue::Struct(GcStruct(RbStruct { id, ptr: ptr as *const i64 }))
+        GcValue::Struct(GcStruct(RbStructOwned { id, ptr: ptr as *const i64 }))
       }
 
       _ => unreachable!("not an owned value: {vt:?}"),

@@ -6,8 +6,15 @@ use rb_value::DynamicValueType;
 use crate::{RebarArgsParser, Value};
 
 #[derive(Clone, Copy)]
-pub struct RbStruct {
+pub struct RbStructOwned {
   pub id:  StructId,
+  pub ptr: *const i64,
+}
+
+#[derive(Clone, Copy)]
+pub struct RbStruct<'ctx> {
+  pub id:  StructId,
+  pub ctx: &'ctx MirContext,
   pub ptr: *const i64,
 }
 
@@ -18,8 +25,8 @@ pub struct FieldsIter<'a> {
   idx:    usize,
 }
 
-impl RbStruct {
-  pub fn new(id: StructId, ptr: *const i64) -> Self { RbStruct { id, ptr } }
+impl RbStructOwned {
+  pub fn new(id: StructId, ptr: *const i64) -> Self { RbStructOwned { id, ptr } }
 
   pub fn len(&self, ctx: &MirContext) -> usize { ctx.structs[&self.id].fields.len() }
 
@@ -28,6 +35,21 @@ impl RbStruct {
     let parser = RebarArgsParser::new(ctx, self.ptr as *const _);
 
     FieldsIter { ctx, strct, parser, idx: 0 }
+  }
+}
+
+impl<'ctx> RbStruct<'ctx> {
+  pub fn new(ctx: &'ctx MirContext, id: StructId, ptr: *const i64) -> Self {
+    RbStruct { ctx, id, ptr }
+  }
+
+  pub fn len(&self) -> usize { self.ctx.structs[&self.id].fields.len() }
+
+  pub fn fields(&self) -> FieldsIter<'ctx> {
+    let strct = &self.ctx.structs[&self.id];
+    let parser = RebarArgsParser::new(self.ctx, self.ptr as *const _);
+
+    FieldsIter { ctx: self.ctx, strct, parser, idx: 0 }
   }
 }
 
@@ -48,12 +70,10 @@ impl<'a> Iterator for FieldsIter<'a> {
   }
 }
 
-impl fmt::Debug for RbStruct {
+impl fmt::Debug for RbStruct<'_> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     let mut s = f.debug_struct("RbStruct");
 
-    // FIXME
-    /*
     unsafe {
       let strct = &self.ctx.structs[&self.id];
       let mut parser = RebarArgsParser::new(self.ctx, self.ptr as *const _);
@@ -62,16 +82,17 @@ impl fmt::Debug for RbStruct {
         s.field("foo", &parser.value(DynamicValueType::for_type(self.ctx, &field.1)));
       }
     }
-    */
 
     s.finish()
   }
 }
 
-impl PartialEq for RbStruct {
-  fn eq(&self, _other: &Self) -> bool {
-    // FIXME
-    /*
+impl fmt::Debug for RbStructOwned {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { f.debug_struct("RbStruct").finish() }
+}
+
+impl PartialEq for RbStruct<'_> {
+  fn eq(&self, other: &Self) -> bool {
     if self.id != other.id {
       return false;
     }
@@ -81,7 +102,5 @@ impl PartialEq for RbStruct {
 
     // The length must be the same if the IDs are the same.
     a.zip(b).all(|(a, b)| a == b)
-    */
-    false
   }
 }

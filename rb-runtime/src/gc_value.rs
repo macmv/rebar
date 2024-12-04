@@ -2,7 +2,7 @@ use std::mem::ManuallyDrop;
 
 use rb_gc::{Collect, Gc};
 use rb_mir::MirContext;
-use rb_std::{RbArray, RbStruct, Value};
+use rb_std::{RbArray, RbStructOwned, Value};
 
 /// An owned, garbage collected value. This is created from the rebar values, so
 /// it almost always shows up as a `ManuallyDrop<GcValue>`, as we need to
@@ -24,8 +24,8 @@ pub struct GcArray(pub RbArray);
 // location on the stack where this struct lives. Once the rebar function
 // returns, `ptr` will be invalid. Returning from a function will pop the
 // GcStruct off the stack, and destroy the invalid pointer.
-#[derive(Debug, PartialEq)]
-pub struct GcStruct(pub RbStruct);
+#[derive(Debug)]
+pub struct GcStruct(pub RbStructOwned);
 
 impl GcValue {
   // NB: This `GcValue` cannot be dropped, as that will cause a double free.
@@ -36,7 +36,7 @@ impl GcValue {
         // This is horrible.
         GcValue::Array(Gc::from_ptr(arr.elems as *const _ as *const GcArray))
       },
-      Value::Struct(s) => GcValue::Struct(GcStruct(*s)),
+      Value::Struct(s) => GcValue::Struct(GcStruct(RbStructOwned { id: s.id, ptr: s.ptr })),
       _ => return None,
     };
     Some(ManuallyDrop::new(gc))
