@@ -4,4 +4,4 @@ struct Foo {
 }
 
 let structs = [Foo { a: 1, b: "hi" }, Foo { a: 2, b: "bye" }]
-println("structs: #{structs[0]}")
+println("structs: #{structs}")

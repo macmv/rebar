@@ -44,9 +44,10 @@ impl<'a> RebarArgsParser<'a> {
         //
         // TODO: Get `GcArray` in here!
         #[repr(C)]
-        struct GcArrayTmp {
-          arr: RbArray,
-          vt:  DynamicValueType,
+        struct GcArrayTmp<'ctx> {
+          arr:     RbArray,
+          _spacer: &'ctx MirContext,
+          vt:      DynamicValueType,
         }
 
         let arr = &*(ptr as *const GcArrayTmp);
