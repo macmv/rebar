@@ -6,7 +6,7 @@ use codegen::{
 use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, FuncId, FunctionDeclaration, Linkage, Module};
-use isa::{CallConv, TargetIsa};
+use isa::{CallConv, TargetFrontendConfig, TargetIsa};
 use rb_mir::{
   ast::{self as mir, UserFunctionId},
   MirContext,
@@ -115,6 +115,7 @@ intrinsics!(
 
 pub struct FuncBuilder<'a> {
   ctx: &'a MirContext,
+  isa: &'a dyn TargetIsa,
 
   builder:    FunctionBuilder<'a>,
   mir:        &'a mir::Function,
@@ -228,6 +229,7 @@ impl ThreadCtx<'_> {
 
     FuncBuilder {
       ctx: self.mir_ctx,
+      isa: self.isa,
       builder,
       mir,
       intrinsics: funcs,
@@ -281,6 +283,13 @@ pub struct CompiledFunction {
 }
 
 impl FuncBuilder<'_> {
+  fn target_frontend_config(&self) -> TargetFrontendConfig {
+    TargetFrontendConfig {
+      default_call_conv: self.isa.default_call_conv(),
+      pointer_width:     self.isa.triple().pointer_width().unwrap(),
+    }
+  }
+
   fn translate(mut self) {
     let entry_block = self.builder.create_block();
 
