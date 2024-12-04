@@ -13,12 +13,12 @@ use rb_std::{RbArray, RbStruct, Value};
 #[derive(Debug, PartialEq)]
 pub enum GcValue<'ctx> {
   String(Gc<String>),
-  Array(Gc<GcArray<'ctx>>),
+  Array(Gc<GcArray>),
   Struct(GcStruct<'ctx>),
 }
 
 #[derive(Debug, PartialEq)]
-pub struct GcArray<'ctx>(pub RbArray<'ctx>);
+pub struct GcArray(pub RbArray);
 
 // This type is never created by rebar. Instead, `ptr` is a pointer to the
 // location on the stack where this struct lives. Once the rebar function
@@ -53,9 +53,9 @@ unsafe impl Collect<MirContext> for GcValue<'_> {
   }
 }
 
-unsafe impl Collect<MirContext> for GcArray<'_> {
+unsafe impl Collect<MirContext> for GcArray {
   fn trace(&self, ctx: &MirContext, cc: &rb_gc::Collection) {
-    for value in self.0.as_slice().iter() {
+    for value in self.0.as_slice(ctx).iter() {
       if let Some(v) = GcValue::from_value(&value) {
         v.trace(ctx, cc);
       }

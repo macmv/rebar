@@ -207,7 +207,6 @@ impl RuntimeEnvironment {
           arr: UnsafeCell::new(RbVec::new_with_len(
             len as usize * vt.len(&env.env.mir_ctx) as usize,
           )),
-          ctx: &env.env.mir_ctx,
           vt,
         }),
       )) as *const u8
