@@ -15,7 +15,6 @@ use rb_typer::{Literal, Type};
 use slot::Slot;
 use std::collections::HashMap;
 
-mod ir_value;
 mod r_value;
 mod slot;
 
