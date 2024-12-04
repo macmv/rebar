@@ -1,9 +1,7 @@
-use std::{cell::UnsafeCell, fmt, mem::ManuallyDrop};
+use std::mem::ManuallyDrop;
 
 use rb_gc::{Collect, Gc};
-use rb_mir::MirContext;
-use rb_std::{RbSlice, RbStruct, Value};
-use rb_value::{DynamicValueType, RbArray};
+use rb_std::{RbArray, RbStruct, Value};
 
 /// An owned, garbage collected value. This is created from the rebar values, so
 /// it almost always shows up as a `ManuallyDrop<GcValue>`, as we need to
@@ -18,20 +16,14 @@ pub enum GcValue<'ctx> {
   Struct(GcStruct<'ctx>),
 }
 
-// SAFETY: Must be `#[repr(C)]`, so that rebar can access fields in it. Rebar
-// will never access the `vt` field (as that's captured in the static type
-// information), but it needs the `arr` field to be at the start of the struct.
-#[repr(C)]
-pub struct GcArray<'ctx> {
-  pub(crate) arr: UnsafeCell<RbArray>,
-  pub(crate) ctx: &'ctx MirContext,
-  pub(crate) vt:  DynamicValueType,
-}
+#[derive(Debug, PartialEq)]
+pub struct GcArray<'ctx>(pub RbArray<'ctx>);
 
 // This type is never created by rebar. Instead, `ptr` is a pointer to the
 // location on the stack where this struct lives. Once the rebar function
 // returns, `ptr` will be invalid. Returning from a function will pop the
 // GcStruct off the stack, and destroy the invalid pointer.
+#[derive(Debug, PartialEq)]
 pub struct GcStruct<'ctx>(pub RbStruct<'ctx>);
 
 impl GcValue<'_> {
@@ -41,39 +33,13 @@ impl GcValue<'_> {
       Value::String(s) => unsafe { GcValue::String(Gc::from_ptr(*s)) },
       Value::Array(arr) => unsafe {
         // This is horrible.
-        GcValue::Array(Gc::from_ptr(arr.elems as *const RbArray as *const GcArray))
+        GcValue::Array(Gc::from_ptr(arr.elems as *const rb_value::RbArray as *const GcArray))
       },
       Value::Struct(s) => GcValue::Struct(GcStruct(*s)),
       _ => return None,
     };
     Some(ManuallyDrop::new(gc))
   }
-}
-
-impl PartialEq for GcArray<'_> {
-  fn eq(&self, other: &Self) -> bool { self.as_slice() == other.as_slice() }
-}
-
-impl GcArray<'_> {
-  pub fn as_slice<'a>(&'a self) -> RbSlice<'a> {
-    unsafe { RbSlice::new(self.ctx, &*self.arr.get(), self.vt) }
-  }
-}
-
-impl fmt::Debug for GcArray<'_> {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    f.debug_struct("GcArray").field("arr", &self.arr).finish()
-  }
-}
-
-impl fmt::Debug for GcStruct<'_> {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    f.debug_struct("GcStruct").field("struct", &self.0).finish()
-  }
-}
-
-impl PartialEq for GcStruct<'_> {
-  fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
 }
 
 unsafe impl Collect for GcValue<'_> {
@@ -88,7 +54,7 @@ unsafe impl Collect for GcValue<'_> {
 
 unsafe impl Collect for GcArray<'_> {
   fn trace(&self, cc: &rb_gc::Collection) {
-    for value in self.as_slice().iter() {
+    for value in self.0.as_slice().iter() {
       if let Some(v) = GcValue::from_value(&value) {
         v.trace(cc);
       }

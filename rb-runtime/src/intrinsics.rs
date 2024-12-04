@@ -5,9 +5,9 @@ use ::std::{
 use std::collections::HashMap;
 
 use rb_gc::{lock::RefLock, Gc};
-use rb_std::{Environment, RebarArgsParser};
+use rb_std::{Environment, RbArray, RebarArgsParser};
 use rb_typer::{Literal, Type};
-use rb_value::{DynamicValueType, IntrinsicImpls, RbArray, RebarArgs};
+use rb_value::{DynamicValueType, IntrinsicImpls, RebarArgs};
 
 use crate::{
   gc::{GcArena, GcRoot},
@@ -202,13 +202,13 @@ impl RuntimeEnvironment {
       let m = env.gc.mutate();
       Gc::as_ptr(Gc::new(
         m,
-        GcArray {
-          arr: UnsafeCell::new(RbArray::new_with_len(
+        GcArray(RbArray {
+          arr: UnsafeCell::new(rb_value::RbArray::new_with_len(
             len as usize * vt.len(&env.env.mir_ctx) as usize,
           )),
           ctx: &env.env.mir_ctx,
           vt,
-        },
+        }),
       )) as *const u8
     })
   }
