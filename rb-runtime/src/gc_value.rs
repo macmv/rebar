@@ -96,18 +96,6 @@ unsafe impl Collect for GcArray<'_> {
   }
 }
 
-impl Drop for GcArray<'_> {
-  fn drop(&mut self) {
-    for value in self.as_slice().iter() {
-      if let Some(mut v) = GcValue::from_value(&value) {
-        unsafe {
-          ManuallyDrop::drop(&mut v);
-        }
-      }
-    }
-  }
-}
-
 unsafe impl Collect for GcStruct<'_> {
   fn trace(&self, cc: &rb_gc::Collection) {
     for value in self.0.fields() {
