@@ -1,7 +1,9 @@
 use std::num::NonZero;
 
+use crate::slot::Slot;
+
 use super::IRValue;
-use cranelift::prelude::{FunctionBuilder, InstBuilder};
+use cranelift::prelude::FunctionBuilder;
 use rb_mir::MirContext;
 use rb_typer::Type;
 use rb_value::{DynamicValueType, ParamKind, ValueType};
@@ -42,56 +44,58 @@ impl RValue {
   /// into a union slot, or back to native code. The number of values may change
   /// depending on the type (so this works for function calls, but not for
   /// block arguments).
-  fn to_extended_ir(
-    &self,
-    builder: &mut FunctionBuilder,
-    len: Option<NonZero<u32>>,
-  ) -> Vec<cranelift::codegen::ir::Value> {
-    let mut ret = vec![];
+  fn to_extended_ir(&self, builder: &mut FunctionBuilder, len: Option<NonZero<u32>>) -> Slot {
+    let ty_ir = self.ty.to_ir(builder);
 
-    ret.push(self.ty.to_ir(builder));
-    for v in &self.values {
-      ret.push(v.to_ir(builder));
-    }
+    let len = match len {
+      Some(v) => v.get() as usize,
+      None => self.values.len() + 1,
+    };
 
-    if let Some(l) = len {
-      while ret.len() < l.get() as usize {
-        ret.push(builder.ins().iconst(cranelift::codegen::ir::types::I64, 0));
+    assert!(self.values.len() + 1 <= len, "value {self:?} cannot fit into slot of length {len:?}");
+
+    if len == 1 {
+      Slot::Single(ty_ir)
+    } else {
+      let slot = Slot::new_multiple(builder, len);
+
+      slot.set(builder, 0, ty_ir);
+
+      for (i, v) in self.values.iter().enumerate() {
+        let ir = v.to_ir(builder);
+        slot.set(builder, i + 1, ir);
       }
 
-      assert_eq!(
-        ret.len(),
-        l.get() as usize,
-        "value {self:?} cannot fit into slot of length {len:?}"
-      );
+      slot
     }
-
-    ret
   }
 
   /// Returns the compact for of this value. This is used wherever the static
   /// type of the value is simple (ie, not a union), and when the number of
   /// values can change depending on the type (so this works for function
   /// arguments, but not for block arguments).
-  fn to_compact_ir(&self, builder: &mut FunctionBuilder) -> Vec<cranelift::codegen::ir::Value> {
-    let mut ret = vec![];
+  fn to_compact_ir(&self, builder: &mut FunctionBuilder) -> Slot {
+    match self.values.as_slice() {
+      [] => Slot::Empty,
+      [v] => Slot::Single(v.to_ir(builder)),
+      _ => {
+        let slot = Slot::new_multiple(builder, self.values.len());
 
-    for v in &self.values {
-      ret.push(v.to_ir(builder));
+        for (i, v) in self.values.iter().enumerate() {
+          let ir = v.to_ir(builder);
+          slot.set(builder, i, ir);
+        }
+
+        slot
+      }
     }
-
-    ret
   }
 
   /// Returns the dynamic IR values for this RValue. This should be used
   /// whenever the length of arguments can change (for example in a function
   /// call). For block arguments, which must have a consistent size, use
   /// `to_sized_ir`.
-  pub fn to_ir(
-    &self,
-    kind: ParamKind,
-    builder: &mut FunctionBuilder,
-  ) -> Vec<cranelift::codegen::ir::Value> {
+  pub fn to_ir(&self, kind: ParamKind, builder: &mut FunctionBuilder) -> Slot {
     match kind {
       ParamKind::Compact => self.to_compact_ir(builder),
       ParamKind::Extended(len) => self.to_extended_ir(builder, Some(len)),
@@ -100,6 +104,7 @@ impl RValue {
   }
 
   // TODO: Need to actually use this with a function return.
+  #[track_caller]
   pub fn from_ir(ctx: &MirContext, ir: &[cranelift::codegen::ir::Value], ty: &Type) -> RValue {
     let dty = DynamicValueType::for_type(ctx, ty);
     assert_eq!(ir.len() as u32, dty.len(ctx), "variable length mismatch");

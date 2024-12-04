@@ -328,7 +328,7 @@ impl FuncBuilder<'_> {
       let slot = Slot::<Variable>::new(&mut self, len);
 
       self.locals.insert(mir::VarId(id as u32), slot.clone());
-      slot.set(&mut self.builder, &values);
+      slot.copy_from_slice(&mut self.builder, &values);
     }
 
     for &stmt in &self.mir.items {
@@ -403,7 +403,7 @@ impl FuncBuilder<'_> {
 
         let slot = Slot::<Variable>::new(self, ir.len());
 
-        slot.set(&mut self.builder, &ir);
+        slot.copy_from(&mut self.builder, &ir);
         self.locals.insert(id, slot);
 
         if self.type_needs_gc(ty) {
@@ -542,10 +542,7 @@ impl FuncBuilder<'_> {
           let offset = self.builder.ins().iconst(ir::types::I64, i as i64 * slot_size as i64 * 8);
           let element_ptr = self.builder.ins().iadd(first_ptr, offset);
 
-          // TODO: Compile this into a loop if its too long.
-          for j in 0..slot_size as usize {
-            self.builder.ins().store(MemFlags::new(), ir[j], element_ptr, (j as i32) * 8);
-          }
+          ir.copy_to(self, element_ptr);
         }
 
         let result = RValue {
@@ -677,18 +674,30 @@ impl FuncBuilder<'_> {
             for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
               let arg = self.compile_expr(arg);
 
-              let v = arg.to_ir(
+              let slot = arg.to_ir(
                 DynamicValueType::for_type(self.ctx, &arg_ty).param_kind(self.ctx),
                 &mut self.builder,
               );
-              for v in v {
-                use cranelift::codegen::ir::InstBuilderBase;
+              match slot {
+                Slot::Empty => {}
+                Slot::Single(v) => {
+                  use cranelift::codegen::ir::InstBuilderBase;
 
-                match self.builder.ins().data_flow_graph_mut().value_type(v) {
-                  ir::types::I64 => arg_values.push(v),
-                  _ => {
-                    let v2 = self.builder.ins().uextend(ir::types::I64, v);
-                    arg_values.push(v2);
+                  match self.builder.ins().data_flow_graph_mut().value_type(v) {
+                    ir::types::I64 => arg_values.push(v),
+                    _ => {
+                      let v2 = self.builder.ins().uextend(ir::types::I64, v);
+                      arg_values.push(v2);
+                    }
+                  }
+                }
+                Slot::Multiple(len, slot) => {
+                  for i in 0..len {
+                    arg_values.push(self.builder.ins().stack_load(
+                      ir::types::I64,
+                      slot.clone(),
+                      i as i32 * 8,
+                    ));
                   }
                 }
               }
@@ -908,42 +917,110 @@ impl FuncBuilder<'_> {
         let merge_block = self.builder.create_block();
 
         let dvt = DynamicValueType::for_type(self.ctx, &ty);
-        for _ in 0..dvt.len(self.ctx) {
-          self.builder.append_block_param(merge_block, cranelift::codegen::ir::types::I64);
-        }
         let param_kind = dvt.param_kind(self.ctx);
 
-        // Test the if condition and conditionally branch.
-        self.builder.ins().brif(cond, then_block, &[], else_block, &[]);
+        if dvt.len(self.ctx) == 0 {
+          // Test the if condition and conditionally branch.
+          self.builder.ins().brif(cond, then_block, &[], else_block, &[]);
 
-        self.builder.switch_to_block(then_block);
-        self.builder.seal_block(then_block);
-        let then_return = self.compile_expr(then).to_ir(param_kind, &mut self.builder);
+          self.builder.switch_to_block(then_block);
+          self.builder.seal_block(then_block);
+          self.compile_expr(then).to_ir(param_kind, &mut self.builder);
 
-        // Jump to the merge block, passing it the block return value.
-        self.builder.ins().jump(merge_block, &then_return);
+          self.builder.ins().jump(merge_block, &[]);
 
-        self.builder.switch_to_block(else_block);
-        self.builder.seal_block(else_block);
-        let else_return = self.compile_expr(els).to_ir(param_kind, &mut self.builder);
+          self.builder.switch_to_block(else_block);
+          self.builder.seal_block(else_block);
+          self.compile_expr(els).to_ir(param_kind, &mut self.builder);
 
-        // Jump to the merge block, passing it the block return value.
-        self.builder.ins().jump(merge_block, &else_return);
+          self.builder.ins().jump(merge_block, &[]);
 
-        // Switch to the merge block for subsequent statements.
-        self.builder.switch_to_block(merge_block);
+          self.builder.switch_to_block(merge_block);
+          self.builder.seal_block(merge_block);
 
-        // We've now seen all the predecessors of the merge block.
-        self.builder.seal_block(merge_block);
+          RValue::nil()
+        } else if dvt.len(self.ctx) == 1 {
+          // Special case: if `dvt.len() == 1`, we can avoid creating a stack slot, and
+          // just use a block parameter.
+          self.builder.append_block_param(merge_block, cranelift::codegen::ir::types::I64);
 
-        // Read the value of the if-else by reading the merge block
-        // parameter.
-        RValue::from_ir(self.ctx, self.builder.block_params(merge_block), ty)
+          // Test the if condition and conditionally branch.
+          self.builder.ins().brif(cond, then_block, &[], else_block, &[]);
+
+          self.builder.switch_to_block(then_block);
+          self.builder.seal_block(then_block);
+          let then_return = self.compile_expr(then).to_ir(param_kind, &mut self.builder);
+
+          self.builder.ins().jump(
+            merge_block,
+            &[match then_return {
+              Slot::Single(v) => v,
+              _ => unreachable!("cannot produce multiple values for a block with only 1 argument"),
+            }],
+          );
+
+          self.builder.switch_to_block(else_block);
+          self.builder.seal_block(else_block);
+          let else_return = self.compile_expr(els).to_ir(param_kind, &mut self.builder);
+
+          self.builder.ins().jump(
+            merge_block,
+            &[match else_return {
+              Slot::Single(v) => v,
+              _ => unreachable!("cannot produce multiple values for a block with only 1 argument"),
+            }],
+          );
+
+          self.builder.switch_to_block(merge_block);
+          self.builder.seal_block(merge_block);
+
+          RValue::from_ir(self.ctx, self.builder.block_params(merge_block), ty)
+        } else {
+          let slot = self.builder.create_sized_stack_slot(StackSlotData {
+            kind: StackSlotKind::ExplicitSlot,
+            size: dvt.len(self.ctx) as u32 * 8,
+          });
+          let addr = self.builder.ins().stack_addr(ir::types::I64, slot.clone(), 0);
+
+          // Test the if condition and conditionally branch.
+          self.builder.ins().brif(cond, then_block, &[], else_block, &[]);
+
+          self.builder.switch_to_block(then_block);
+          self.builder.seal_block(then_block);
+          let then_return = self.compile_expr(then).to_ir(param_kind, &mut self.builder);
+          then_return.copy_to(self, addr);
+
+          self.builder.ins().jump(merge_block, &[]);
+
+          self.builder.switch_to_block(else_block);
+          self.builder.seal_block(else_block);
+          let else_return = self.compile_expr(els).to_ir(param_kind, &mut self.builder);
+          else_return.copy_to(self, addr);
+
+          self.builder.ins().jump(merge_block, &[]);
+
+          self.builder.switch_to_block(merge_block);
+          self.builder.seal_block(merge_block);
+
+          // FIXME: Rework `RValue` to store a stack slot.
+          let mut values = vec![];
+          for i in 0..dvt.len(self.ctx) {
+            values.push(self.builder.ins().stack_load(ir::types::I64, slot.clone(), i as i32 * 8));
+          }
+          RValue::from_ir(self.ctx, &values, ty)
+        }
       }
 
       mir::Expr::StructInit(id, ref fields) => {
         let strct = self.ctx.structs.get(&id).unwrap();
-        let mut values = vec![IRValue::Const(0); strct.fields.len()];
+        let slot = self.builder.create_sized_stack_slot(StackSlotData {
+          kind: StackSlotKind::ExplicitSlot,
+          size: strct
+            .fields
+            .iter()
+            .map(|(_, ty)| DynamicValueType::for_type(self.ctx, ty).len(self.ctx) as u32)
+            .sum(),
+        });
 
         // Insert instructions in order of `fields`, but fill in `values` in order of
         // `strct.fields`.
@@ -970,8 +1047,22 @@ impl FuncBuilder<'_> {
             })
             .unwrap_err() as usize;
 
-          for v in values[offset..offset + ir.len()].iter_mut().zip(ir.into_iter()) {
-            *v.0 = IRValue::Dyn(v.1);
+          let addr = self.builder.ins().stack_addr(ir::types::I64, slot.clone(), offset as i32 * 8);
+          ir.copy_to(self, addr);
+        }
+
+        // FIXME: Rework `RValue` to not require this.
+        let mut values = vec![];
+        let mut i = 0;
+        for (_, ty) in &strct.fields {
+          let len = DynamicValueType::for_type(self.ctx, ty).len(self.ctx);
+          for _ in 0..len {
+            values.push(IRValue::from(self.builder.ins().stack_load(
+              ir::types::I64,
+              slot.clone(),
+              i as i32 * 8,
+            )));
+            i += 1;
           }
         }
 
@@ -985,7 +1076,7 @@ impl FuncBuilder<'_> {
   fn call_native(
     &mut self,
     native: ir::Value,
-    args: &[Vec<ir::Value>],
+    args: &[Slot],
     arg_types: &[Type],
     ret_ty: &Type,
   ) -> RValue {
@@ -1007,11 +1098,10 @@ impl FuncBuilder<'_> {
     });
 
     let mut slot_index = 0;
-    for v in args {
-      for &v in v.iter() {
-        self.builder.ins().stack_store(v, arg_slot, slot_index * 8);
-        slot_index += 1;
-      }
+    for ir in args {
+      let addr = self.builder.ins().stack_addr(ir::types::I64, arg_slot, slot_index as i32 * 8);
+      ir.copy_to(self, addr);
+      slot_index += ir.len();
     }
 
     let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, arg_slot, 0);
@@ -1045,19 +1135,20 @@ impl FuncBuilder<'_> {
   fn stack_slot_unsized(&mut self, value: &RValue) -> ir::Value {
     let ir = value.to_ir(ParamKind::Unsized, &mut self.builder);
 
-    self.stack_slot_for_ir(ir)
-  }
+    match ir {
+      Slot::Empty => {
+        let dangling: *const i64 = std::ptr::dangling();
+        self.builder.ins().iconst(ir::types::I64, dangling as i64)
+      }
+      Slot::Single(v) => {
+        let slot = self
+          .builder
+          .create_sized_stack_slot(StackSlotData { kind: StackSlotKind::ExplicitSlot, size: 8 });
 
-  fn stack_slot_for_ir(&mut self, ir: Vec<ir::Value>) -> ir::Value {
-    let slot = self.builder.create_sized_stack_slot(StackSlotData {
-      kind: StackSlotKind::ExplicitSlot,
-      size: ir.len() as u32 * 8,
-    });
-
-    for (i, &v) in ir.iter().enumerate() {
-      self.builder.ins().stack_store(v, slot, i as i32 * 8);
+        self.builder.ins().stack_store(v, slot, 0);
+        self.builder.ins().stack_addr(ir::types::I64, slot, 0)
+      }
+      Slot::Multiple(_, slot) => self.builder.ins().stack_addr(ir::types::I64, slot, 0),
     }
-
-    self.builder.ins().stack_addr(ir::types::I64, slot, 0)
   }
 }
