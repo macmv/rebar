@@ -81,7 +81,8 @@ impl ValueType {
       ValueType::String => 5,
       ValueType::Array => 6,
 
-      ValueType::Struct(id) => !id.0 as i64,
+      // Leave the first 32 ids for the built-in types.
+      ValueType::Struct(id) => id.0 as i64 + 32,
     }
   }
 }
@@ -99,7 +100,7 @@ impl TryFrom<i64> for ValueType {
       5 => Ok(ValueType::String),
       6 => Ok(ValueType::Array),
 
-      v if v < 0 => Ok(ValueType::Struct(StructId(!v as u64))),
+      v if v >= 32 => Ok(ValueType::Struct(StructId(v as u64 - 32))),
 
       _ => Err(()),
     }
