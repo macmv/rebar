@@ -316,7 +316,7 @@ impl FuncBuilder<'_> {
 
     for (id, values) in param_values.into_iter().enumerate() {
       let len = values.len();
-      let slot = Slot::<Variable>::from((0..len).map(|_| self.new_variable()));
+      let slot = Slot::<Variable>::new(&mut self, len);
 
       self.locals.insert(mir::VarId(id as u32), slot.clone());
       slot.set(&mut self.builder, &values);
@@ -384,13 +384,6 @@ pub enum Error {
 }
 
 impl FuncBuilder<'_> {
-  fn new_variable(&mut self) -> Variable {
-    let var = Variable::new(self.next_variable);
-    self.builder.declare_var(var, ir::types::I64);
-    self.next_variable += 1;
-    var
-  }
-
   fn compile_stmt(&mut self, stmt: mir::StmtId) -> RValue {
     match self.mir.stmts[stmt] {
       mir::Stmt::Expr(expr) => self.compile_expr(expr),
@@ -399,7 +392,7 @@ impl FuncBuilder<'_> {
         let ir = value
           .to_ir(DynamicValueType::for_type(self.ctx, &ty).param_kind(self.ctx), &mut self.builder);
 
-        let slot = Slot::<Variable>::from(ir.iter().map(|_| self.new_variable()));
+        let slot = Slot::<Variable>::new(self, ir.len());
 
         slot.set(&mut self.builder, &ir);
         self.locals.insert(id, slot);
@@ -566,24 +559,38 @@ impl FuncBuilder<'_> {
             values: match var {
               Slot::Empty => vec![],
               Slot::Single(v) => vec![IRValue::Dyn(self.builder.use_var(*v))],
-              Slot::Multiple(v) => {
-                v.iter().map(|v| IRValue::Dyn(self.builder.use_var(*v))).collect::<Vec<_>>()
-              }
+              Slot::Multiple(len, slot) => (0..*len)
+                .map(|i| {
+                  IRValue::Dyn(self.builder.ins().stack_load(
+                    ir::types::I64,
+                    slot.clone(),
+                    i as i32 * 8,
+                  ))
+                })
+                .collect::<Vec<_>>(),
             },
           },
 
           DynamicValueType::Union(_) => RValue {
-            ty:     IRValue::Dyn(self.builder.use_var(match var {
+            ty:     IRValue::Dyn(match var {
               Slot::Empty => unreachable!(),
-              Slot::Single(v) => *v,
-              Slot::Multiple(v) => v[0],
-            })),
+              Slot::Single(v) => self.builder.use_var(*v),
+              Slot::Multiple(_, slot) => {
+                self.builder.ins().stack_load(ir::types::I64, slot.clone(), 0)
+              }
+            }),
             values: match var {
               Slot::Empty => unreachable!(),
               Slot::Single(_) => vec![],
-              Slot::Multiple(v) => {
-                v[1..].iter().map(|v| IRValue::Dyn(self.builder.use_var(*v))).collect::<Vec<_>>()
-              }
+              Slot::Multiple(len, slot) => (1..*len)
+                .map(|i| {
+                  IRValue::Dyn(self.builder.ins().stack_load(
+                    ir::types::I64,
+                    slot.clone(),
+                    i as i32 * 8,
+                  ))
+                })
+                .collect::<Vec<_>>(),
             },
           },
         }
