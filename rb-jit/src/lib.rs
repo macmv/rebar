@@ -12,10 +12,12 @@ use rb_mir::{
   MirContext,
 };
 use rb_typer::{Literal, Type};
+use slot::Slot;
 use std::collections::HashMap;
 
 mod ir_value;
 mod r_value;
+mod slot;
 
 use ir_value::IRValue;
 use r_value::RValue;
@@ -122,7 +124,7 @@ pub struct FuncBuilder<'a> {
   //
   // `VarId` is an opaque identifier for a local variable in the AST, whereas `Variable` is a
   // cranelift IR variable. There will usually be more cranelift variables than local variables.
-  locals:        HashMap<mir::VarId, Vec<Variable>>,
+  locals:        HashMap<mir::VarId, Slot<Variable>>,
   next_variable: usize,
 
   // A map of user-defined function calls to function refs.
@@ -314,10 +316,10 @@ impl FuncBuilder<'_> {
 
     for (id, values) in param_values.into_iter().enumerate() {
       let len = values.len();
-      let variables = (0..len).map(|_| self.new_variable()).collect::<Vec<_>>();
+      let slot = Slot::<Variable>::from((0..len).map(|_| self.new_variable()));
 
-      self.locals.insert(mir::VarId(id as u32), variables.clone());
-      self.set_var(&variables, &values);
+      self.locals.insert(mir::VarId(id as u32), slot.clone());
+      slot.set(&mut self.builder, &values);
     }
 
     for &stmt in &self.mir.items {
@@ -389,20 +391,6 @@ impl FuncBuilder<'_> {
     var
   }
 
-  fn set_var(&mut self, var: &[Variable], ir: &[ir::Value]) {
-    if var.is_empty() && ir.is_empty() {
-      return;
-    }
-
-    assert!(!ir.is_empty(), "ir must have at least one element, got {ir:?}");
-
-    // The first value is the only one that must be set. For example, if a value is
-    // set to `nil`, the second variable is undefined.
-    for (&var, &value) in var.iter().zip(ir.iter()) {
-      self.builder.def_var(var, value);
-    }
-  }
-
   fn compile_stmt(&mut self, stmt: mir::StmtId) -> RValue {
     match self.mir.stmts[stmt] {
       mir::Stmt::Expr(expr) => self.compile_expr(expr),
@@ -411,10 +399,10 @@ impl FuncBuilder<'_> {
         let ir = value
           .to_ir(DynamicValueType::for_type(self.ctx, &ty).param_kind(self.ctx), &mut self.builder);
 
-        let variables = ir.iter().map(|_| self.new_variable()).collect::<Vec<_>>();
+        let slot = Slot::<Variable>::from(ir.iter().map(|_| self.new_variable()));
 
-        self.set_var(&variables, &ir);
-        self.locals.insert(id, variables);
+        slot.set(&mut self.builder, &ir);
+        self.locals.insert(id, slot);
 
         if self.type_needs_gc(ty) {
           let arg_ptr = self.stack_slot_unsized(&value);
@@ -575,15 +563,28 @@ impl FuncBuilder<'_> {
         match dvt {
           DynamicValueType::Const(ty) => RValue {
             ty:     IRValue::Const(ty),
-            values: var.iter().map(|v| IRValue::Dyn(self.builder.use_var(*v))).collect::<Vec<_>>(),
+            values: match var {
+              Slot::Empty => vec![],
+              Slot::Single(v) => vec![IRValue::Dyn(self.builder.use_var(*v))],
+              Slot::Multiple(v) => {
+                v.iter().map(|v| IRValue::Dyn(self.builder.use_var(*v))).collect::<Vec<_>>()
+              }
+            },
           },
 
           DynamicValueType::Union(_) => RValue {
-            ty:     IRValue::Dyn(self.builder.use_var(var[0])),
-            values: var[1..]
-              .iter()
-              .map(|v| IRValue::Dyn(self.builder.use_var(*v)))
-              .collect::<Vec<_>>(),
+            ty:     IRValue::Dyn(self.builder.use_var(match var {
+              Slot::Empty => unreachable!(),
+              Slot::Single(v) => *v,
+              Slot::Multiple(v) => v[0],
+            })),
+            values: match var {
+              Slot::Empty => unreachable!(),
+              Slot::Single(_) => vec![],
+              Slot::Multiple(v) => {
+                v[1..].iter().map(|v| IRValue::Dyn(self.builder.use_var(*v))).collect::<Vec<_>>()
+              }
+            },
           },
         }
       }
