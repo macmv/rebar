@@ -35,7 +35,7 @@ impl<'a> RebarArgsParser<'a> {
         // NB: `ptr` is a pointer from `rb-gc`.
         let gc = &*(ptr as *const String);
 
-        Value::String(::std::mem::transmute(gc.as_str()))
+        Value::String(::std::mem::transmute(gc))
       }
       ValueType::Array => {
         let ptr = self.next();

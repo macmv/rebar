@@ -5,10 +5,11 @@ use rb_value::DynamicValueType;
 
 use crate::{RebarArgsParser, Value};
 
+#[derive(Clone, Copy)]
 pub struct RbStruct<'a> {
-  ctx: &'a MirContext,
-  id:  StructId,
-  ptr: *const i64,
+  pub ctx: &'a MirContext,
+  pub id:  StructId,
+  pub ptr: *const i64,
 }
 
 pub struct FieldsIter<'a> {

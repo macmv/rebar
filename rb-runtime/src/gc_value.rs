@@ -2,10 +2,8 @@ use std::{cell::UnsafeCell, fmt, mem::ManuallyDrop};
 
 use rb_gc::{Collect, Gc};
 use rb_mir::MirContext;
-use rb_std::{RbSlice, Value};
-use rb_value::{DynamicValueType, RbArray, RebarArgs, ValueType};
-
-use crate::owned_arg_parser::OwnedRebarArgsParser;
+use rb_std::{RbSlice, RbStruct, Value};
+use rb_value::{DynamicValueType, RbArray};
 
 /// An owned, garbage collected value. This is created from the rebar values, so
 /// it almost always shows up as a `ManuallyDrop<GcValue>`, as we need to
@@ -34,21 +32,18 @@ pub struct GcArray<'ctx> {
 // location on the stack where this struct lives. Once the rebar function
 // returns, `ptr` will be invalid. Returning from a function will pop the
 // GcStruct off the stack, and destroy the invalid pointer.
-pub struct GcStruct<'ctx> {
-  pub(crate) ctx:   &'ctx MirContext,
-  pub(crate) strct: rb_mir::Struct,
-  pub(crate) ptr:   *const RebarArgs,
-}
+pub struct GcStruct<'ctx>(pub RbStruct<'ctx>);
 
 impl GcValue<'_> {
   // NB: This `GcValue` cannot be dropped, as that will cause a double free.
-  pub(crate) fn from_value(value: &Value) -> Option<ManuallyDrop<GcValue<'static>>> {
+  pub(crate) fn from_value<'ctx>(value: &Value<'ctx>) -> Option<ManuallyDrop<GcValue<'ctx>>> {
     let gc = match value {
-      Value::String(s) => unsafe { GcValue::String(Gc::from_ptr(s.as_ptr() as *const String)) },
+      Value::String(s) => unsafe { GcValue::String(Gc::from_ptr(*s)) },
       Value::Array(arr) => unsafe {
         // This is horrible.
         GcValue::Array(Gc::from_ptr(arr.elems as *const RbArray as *const GcArray))
       },
+      Value::Struct(s) => GcValue::Struct(GcStruct(*s)),
       _ => return None,
     };
     Some(ManuallyDrop::new(gc))
@@ -73,12 +68,12 @@ impl fmt::Debug for GcArray<'_> {
 
 impl fmt::Debug for GcStruct<'_> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    f.debug_struct("GcStruct").field("ptr", &self.ptr).finish()
+    f.debug_struct("GcStruct").field("struct", &self.0).finish()
   }
 }
 
 impl PartialEq for GcStruct<'_> {
-  fn eq(&self, other: &Self) -> bool { self.ptr == other.ptr }
+  fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
 }
 
 unsafe impl Collect for GcValue<'_> {
@@ -115,23 +110,9 @@ impl Drop for GcArray<'_> {
 
 unsafe impl Collect for GcStruct<'_> {
   fn trace(&self, cc: &rb_gc::Collection) {
-    let mut parser = OwnedRebarArgsParser::new(self.ctx, self.ptr);
-
-    for (_, ty) in self.strct.fields.iter() {
-      match DynamicValueType::for_type(self.ctx, ty) {
-        DynamicValueType::Const(vt) => match vt {
-          ValueType::Int => parser.offset += 1,
-
-          ValueType::String | ValueType::Array => unsafe {
-            parser.value_owned(vt).trace(cc);
-          },
-
-          _ => todo!("skip const value: {vt:?}"),
-        },
-        // FIXME: Consume the rest of `len` bytes.
-        DynamicValueType::Union(_len) => unsafe {
-          parser.value_owned_unsized().trace(cc);
-        },
+    for value in self.0.fields() {
+      if let Some(v) = GcValue::from_value(&value) {
+        v.trace(cc);
       }
     }
   }

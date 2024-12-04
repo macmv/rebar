@@ -9,7 +9,7 @@ pub enum Value<'a> {
   Nil,
   Int(i64),
   Bool(bool),
-  String(&'a str),
+  String(&'a String),
   Array(RbSlice<'a>),
   Struct(RbStruct<'a>),
 }
