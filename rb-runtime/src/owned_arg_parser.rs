@@ -4,15 +4,15 @@ use rb_value::{DynamicValueType, RebarArgs, ValueType};
 
 use crate::{gc_value::GcStruct, GcArray, GcValue};
 
-pub struct OwnedRebarArgsParser<'a> {
-  ctx: &'a MirContext,
+pub struct OwnedRebarArgsParser<'ctx> {
+  ctx: &'ctx MirContext,
 
   args:              *const RebarArgs,
   pub(crate) offset: usize,
 }
 
-impl<'a> OwnedRebarArgsParser<'a> {
-  pub fn new(ctx: &'a MirContext, args: *const RebarArgs) -> Self {
+impl<'ctx> OwnedRebarArgsParser<'ctx> {
+  pub fn new(ctx: &'ctx MirContext, args: *const RebarArgs) -> Self {
     OwnedRebarArgsParser { ctx, args, offset: 0 }
   }
 
@@ -22,7 +22,7 @@ impl<'a> OwnedRebarArgsParser<'a> {
     v
   }
 
-  pub(crate) unsafe fn value_owned(&mut self, vt: ValueType) -> GcValue {
+  pub(crate) unsafe fn value_owned(&mut self, vt: ValueType) -> GcValue<'ctx> {
     match vt {
       ValueType::String => {
         let ptr = self.next();
@@ -58,7 +58,7 @@ impl<'a> OwnedRebarArgsParser<'a> {
           }
         }
 
-        GcValue::Struct(GcStruct { ctx: std::mem::transmute(self.ctx), strct: strct.clone(), ptr })
+        GcValue::Struct(GcStruct { ctx: self.ctx, strct: strct.clone(), ptr })
       }
 
       _ => unreachable!("not an owned value: {vt:?}"),
@@ -66,7 +66,7 @@ impl<'a> OwnedRebarArgsParser<'a> {
   }
 
   /// Parses a value to get tracked by the GC. This value should not be dropped!
-  pub unsafe fn value_owned_unsized(&mut self) -> GcValue {
+  pub unsafe fn value_owned_unsized(&mut self) -> GcValue<'ctx> {
     let ty = self.next();
     let vt = ValueType::try_from(ty).unwrap();
     self.value_owned(vt)

@@ -14,10 +14,10 @@ use crate::owned_arg_parser::OwnedRebarArgsParser;
 /// Using `GcValue::gc_id`, we can check if we've already tracked a value. If we
 /// haven't then the owned value is added to the garbage collector.
 #[derive(Debug, PartialEq)]
-pub enum GcValue {
+pub enum GcValue<'ctx> {
   String(Gc<String>),
   Array(Gc<GcArray>),
-  Struct(GcStruct),
+  Struct(GcStruct<'ctx>),
 }
 
 // SAFETY: Must be `#[repr(C)]`, so that rebar can access fields in it. Rebar
@@ -34,16 +34,15 @@ pub struct GcArray {
 // location on the stack where this struct lives. Once the rebar function
 // returns, `ptr` will be invalid. Returning from a function will pop the
 // GcStruct off the stack, and destroy the invalid pointer.
-pub struct GcStruct {
-  // FIXME: Needs a better lifetime. For the purpose of GC values, its effectively static.
-  pub(crate) ctx:   &'static MirContext,
+pub struct GcStruct<'ctx> {
+  pub(crate) ctx:   &'ctx MirContext,
   pub(crate) strct: rb_mir::Struct,
   pub(crate) ptr:   *const RebarArgs,
 }
 
-impl GcValue {
+impl GcValue<'_> {
   // NB: This `GcValue` cannot be dropped, as that will cause a double free.
-  pub(crate) fn from_value(value: &Value) -> Option<ManuallyDrop<GcValue>> {
+  pub(crate) fn from_value(value: &Value) -> Option<ManuallyDrop<GcValue<'static>>> {
     let gc = match value {
       Value::String(s) => unsafe { GcValue::String(Gc::from_ptr(s.as_ptr() as *const String)) },
       Value::Array(arr) => unsafe {
@@ -73,17 +72,17 @@ impl GcArray {
   }
 }
 
-impl fmt::Debug for GcStruct {
+impl fmt::Debug for GcStruct<'_> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.debug_struct("GcStruct").field("ptr", &self.ptr).finish()
   }
 }
 
-impl PartialEq for GcStruct {
+impl PartialEq for GcStruct<'_> {
   fn eq(&self, other: &Self) -> bool { self.ptr == other.ptr }
 }
 
-unsafe impl Collect for GcValue {
+unsafe impl Collect for GcValue<'_> {
   fn trace(&self, cc: &rb_gc::Collection) {
     match self {
       GcValue::String(s) => s.trace(cc),
@@ -125,7 +124,7 @@ impl Drop for GcArray {
   }
 }
 
-unsafe impl Collect for GcStruct {
+unsafe impl Collect for GcStruct<'_> {
   fn trace(&self, cc: &rb_gc::Collection) {
     let mut parser = OwnedRebarArgsParser::new(self.ctx, self.ptr);
 
