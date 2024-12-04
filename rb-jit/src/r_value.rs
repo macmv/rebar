@@ -6,9 +6,7 @@ use cranelift::{
   codegen::ir,
   prelude::{InstBuilder, MemFlags},
 };
-use rb_mir::MirContext;
-use rb_typer::Type;
-use rb_value::{DynamicValueType, ParamKind, ValueType};
+use rb_value::{ParamKind, ValueType};
 
 #[derive(Debug, Clone)]
 pub enum RValue {

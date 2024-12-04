@@ -1,6 +1,6 @@
 use rb_gc::Gc;
 use rb_mir::MirContext;
-use rb_std::{RbStruct, RbStructOwned};
+use rb_std::RbStructOwned;
 use rb_value::{DynamicValueType, RebarArgs, ValueType};
 
 use crate::{gc_value::GcStruct, GcArray, GcValue};
