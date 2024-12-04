@@ -41,8 +41,8 @@ impl GcBox {
   ///
   /// **SAFETY**: `Self::drop_in_place` must not have been called.
   #[inline(always)]
-  pub(crate) unsafe fn trace_value(&self, cc: &crate::Collection) {
-    (self.header().vtable().trace_value)(*self, cc)
+  pub(crate) unsafe fn trace_value(&self, ctx: &(), cc: &crate::Collection) {
+    (self.header().vtable().trace_value)(*self, ctx, cc)
   }
 
   /// Drops the stored value.
@@ -80,17 +80,17 @@ pub(crate) struct GcBoxHeader {
 
 impl GcBoxHeader {
   #[inline(always)]
-  pub fn new<T: Collect>() -> Self {
+  pub fn new<T: Collect<C>, C>() -> Self {
     // Helper trait to materialize vtables in static memory.
-    trait HasCollectVtable {
+    trait HasCollectVtable<C> {
       const VTABLE: CollectVtable;
     }
 
-    impl<T: Collect> HasCollectVtable for T {
-      const VTABLE: CollectVtable = CollectVtable::vtable_for::<T>();
+    impl<T: Collect<C>, C> HasCollectVtable<C> for T {
+      const VTABLE: CollectVtable = CollectVtable::vtable_for::<T, C>();
     }
 
-    let vtable: &'static _ = &<T as HasCollectVtable>::VTABLE;
+    let vtable: &'static _ = &<T as HasCollectVtable<C>>::VTABLE;
     Self { next: Cell::new(None), tagged_vtable: Cell::new(vtable as *const _) }
   }
 
@@ -178,7 +178,7 @@ struct CollectVtable {
   /// box).
   drop_value:  unsafe fn(GcBox),
   /// Traces the value stored in the given `GcBox`.
-  trace_value: unsafe fn(GcBox, &crate::Collection),
+  trace_value: unsafe fn(GcBox, &(), &crate::Collection),
 }
 
 impl CollectVtable {
@@ -186,15 +186,15 @@ impl CollectVtable {
   /// Because `T: Sized`, we can recover a typed pointer
   /// directly from the erased `GcBox`.
   #[inline(always)]
-  const fn vtable_for<T: Collect>() -> Self {
+  const fn vtable_for<T: Collect<C>, C>() -> Self {
     Self {
       box_layout:  Layout::new::<GcBoxInner<T>>(),
       drop_value:  |erased| unsafe {
         ptr::drop_in_place(erased.unerased_value::<T>());
       },
-      trace_value: |erased, cc| unsafe {
+      trace_value: |erased, ctx, cc| unsafe {
         let val = &*(erased.unerased_value::<T>());
-        val.trace(cc)
+        val.trace(&*(ctx as *const () as *const C), cc)
       },
     }
   }
@@ -212,9 +212,9 @@ pub(crate) struct GcBoxInner<T: ?Sized> {
 
 impl<T: ?Sized> GcBoxInner<T> {
   #[inline(always)]
-  pub(crate) fn new(header: GcBoxHeader, t: T) -> Self
+  pub(crate) fn new<C>(header: GcBoxHeader, t: T) -> Self
   where
-    T: Collect + Sized,
+    T: Collect<C> + Sized,
   {
     Self { header, value: mem::ManuallyDrop::new(t) }
   }

@@ -48,9 +48,9 @@ impl<T: ?Sized> Clone for Gc<T> {
   fn clone(&self) -> Gc<T> { *self }
 }
 
-unsafe impl<T: ?Sized> Collect for Gc<T> {
+unsafe impl<T: ?Sized, C> Collect<C> for Gc<T> {
   #[inline]
-  fn trace(&self, cc: &Collection) {
+  fn trace(&self, _: &C, cc: &Collection) {
     unsafe {
       cc.trace(GcBox::erase(self.ptr));
     }
@@ -74,9 +74,14 @@ impl<T: ?Sized> Borrow<T> for Gc<T> {
   fn borrow(&self) -> &T { unsafe { &self.ptr.as_ref().value } }
 }
 
-impl<T: Collect> Gc<T> {
+impl<T> Gc<T> {
   #[inline]
-  pub fn new(mc: &Mutation, t: T) -> Gc<T> { Gc { ptr: mc.allocate(t) } }
+  pub fn new<C>(mc: &Mutation, t: T) -> Gc<T>
+  where
+    T: Collect<C>,
+  {
+    Gc { ptr: mc.allocate(t) }
+  }
 }
 
 impl<T: 'static> Gc<T> {
@@ -99,7 +104,7 @@ impl<T: 'static> Gc<T> {
   /// ```
   #[inline]
   pub fn new_static(mc: &Mutation, t: T) -> Gc<T> {
-    let p = Gc::new(mc, Static(t));
+    let p = Gc::new::<()>(mc, Static(t));
     // SAFETY: `Static` is `#[repr(transparent)]`.
     unsafe { Gc::cast::<T>(p) }
   }

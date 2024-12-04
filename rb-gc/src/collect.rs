@@ -22,7 +22,7 @@ use crate::context::Collection;
 /// internal mutability in this case is to use [`crate::lock::Lock<T>`] and
 /// [`crate::lock::RefLock<T>`], which provides internal mutability
 /// while ensuring that the write barrier is always executed.
-pub unsafe trait Collect {
+pub unsafe trait Collect<C> {
   /// As an optimization, if this type can never hold a `Gc` pointer and `trace`
   /// is unnecessary to call, you may implement this method and return false.
   /// The default implementation returns true, signaling that `Collect::trace`
@@ -39,5 +39,5 @@ pub unsafe trait Collect {
   /// inner types that implement `Collect`, a valid implementation would
   /// simply call `Collect::trace` on all the held values to ensure this.
   #[inline]
-  fn trace(&self, _cc: &Collection) {}
+  fn trace(&self, ctx: &C, cc: &Collection) { let _ = (ctx, cc); }
 }

@@ -200,7 +200,6 @@ where
 impl<R> Arena<R>
 where
   R: for<'a> Rootable<'a>,
-  for<'a> Root<'a, R>: Collect,
 {
   /// Run incremental garbage collection until the allocation debt is <= 0.0.
   ///
@@ -211,9 +210,12 @@ where
   /// `Sleeping` phase, i.e. it will never transition from the `Sweeping`
   /// phase to the `Marking` phase without returning in-between.
   #[inline]
-  pub fn collect_debt(&mut self) {
+  pub fn collect_debt<C>(&mut self, ctx: &C)
+  where
+    for<'a> Root<'a, R>: Collect<C>,
+  {
     unsafe {
-      self.context.do_collection(&self.root, 0.0, None);
+      self.context.do_collection(&self.root, ctx, 0.0, None);
     }
   }
 
@@ -224,10 +226,13 @@ where
   /// nothing if the collection phase is `Marked` or `Sweeping`, otherwise
   /// acts like `Arena::collect_debt`.
   #[inline]
-  pub fn mark_debt(&mut self) -> Option<MarkedArena<'_, R>> {
+  pub fn mark_debt<C>(&mut self, ctx: &C) -> Option<MarkedArena<'_, R>>
+  where
+    for<'a> Root<'a, R>: Collect<C>,
+  {
     if matches!(self.context.phase(), Phase::Mark | Phase::Sleep) {
       unsafe {
-        self.context.do_collection(&self.root, 0.0, Some(EarlyStop::BeforeSweep));
+        self.context.do_collection(&self.root, ctx, 0.0, Some(EarlyStop::BeforeSweep));
       }
     }
 
@@ -243,9 +248,12 @@ where
   /// currently in the sleep phase, this restarts the collection and performs
   /// a full collection before transitioning back to the sleep phase.
   #[inline]
-  pub fn collect_all(&mut self) {
+  pub fn collect_all<C>(&mut self, ctx: &C)
+  where
+    for<'a> Root<'a, R>: Collect<C>,
+  {
     unsafe {
-      self.context.do_collection(&self.root, f64::NEG_INFINITY, None);
+      self.context.do_collection(&self.root, ctx, f64::NEG_INFINITY, None);
     }
   }
 
@@ -256,10 +264,18 @@ where
   /// the `Marked` phase, and does nothing if the collector is currently in
   /// the `Marked` phase or the `Sweeping` phase.
   #[inline]
-  pub fn mark_all(&mut self) -> Option<MarkedArena<'_, R>> {
+  pub fn mark_all<C>(&mut self, ctx: &C) -> Option<MarkedArena<'_, R>>
+  where
+    for<'a> Root<'a, R>: Collect<C>,
+  {
     if matches!(self.context.phase(), Phase::Mark | Phase::Sleep) {
       unsafe {
-        self.context.do_collection(&self.root, f64::NEG_INFINITY, Some(EarlyStop::BeforeSweep));
+        self.context.do_collection(
+          &self.root,
+          ctx,
+          f64::NEG_INFINITY,
+          Some(EarlyStop::BeforeSweep),
+        );
       }
     }
 
@@ -276,7 +292,6 @@ pub struct MarkedArena<'a, R: for<'b> Rootable<'b>>(&'a mut Arena<R>);
 impl<'a, R> MarkedArena<'a, R>
 where
   R: for<'b> Rootable<'b>,
-  for<'b> Root<'b, R>: Collect,
 {
   /// Examine the state of a fully marked arena.
   ///
@@ -301,9 +316,17 @@ where
   /// Immediately transition the arena out of [`CollectionPhase::Marked`] to
   /// [`CollectionPhase::Sweeping`].
   #[inline]
-  pub fn start_sweeping(self) {
+  pub fn start_sweeping<C>(self, ctx: &C)
+  where
+    for<'b> Root<'b, R>: Collect<C>,
+  {
     unsafe {
-      self.0.context.do_collection(&self.0.root, f64::NEG_INFINITY, Some(EarlyStop::AfterSweep));
+      self.0.context.do_collection(
+        &self.0.root,
+        ctx,
+        f64::NEG_INFINITY,
+        Some(EarlyStop::AfterSweep),
+      );
     }
     assert_eq!(self.0.context.phase(), Phase::Sweep);
   }

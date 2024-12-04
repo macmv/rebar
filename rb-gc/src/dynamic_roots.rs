@@ -25,14 +25,14 @@ use crate::{arena::Root, metrics::Metrics, Collect, Gc, Mutation, Rootable};
 #[derive(Copy, Clone)]
 pub struct DynamicRootSet(Gc<Inner>);
 
-unsafe impl Collect for DynamicRootSet {
-  fn trace(&self, cc: &crate::Collection) { self.0.trace(cc); }
+unsafe impl<C> Collect<C> for DynamicRootSet {
+  fn trace(&self, ctx: &C, cc: &crate::Collection) { self.0.trace(ctx, cc); }
 }
 
 impl DynamicRootSet {
   /// Creates a new, empty root set.
   pub fn new(mc: &Mutation) -> Self {
-    DynamicRootSet(Gc::new(
+    DynamicRootSet(Gc::new::<()>(
       mc,
       Inner { slots: Rc::new(RefCell::new(Slots::new(mc.metrics().clone()))) },
     ))
@@ -169,10 +169,10 @@ struct Inner {
   slots: Rc<RefCell<Slots>>,
 }
 
-unsafe impl Collect for Inner {
-  fn trace(&self, cc: &crate::Collection) {
+unsafe impl<C> Collect<C> for Inner {
+  fn trace(&self, ctx: &C, cc: &crate::Collection) {
     let slots = self.slots.borrow();
-    slots.trace(cc);
+    slots.trace(ctx, cc);
   }
 }
 
@@ -189,11 +189,11 @@ enum Slot {
   Occupied { root: Gc<()>, ref_count: usize },
 }
 
-unsafe impl Collect for Slot {
-  fn trace(&self, cc: &crate::Collection) {
+unsafe impl<C> Collect<C> for Slot {
+  fn trace(&self, ctx: &C, cc: &crate::Collection) {
     match self {
       Slot::Vacant { .. } => {}
-      Slot::Occupied { root, .. } => root.trace(cc),
+      Slot::Occupied { root, .. } => root.trace(ctx, cc),
     }
   }
 }
@@ -210,8 +210,8 @@ impl Drop for Slots {
   }
 }
 
-unsafe impl Collect for Slots {
-  fn trace(&self, cc: &crate::Collection) { self.slots.trace(cc); }
+unsafe impl<C> Collect<C> for Slots {
+  fn trace(&self, ctx: &C, cc: &crate::Collection) { self.slots.trace(ctx, cc); }
 }
 
 impl Slots {

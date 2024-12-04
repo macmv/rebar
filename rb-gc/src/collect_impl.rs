@@ -19,7 +19,7 @@ use crate::{collect::Collect, context::Collection};
 #[macro_export]
 macro_rules! static_collect {
   ($type:ty) => {
-    unsafe impl Collect for $type
+    unsafe impl<C> Collect<C> for $type
     where
       $type: 'static,
     {
@@ -87,175 +87,175 @@ static_collect!(std::ffi::OsString);
 /// longer compiles. So, until this rustc bug is fixed...
 ///
 /// DO NOT REMOVE THIS EXTRA `T: 'static` BOUND
-unsafe impl<T: ?Sized + 'static> Collect for &'static T {
+unsafe impl<T: ?Sized + 'static, C> Collect<C> for &'static T {
   #[inline]
   fn needs_trace() -> bool { false }
 }
 
-unsafe impl<T: ?Sized + Collect> Collect for Box<T> {
+unsafe impl<T: ?Sized + Collect<C>, C> Collect<C> for Box<T> {
   #[inline]
-  fn trace(&self, cc: &Collection) { (**self).trace(cc) }
+  fn trace(&self, ctx: &C, cc: &Collection) { (**self).trace(ctx, cc) }
 }
 
-unsafe impl<T: Collect> Collect for [T] {
+unsafe impl<T: Collect<C>, C> Collect<C> for [T] {
   #[inline]
   fn needs_trace() -> bool { T::needs_trace() }
 
   #[inline]
-  fn trace(&self, cc: &Collection) {
+  fn trace(&self, ctx: &C, cc: &Collection) {
     for t in self.iter() {
-      t.trace(cc)
+      t.trace(ctx, cc)
     }
   }
 }
 
-unsafe impl<T: Collect> Collect for Option<T> {
+unsafe impl<T: Collect<C>, C> Collect<C> for Option<T> {
   #[inline]
   fn needs_trace() -> bool { T::needs_trace() }
 
   #[inline]
-  fn trace(&self, cc: &Collection) {
+  fn trace(&self, ctx: &C, cc: &Collection) {
     if let Some(t) = self.as_ref() {
-      t.trace(cc)
+      t.trace(ctx, cc)
     }
   }
 }
 
-unsafe impl<T: Collect, E: Collect> Collect for Result<T, E> {
+unsafe impl<T: Collect<C>, E: Collect<C>, C> Collect<C> for Result<T, E> {
   #[inline]
   fn needs_trace() -> bool { T::needs_trace() || E::needs_trace() }
 
   #[inline]
-  fn trace(&self, cc: &Collection) {
+  fn trace(&self, ctx: &C, cc: &Collection) {
     match self {
-      Ok(r) => r.trace(cc),
-      Err(e) => e.trace(cc),
+      Ok(r) => r.trace(ctx, cc),
+      Err(e) => e.trace(ctx, cc),
     }
   }
 }
 
-unsafe impl<T: Collect> Collect for Vec<T> {
+unsafe impl<T: Collect<C>, C> Collect<C> for Vec<T> {
   #[inline]
   fn needs_trace() -> bool { T::needs_trace() }
 
   #[inline]
-  fn trace(&self, cc: &Collection) {
+  fn trace(&self, ctx: &C, cc: &Collection) {
     for t in self {
-      t.trace(cc)
+      t.trace(ctx, cc)
     }
   }
 }
 
-unsafe impl<T: Collect> Collect for VecDeque<T> {
+unsafe impl<T: Collect<C>, C> Collect<C> for VecDeque<T> {
   #[inline]
   fn needs_trace() -> bool { T::needs_trace() }
 
   #[inline]
-  fn trace(&self, cc: &Collection) {
+  fn trace(&self, ctx: &C, cc: &Collection) {
     for t in self {
-      t.trace(cc)
+      t.trace(ctx, cc)
     }
   }
 }
 
-unsafe impl<T: Collect> Collect for LinkedList<T> {
+unsafe impl<T: Collect<C>, C> Collect<C> for LinkedList<T> {
   #[inline]
   fn needs_trace() -> bool { T::needs_trace() }
 
   #[inline]
-  fn trace(&self, cc: &Collection) {
+  fn trace(&self, ctx: &C, cc: &Collection) {
     for t in self {
-      t.trace(cc)
+      t.trace(ctx, cc)
     }
   }
 }
 
 #[cfg(feature = "std")]
-unsafe impl<K, V, S> Collect for HashMap<K, V, S>
+unsafe impl<K, V, S, C> Collect<C> for HashMap<K, V, S>
 where
-  K: Collect,
-  V: Collect,
+  K: Collect<C>,
+  V: Collect<C>,
   S: 'static,
 {
   #[inline]
   fn needs_trace() -> bool { K::needs_trace() || V::needs_trace() }
 
   #[inline]
-  fn trace(&self, cc: &Collection) {
+  fn trace(&self, ctx: &C, cc: &Collection) {
     for (k, v) in self {
-      k.trace(cc);
-      v.trace(cc);
+      k.trace(ctx, cc);
+      v.trace(ctx, cc);
     }
   }
 }
 
 #[cfg(feature = "std")]
-unsafe impl<T, S> Collect for HashSet<T, S>
+unsafe impl<T, S, C> Collect<C> for HashSet<T, S>
 where
-  T: Collect,
+  T: Collect<C>,
   S: 'static,
 {
   #[inline]
   fn needs_trace() -> bool { T::needs_trace() }
 
   #[inline]
-  fn trace(&self, cc: &Collection) {
+  fn trace(&self, ctx: &C, cc: &Collection) {
     for v in self {
-      v.trace(cc);
+      v.trace(ctx, cc);
     }
   }
 }
 
-unsafe impl<K, V> Collect for BTreeMap<K, V>
+unsafe impl<K, V, C> Collect<C> for BTreeMap<K, V>
 where
-  K: Collect,
-  V: Collect,
+  K: Collect<C>,
+  V: Collect<C>,
 {
   #[inline]
   fn needs_trace() -> bool { K::needs_trace() || V::needs_trace() }
 
   #[inline]
-  fn trace(&self, cc: &Collection) {
+  fn trace(&self, ctx: &C, cc: &Collection) {
     for (k, v) in self {
-      k.trace(cc);
-      v.trace(cc);
+      k.trace(ctx, cc);
+      v.trace(ctx, cc);
     }
   }
 }
 
-unsafe impl<T> Collect for BTreeSet<T>
+unsafe impl<T, C> Collect<C> for BTreeSet<T>
 where
-  T: Collect,
+  T: Collect<C>,
 {
   #[inline]
   fn needs_trace() -> bool { T::needs_trace() }
 
   #[inline]
-  fn trace(&self, cc: &Collection) {
+  fn trace(&self, ctx: &C, cc: &Collection) {
     for v in self {
-      v.trace(cc);
+      v.trace(ctx, cc);
     }
   }
 }
 
-unsafe impl<T> Collect for Rc<T>
+unsafe impl<T, C> Collect<C> for Rc<T>
 where
-  T: ?Sized + Collect,
+  T: ?Sized + Collect<C>,
 {
   #[inline]
-  fn trace(&self, cc: &Collection) { (**self).trace(cc); }
+  fn trace(&self, ctx: &C, cc: &Collection) { (**self).trace(ctx, cc); }
 }
 
 #[cfg(target_has_atomic = "ptr")]
-unsafe impl<T> Collect for alloc::sync::Arc<T>
+unsafe impl<T, C> Collect<C> for alloc::sync::Arc<T>
 where
-  T: ?Sized + Collect,
+  T: ?Sized + Collect<C>,
 {
   #[inline]
-  fn trace(&self, cc: &Collection) { (**self).trace(cc); }
+  fn trace(&self, ctx: &C, cc: &Collection) { (**self).trace(ctx, cc); }
 }
 
-unsafe impl<T> Collect for Cell<T>
+unsafe impl<T, C> Collect<C> for Cell<T>
 where
   T: 'static,
 {
@@ -263,7 +263,7 @@ where
   fn needs_trace() -> bool { false }
 }
 
-unsafe impl<T> Collect for RefCell<T>
+unsafe impl<T, C> Collect<C> for RefCell<T>
 where
   T: 'static,
 {
@@ -272,26 +272,26 @@ where
 }
 
 // SAFETY: `PhantomData` is a ZST, and therefore doesn't store anything
-unsafe impl<T> Collect for PhantomData<T> {
+unsafe impl<T, C> Collect<C> for PhantomData<T> {
   #[inline]
   fn needs_trace() -> bool { false }
 }
 
-unsafe impl<T: Collect, const N: usize> Collect for [T; N] {
+unsafe impl<T: Collect<C>, C, const N: usize> Collect<C> for [T; N] {
   #[inline]
   fn needs_trace() -> bool { T::needs_trace() }
 
   #[inline]
-  fn trace(&self, cc: &Collection) {
+  fn trace(&self, ctx: &C, cc: &Collection) {
     for t in self {
-      t.trace(cc)
+      t.trace(ctx, cc)
     }
   }
 }
 
 macro_rules! impl_tuple {
     () => (
-        unsafe impl Collect for () {
+        unsafe impl<C> Collect<C> for () {
             #[inline]
             fn needs_trace() -> bool {
                 false
@@ -300,8 +300,8 @@ macro_rules! impl_tuple {
     );
 
     ($($name:ident)+) => (
-        unsafe impl<$($name,)*> Collect for ($($name,)*)
-            where $($name: Collect,)*
+        unsafe impl<$($name,)* Ctx> Collect<Ctx> for ($($name,)*)
+            where $($name: Collect<Ctx>,)*
         {
             #[inline]
             fn needs_trace() -> bool {
@@ -310,9 +310,9 @@ macro_rules! impl_tuple {
 
             #[allow(non_snake_case)]
             #[inline]
-            fn trace(&self, cc: &Collection) {
+            fn trace(&self, ctx: &Ctx, cc: &Collection) {
                 let ($($name,)*) = self;
-                $($name.trace(cc);)*
+                $($name.trace(ctx, cc);)*
             }
         }
     );

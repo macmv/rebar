@@ -17,9 +17,9 @@ impl<T: ?Sized> Debug for GcWeak<T> {
   fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result { write!(fmt, "(GcWeak)") }
 }
 
-unsafe impl<T: ?Sized> Collect for GcWeak<T> {
+unsafe impl<T: ?Sized, C> Collect<C> for GcWeak<T> {
   #[inline]
-  fn trace(&self, cc: &Collection) {
+  fn trace(&self, _: &C, cc: &Collection) {
     unsafe {
       cc.trace_weak(GcBox::erase(self.inner.ptr));
     }

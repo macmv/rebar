@@ -147,12 +147,12 @@ impl<'gc, T: Copy + 'gc> Gc<Lock<T>> {
   pub fn set(self, mc: &Mutation, t: T) { self.unlock(mc).set(t); }
 }
 
-unsafe impl<'gc, T: Collect + Copy + 'gc> Collect for Lock<T> {
+unsafe impl<'gc, T: Collect<C> + Copy + 'gc, C> Collect<C> for Lock<T> {
   #[inline]
   fn needs_trace() -> bool { T::needs_trace() }
 
   #[inline]
-  fn trace(&self, cc: &Collection) {
+  fn trace(&self, ctx: &C, cc: &Collection) {
     // Okay, so this calls `T::trace` on a *copy* of `T`.
     //
     // This is theoretically a correctness issue, because technically `T` could have
@@ -173,7 +173,7 @@ unsafe impl<'gc, T: Collect + Copy + 'gc> Collect for Lock<T> {
     // It could be fixed now, but since it is not even testable because it is
     // currently *impossible*, I did not bother. One day this may need to be
     // implemented!
-    T::trace(&self.get(), cc);
+    T::trace(&self.get(), ctx, cc);
   }
 }
 
@@ -273,10 +273,10 @@ impl<'gc, T: ?Sized + 'gc> Gc<RefLock<T>> {
 // required by `needs_trace`).
 // Fortunately this doesn't matter much as there's no way to allocate
 // unsized GC'd values directly.
-unsafe impl<'gc, T: Collect + 'gc> Collect for RefLock<T> {
+unsafe impl<'gc, T: Collect<C> + 'gc, C> Collect<C> for RefLock<T> {
   #[inline]
   fn needs_trace() -> bool { T::needs_trace() }
 
   #[inline]
-  fn trace(&self, cc: &Collection) { self.borrow().trace(cc); }
+  fn trace(&self, ctx: &C, cc: &Collection) { self.borrow().trace(ctx, cc); }
 }

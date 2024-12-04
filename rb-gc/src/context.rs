@@ -69,7 +69,7 @@ impl Mutation {
   }
 
   #[inline]
-  pub(crate) fn allocate<T: Collect>(&self, t: T) -> NonNull<GcBoxInner<T>> {
+  pub(crate) fn allocate<T: Collect<C>, C>(&self, t: T) -> NonNull<GcBoxInner<T>> {
     self.context.allocate(t)
   }
 
@@ -253,18 +253,20 @@ impl Context {
   //
   // If we are currently in `Phase::Sleep`, this will transition the collector to
   // `Phase::Mark`.
-  pub(crate) unsafe fn do_collection<R: Collect + ?Sized>(
+  pub(crate) unsafe fn do_collection<R: Collect<C> + ?Sized, C>(
     &self,
     root: &R,
+    ctx: &C,
     target_debt: f64,
     early_stop: Option<EarlyStop>,
   ) {
-    self.do_collection_inner(root, target_debt, early_stop)
+    self.do_collection_inner(root, ctx, target_debt, early_stop)
   }
 
-  fn do_collection_inner<R: Collect + ?Sized>(
+  fn do_collection_inner<R: Collect<C> + ?Sized, C>(
     &self,
     root: &R,
+    ctx: &C,
     mut target_debt: f64,
     early_stop: Option<EarlyStop>,
   ) {
@@ -320,14 +322,16 @@ impl Context {
 
             let guard = DropGuard { cx: self, gc_box };
             debug_assert!(gc_box.header().is_live());
-            unsafe { gc_box.trace_value(self.collection_context()) }
+            unsafe {
+              gc_box.trace_value(&*(ctx as *const C as *const ()), self.collection_context())
+            }
             gc_box.header().set_color(GcColor::Black);
             mem::forget(guard);
           } else if self.root_needs_trace.get() {
             // We treat the root object as gray if `root_needs_trace` is set, and we
             // process it at the end of the gray queue for the same reason as the "gray
             // again" objects.
-            root.trace(self.collection_context());
+            root.trace(ctx, self.collection_context());
             self.root_needs_trace.set(false);
           } else {
             if early_stop == Some(EarlyStop::BeforeSweep) {
@@ -422,8 +426,8 @@ impl Context {
     }
   }
 
-  fn allocate<T: Collect>(&self, t: T) -> NonNull<GcBoxInner<T>> {
-    let header = GcBoxHeader::new::<T>();
+  fn allocate<T: Collect<C>, C>(&self, t: T) -> NonNull<GcBoxInner<T>> {
+    let header = GcBoxHeader::new::<T, C>();
     header.set_next(self.all.get());
     header.set_live(true);
     header.set_needs_trace(T::needs_trace());
