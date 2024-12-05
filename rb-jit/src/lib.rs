@@ -1,6 +1,6 @@
 use codegen::{
   control::ControlPlane,
-  ir::{self, FuncRef},
+  ir::{self, FuncRef, Inst},
   CompiledCode,
 };
 use cranelift::prelude::*;
@@ -288,6 +288,10 @@ impl FuncBuilder<'_> {
     }
   }
 
+  fn call_intrinsic(&mut self, intrinsic: FuncRef, args: &[ir::Value]) -> Inst {
+    self.builder.ins().call(intrinsic, args)
+  }
+
   fn translate(mut self) {
     let entry_block = self.builder.create_block();
 
@@ -319,7 +323,7 @@ impl FuncBuilder<'_> {
     self.builder.switch_to_block(entry_block);
     self.builder.seal_block(entry_block);
 
-    self.builder.ins().call(self.intrinsics.push_frame, &[]);
+    self.call_intrinsic(self.intrinsics.push_frame, &[]);
 
     for (id, values) in param_values.into_iter().enumerate() {
       let len = values.len();
@@ -334,7 +338,7 @@ impl FuncBuilder<'_> {
       // self.def_var(return_variable, res.to_ir());
     }
 
-    self.builder.ins().call(self.intrinsics.pop_frame, &[]);
+    self.call_intrinsic(self.intrinsics.pop_frame, &[]);
 
     // Emit the return instruction.
     self.builder.ins().return_(&[]);
@@ -406,10 +410,10 @@ impl FuncBuilder<'_> {
         if self.type_needs_gc(ty) {
           let arg_ptr = self.stack_slot_unsized(&value);
 
-          self.builder.ins().call(self.intrinsics.track, &[arg_ptr]);
+          self.call_intrinsic(self.intrinsics.track, &[arg_ptr]);
         }
 
-        self.builder.ins().call(self.intrinsics.gc_collect, &[]);
+        self.call_intrinsic(self.intrinsics.gc_collect, &[]);
 
         RValue::nil()
       }
@@ -442,7 +446,7 @@ impl FuncBuilder<'_> {
         mir::Literal::Bool(v) => RValue::bool(self.builder.ins().iconst(ir::types::I8, *v as i64)),
         mir::Literal::Int(i) => RValue::int(self.builder.ins().iconst(ir::types::I64, *i)),
         mir::Literal::String(i) => {
-          let str = self.builder.ins().call(self.intrinsics.string_new, &[]);
+          let str = self.call_intrinsic(self.intrinsics.string_new, &[]);
           let str = self.builder.inst_results(str)[0];
 
           let mut to_leak = i.clone();
@@ -457,7 +461,7 @@ impl FuncBuilder<'_> {
           // TODO: Throw this in a GC or something.
           String::leak(to_leak);
 
-          self.builder.ins().call(self.intrinsics.string_append_str, &[str, ptr, len]);
+          self.call_intrinsic(self.intrinsics.string_append_str, &[str, ptr, len]);
 
           RValue::TypedDyn(ValueType::String, Slot::Single(str))
         }
@@ -478,7 +482,7 @@ impl FuncBuilder<'_> {
 
         // We track this in the GC later, once we're done mutating it. For now, manually
         // drop it so we don't double free.
-        let ret = self.builder.ins().call(self.intrinsics.string_new, &[]);
+        let ret = self.call_intrinsic(self.intrinsics.string_new, &[]);
         let str = self.builder.inst_results(ret)[0];
 
         for segment in segments {
@@ -496,14 +500,14 @@ impl FuncBuilder<'_> {
               // TODO: Keep this in a memoized string table.
               String::leak(v);
 
-              self.builder.ins().call(self.intrinsics.string_append_str, &[str, ptr, len]);
+              self.call_intrinsic(self.intrinsics.string_append_str, &[str, ptr, len]);
             }
 
             mir::StringInterp::Expr(e) => {
               let value = self.compile_expr(*e);
               let arg_ptr = self.stack_slot_unsized(&value);
 
-              self.builder.ins().call(self.intrinsics.string_append_value, &[str, arg_ptr]);
+              self.call_intrinsic(self.intrinsics.string_append_value, &[str, arg_ptr]);
             }
           };
         }
@@ -519,7 +523,7 @@ impl FuncBuilder<'_> {
           let vt = self.builder.ins().iconst(ir::types::I64, vt.encode());
           let len = self.builder.ins().iconst(ir::types::I64, exprs.len() as i64);
 
-          let result_ptr = self.builder.ins().call(self.intrinsics.array_new, &[len, vt]);
+          let result_ptr = self.call_intrinsic(self.intrinsics.array_new, &[len, vt]);
           self.builder.inst_results(result_ptr)[0]
         };
 
@@ -577,13 +581,13 @@ impl FuncBuilder<'_> {
       mir::Expr::Block(ref stmts) => {
         // FIXME: Make a new scope so that locals don't leak.
         let mut return_value = RValue::nil();
-        self.builder.ins().call(self.intrinsics.push_frame, &[]);
+        self.call_intrinsic(self.intrinsics.push_frame, &[]);
 
         for &stmt in stmts {
           return_value = self.compile_stmt(stmt);
         }
 
-        self.builder.ins().call(self.intrinsics.pop_frame, &[]);
+        self.call_intrinsic(self.intrinsics.pop_frame, &[]);
         return_value
       }
 
@@ -754,7 +758,7 @@ impl FuncBuilder<'_> {
               let l_addr = self.stack_slot_unsized(&lhs);
               let r_addr = self.stack_slot_unsized(&rhs);
 
-              let ret = self.builder.ins().call(self.intrinsics.value_equals, &[l_addr, r_addr]);
+              let ret = self.call_intrinsic(self.intrinsics.value_equals, &[l_addr, r_addr]);
 
               RValue::bool(self.builder.inst_results(ret)[0])
             }
@@ -1029,7 +1033,7 @@ impl FuncBuilder<'_> {
     let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, arg_slot, 0);
     let ret_ptr = self.builder.ins().stack_addr(ir::types::I64, ret_slot, 0);
 
-    self.builder.ins().call(self.intrinsics.call, &[native, arg_ptr, ret_ptr]);
+    self.call_intrinsic(self.intrinsics.call, &[native, arg_ptr, ret_ptr]);
 
     match ret_dvt {
       DynamicValueType::Const(vt) => {
