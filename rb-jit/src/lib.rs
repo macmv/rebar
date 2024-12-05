@@ -51,18 +51,62 @@ struct IntrinsicDecl<'a> {
   decl: &'a FunctionDeclaration,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct IntrinsicId(u8);
+
 macro_rules! intrinsics {
   ($(
-    $name:ident($($arg:ident),*) $(-> $ret:ident)?,
+    $id:literal: $name:ident($($arg:ident),*) $(-> $ret:ident)?,
   )*) => {
     pub struct Intrinsics<T> {
       $($name: T),*
+    }
+
+    mod intrinsic {
+      use super::*;
+
+      $(
+        #[allow(non_upper_case_globals)]
+        pub const $name: IntrinsicId = IntrinsicId($id);
+      )*
     }
 
     impl<T: Copy> Intrinsics<T> {
       fn map<U>(&self, mut f: impl FnMut(T) -> U) -> Intrinsics<U> {
         Intrinsics {
           $($name: f(self.$name)),*
+        }
+      }
+    }
+
+    impl<T> Intrinsics<T> where T: Copy {
+      pub fn all(v: T) -> Self {
+        Intrinsics {
+          $($name: v),*
+        }
+      }
+    }
+
+    impl<T> std::ops::Index<IntrinsicId> for Intrinsics<T> {
+      type Output = T;
+
+      fn index(&self, id: IntrinsicId) -> &T {
+        match id {
+          $(
+            intrinsic::$name => &self.$name,
+          )*
+          _ => unreachable!(),
+        }
+      }
+    }
+
+    impl<T> std::ops::IndexMut<IntrinsicId> for Intrinsics<T> {
+      fn index_mut(&mut self, id: IntrinsicId) -> &mut T {
+        match id {
+          $(
+            intrinsic::$name => &mut self.$name,
+          )*
+          _ => unreachable!(),
         }
       }
     }
@@ -100,25 +144,26 @@ macro_rules! intrinsics {
 }
 
 intrinsics!(
-  call(I64, I64, I64),
-  push_frame(),
-  pop_frame(),
-  gc_collect(),
-  track(I64),
-  string_append_value(I64, I64),
-  string_append_str(I64, I64, I64),
-  string_new() -> I64,
-  array_new(I64, I64) -> I64,
-  value_equals(I64, I64) -> I8,
+  0: call(I64, I64, I64),
+  1: push_frame(),
+  2: pop_frame(),
+  3: gc_collect(),
+  4: track(I64),
+  5: string_append_value(I64, I64),
+  6: string_append_str(I64, I64, I64),
+  7: string_new() -> I64,
+  8: array_new(I64, I64) -> I64,
+  9: value_equals(I64, I64) -> I8,
 );
 
 pub struct FuncBuilder<'a> {
-  ctx: &'a MirContext,
-  isa: &'a dyn TargetIsa,
+  ctx:            &'a MirContext,
+  isa:            &'a dyn TargetIsa,
+  intrinsic_defs: &'a Intrinsics<IntrinsicDecl<'a>>,
 
   builder:    FunctionBuilder<'a>,
   mir:        &'a mir::Function,
-  intrinsics: Intrinsics<FuncRef>,
+  intrinsics: Intrinsics<Option<FuncRef>>,
 
   // Note that `VarId` and `Variable` are entirely distinct.
   //
@@ -195,20 +240,6 @@ impl ThreadCtx<'_> {
   pub fn new_function<'a>(&'a mut self, mir: &'a mir::Function) -> FuncBuilder<'a> {
     let builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
 
-    let funcs = self.intrinsics.map(|func| {
-      let signature = builder.func.import_signature(func.decl.signature.clone());
-      let user_name_ref = builder.func.declare_imported_user_function(ir::UserExternalName {
-        namespace: 0,
-        index:     func.id.as_u32(),
-      });
-      let colocated = func.decl.linkage.is_final();
-      builder.func.import_function(ir::ExtFuncData {
-        name: ir::ExternalName::user(user_name_ref),
-        signature,
-        colocated,
-      })
-    });
-
     let mut user_funcs = HashMap::new();
     for &dep in mir.deps.iter() {
       let (id, signature) = &self.user_funcs[&dep];
@@ -229,9 +260,10 @@ impl ThreadCtx<'_> {
     FuncBuilder {
       ctx: self.mir_ctx,
       isa: self.isa,
+      intrinsic_defs: &self.intrinsics,
       builder,
       mir,
-      intrinsics: funcs,
+      intrinsics: Intrinsics::all(None),
       locals: HashMap::new(),
       next_variable: 0,
       user_funcs,
@@ -289,8 +321,28 @@ impl FuncBuilder<'_> {
     }
   }
 
-  fn call_intrinsic(&mut self, intrinsic: FuncRef, args: &[ir::Value]) -> Inst {
-    self.builder.ins().call(intrinsic, args)
+  fn call_intrinsic(&mut self, intrinsic: IntrinsicId, args: &[ir::Value]) -> Inst {
+    let intrinsic_ref = &mut self.intrinsics[intrinsic];
+
+    if intrinsic_ref.is_none() {
+      let def = self.intrinsic_defs[intrinsic];
+
+      let signature = self.builder.func.import_signature(def.decl.signature.clone());
+      let user_name_ref = self.builder.func.declare_imported_user_function(ir::UserExternalName {
+        namespace: 0,
+        index:     def.id.as_u32(),
+      });
+      let colocated = def.decl.linkage.is_final();
+      let func = self.builder.func.import_function(ir::ExtFuncData {
+        name: ir::ExternalName::user(user_name_ref),
+        signature,
+        colocated,
+      });
+
+      *intrinsic_ref = Some(func);
+    }
+
+    self.builder.ins().call(intrinsic_ref.unwrap(), args)
   }
 
   fn translate(mut self) {
@@ -324,7 +376,7 @@ impl FuncBuilder<'_> {
     self.builder.switch_to_block(entry_block);
     self.builder.seal_block(entry_block);
 
-    self.call_intrinsic(self.intrinsics.push_frame, &[]);
+    self.call_intrinsic(intrinsic::push_frame, &[]);
 
     for (id, values) in param_values.into_iter().enumerate() {
       let len = values.len();
@@ -339,7 +391,7 @@ impl FuncBuilder<'_> {
       // self.def_var(return_variable, res.to_ir());
     }
 
-    self.call_intrinsic(self.intrinsics.pop_frame, &[]);
+    self.call_intrinsic(intrinsic::pop_frame, &[]);
 
     // Emit the return instruction.
     self.builder.ins().return_(&[]);
@@ -411,10 +463,10 @@ impl FuncBuilder<'_> {
         if self.type_needs_gc(ty) {
           let arg_ptr = self.stack_slot_unsized(&value);
 
-          self.call_intrinsic(self.intrinsics.track, &[arg_ptr]);
+          self.call_intrinsic(intrinsic::track, &[arg_ptr]);
         }
 
-        self.call_intrinsic(self.intrinsics.gc_collect, &[]);
+        self.call_intrinsic(intrinsic::gc_collect, &[]);
 
         RValue::nil()
       }
@@ -447,7 +499,7 @@ impl FuncBuilder<'_> {
         mir::Literal::Bool(v) => RValue::bool(self.builder.ins().iconst(ir::types::I8, *v as i64)),
         mir::Literal::Int(i) => RValue::int(self.builder.ins().iconst(ir::types::I64, *i)),
         mir::Literal::String(i) => {
-          let str = self.call_intrinsic(self.intrinsics.string_new, &[]);
+          let str = self.call_intrinsic(intrinsic::string_new, &[]);
           let str = self.builder.inst_results(str)[0];
 
           let mut to_leak = i.clone();
@@ -462,7 +514,7 @@ impl FuncBuilder<'_> {
           // TODO: Throw this in a GC or something.
           String::leak(to_leak);
 
-          self.call_intrinsic(self.intrinsics.string_append_str, &[str, ptr, len]);
+          self.call_intrinsic(intrinsic::string_append_str, &[str, ptr, len]);
 
           RValue::TypedDyn(ValueType::String, Slot::Single(str))
         }
@@ -483,7 +535,7 @@ impl FuncBuilder<'_> {
 
         // We track this in the GC later, once we're done mutating it. For now, manually
         // drop it so we don't double free.
-        let ret = self.call_intrinsic(self.intrinsics.string_new, &[]);
+        let ret = self.call_intrinsic(intrinsic::string_new, &[]);
         let str = self.builder.inst_results(ret)[0];
 
         for segment in segments {
@@ -501,14 +553,14 @@ impl FuncBuilder<'_> {
               // TODO: Keep this in a memoized string table.
               String::leak(v);
 
-              self.call_intrinsic(self.intrinsics.string_append_str, &[str, ptr, len]);
+              self.call_intrinsic(intrinsic::string_append_str, &[str, ptr, len]);
             }
 
             mir::StringInterp::Expr(e) => {
               let value = self.compile_expr(*e);
               let arg_ptr = self.stack_slot_unsized(&value);
 
-              self.call_intrinsic(self.intrinsics.string_append_value, &[str, arg_ptr]);
+              self.call_intrinsic(intrinsic::string_append_value, &[str, arg_ptr]);
             }
           };
         }
@@ -524,7 +576,7 @@ impl FuncBuilder<'_> {
           let vt = self.builder.ins().iconst(ir::types::I64, vt.encode());
           let len = self.builder.ins().iconst(ir::types::I64, exprs.len() as i64);
 
-          let result_ptr = self.call_intrinsic(self.intrinsics.array_new, &[len, vt]);
+          let result_ptr = self.call_intrinsic(intrinsic::array_new, &[len, vt]);
           self.builder.inst_results(result_ptr)[0]
         };
 
@@ -582,13 +634,13 @@ impl FuncBuilder<'_> {
       mir::Expr::Block(ref stmts) => {
         // FIXME: Make a new scope so that locals don't leak.
         let mut return_value = RValue::nil();
-        self.call_intrinsic(self.intrinsics.push_frame, &[]);
+        self.call_intrinsic(intrinsic::push_frame, &[]);
 
         for &stmt in stmts {
           return_value = self.compile_stmt(stmt);
         }
 
-        self.call_intrinsic(self.intrinsics.pop_frame, &[]);
+        self.call_intrinsic(intrinsic::pop_frame, &[]);
         return_value
       }
 
@@ -759,7 +811,7 @@ impl FuncBuilder<'_> {
               let l_addr = self.stack_slot_unsized(&lhs);
               let r_addr = self.stack_slot_unsized(&rhs);
 
-              let ret = self.call_intrinsic(self.intrinsics.value_equals, &[l_addr, r_addr]);
+              let ret = self.call_intrinsic(intrinsic::value_equals, &[l_addr, r_addr]);
 
               RValue::bool(self.builder.inst_results(ret)[0])
             }
@@ -1034,7 +1086,7 @@ impl FuncBuilder<'_> {
     let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, arg_slot, 0);
     let ret_ptr = self.builder.ins().stack_addr(ir::types::I64, ret_slot, 0);
 
-    self.call_intrinsic(self.intrinsics.call, &[native, arg_ptr, ret_ptr]);
+    self.call_intrinsic(intrinsic::call, &[native, arg_ptr, ret_ptr]);
 
     match ret_dvt {
       DynamicValueType::Const(vt) => {
