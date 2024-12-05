@@ -47,6 +47,7 @@ pub struct ThreadCtx<'a> {
 
 #[derive(Clone, Copy)]
 struct IntrinsicDecl<'a> {
+  id:   FuncId,
   decl: &'a FunctionDeclaration,
 }
 
@@ -175,7 +176,7 @@ impl JIT {
   fn intrinsics(&self) -> Intrinsics<IntrinsicDecl> {
     self
       .intrinsics
-      .map(|id| IntrinsicDecl { decl: self.module.declarations().get_function_decl(id) })
+      .map(|id| IntrinsicDecl { id, decl: self.module.declarations().get_function_decl(id) })
   }
 
   pub fn finalize(&mut self) { self.module.finalize_definitions().unwrap(); }
@@ -194,12 +195,12 @@ impl ThreadCtx<'_> {
   pub fn new_function<'a>(&'a mut self, mir: &'a mir::Function) -> FuncBuilder<'a> {
     let builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
 
-    let mut index = 0;
     let funcs = self.intrinsics.map(|func| {
       let signature = builder.func.import_signature(func.decl.signature.clone());
-      let user_name_ref =
-        builder.func.declare_imported_user_function(ir::UserExternalName { namespace: 0, index });
-      index += 1;
+      let user_name_ref = builder.func.declare_imported_user_function(ir::UserExternalName {
+        namespace: 0,
+        index:     func.id.as_u32(),
+      });
       let colocated = func.decl.linkage.is_final();
       builder.func.import_function(ir::ExtFuncData {
         name: ir::ExternalName::user(user_name_ref),
