@@ -142,7 +142,7 @@ impl FormatterContext<'_> {
 
       (T![,], _) if self.multiline => (None, Newline),
       (T![,] | T![:], _) => (None, Space),
-      (T![=], _) => (Space, Space),
+      (T![=] | T![|], _) => (Space, Space),
 
       (_, _) => (None, None),
     }

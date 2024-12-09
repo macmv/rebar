@@ -690,3 +690,15 @@ fn struct_init_multiline() {
     "#],
   );
 }
+
+#[test]
+fn type_exprs() {
+  check(
+    r#"
+      let a: int | string = 3
+    "#,
+    expect![@r#"
+      let a: int | string = 3
+    "#],
+  );
+}
