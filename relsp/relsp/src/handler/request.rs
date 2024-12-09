@@ -39,7 +39,7 @@ pub fn handle_semantic_tokens_full(
       Err(_) => return Ok(None),
     };
 
-    let highlight = Highlight::from_ast(hir, &span_maps[0]);
+    let highlight = Highlight::from_ast(hir, &span_maps);
 
     let tokens = to_semantic_tokens(snap, file_id, &highlight)?;
     info!("tokens: {:?}", tokens);

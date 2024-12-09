@@ -50,11 +50,11 @@ struct Highlighter<'a> {
 }
 
 impl Highlight {
-  pub fn from_ast(file: hir::SourceFile, span_map: &SpanMap) -> Highlight {
+  pub fn from_ast(file: hir::SourceFile, span_maps: &[SpanMap]) -> Highlight {
     let mut hl = Highlight { tokens: vec![] };
 
-    for (_, func) in file.functions {
-      let mut hl = Highlighter { func: &func, span_map, hl: &mut hl };
+    for (i, func) in file.functions.values().enumerate() {
+      let mut hl = Highlighter { func: &func, span_map: &span_maps[i], hl: &mut hl };
       for stmt in &func.items {
         hl.visit_stmt(*stmt);
       }
