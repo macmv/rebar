@@ -1,6 +1,10 @@
 use rb_diagnostic::{emit, Source, Sources, Span};
 use rb_syntax::cst;
-use std::{io::Read, path::PathBuf, sync::Arc};
+use std::{
+  io::Read,
+  path::{Path, PathBuf},
+  sync::Arc,
+};
 
 use clap::Parser;
 
@@ -11,41 +15,25 @@ mod tests;
 
 #[derive(Parser)]
 struct Args {
-  #[clap(short, long)]
-  input: Option<PathBuf>,
-
-  #[clap(long)]
-  stdin: bool,
+  #[arg()]
+  input: PathBuf,
 }
 
 fn main() {
   let args = Args::parse();
 
-  let source = if let Some(ref input) = args.input {
-    if args.stdin {
-      eprintln!("Cannot specify both --input and --stdin");
-      std::process::exit(1);
-    }
-
-    match std::fs::read_to_string(input) {
-      Ok(s) => s,
-      Err(e) => {
-        eprintln!("Failed to read file {}: {}", input.display(), e);
-        std::process::exit(1);
-      }
-    }
-  } else if args.stdin {
-    if args.input.is_some() {
-      eprintln!("Cannot specify both --input and --stdin");
-      std::process::exit(1);
-    }
-
+  let source = if args.input == Path::new("-") {
     let mut s = String::new();
     std::io::stdin().read_to_string(&mut s).unwrap();
     s
   } else {
-    eprintln!("Must specify either --input or --stdin");
-    std::process::exit(1);
+    match std::fs::read_to_string(&args.input) {
+      Ok(s) => s,
+      Err(e) => {
+        eprintln!("Failed to read file {}: {}", args.input.display(), e);
+        std::process::exit(1);
+      }
+    }
   };
 
   let name = "input.rbr";
