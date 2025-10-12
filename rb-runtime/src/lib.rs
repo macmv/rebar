@@ -118,9 +118,29 @@ pub fn run(
   // cranelift IR. Collect all the functions, split them into chunks, and compile
   // them on a thread pool.
 
-  eval_mir(env, functions);
+  compile_mir(env, functions);
+  // eval_mir(env, functions);
 
   Ok(())
+}
+
+fn compile_mir(env: RuntimeEnvironment, functions: Vec<rb_mir::ast::Function>) {
+  let mut compiler = rb_backend::Compiler::new(env.env.mir_ctx.clone(), env.intrinsics());
+
+  for func in &functions {
+    compiler.declare_function(func);
+  }
+
+  let compiled =
+    run_parallel(&functions, || compiler.new_thread(), |ctx, f| ctx.compile_function(f));
+
+  let mut function_ids = vec![];
+  for func in compiled.into_iter() {
+    function_ids.push(compiler.define_function(func).unwrap());
+  }
+
+  compiler.finalize();
+  compiler.eval(*function_ids.last().unwrap());
 }
 
 fn eval_mir(env: RuntimeEnvironment, functions: Vec<rb_mir::ast::Function>) {

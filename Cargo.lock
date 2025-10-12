@@ -854,6 +854,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rb-backend"
+version = "0.1.0"
+dependencies = [
+ "cranelift",
+ "cranelift-jit",
+ "cranelift-module",
+ "cranelift-native",
+ "rb-mir",
+ "rb-typer",
+ "rb-value",
+]
+
+[[package]]
 name = "rb-build"
 version = "0.1.0"
 dependencies = [
@@ -946,6 +959,7 @@ dependencies = [
 name = "rb-runtime"
 version = "0.1.0"
 dependencies = [
+ "rb-backend",
  "rb-diagnostic",
  "rb-gc",
  "rb-hir",

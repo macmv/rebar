@@ -1,0 +1,14 @@
+[package]
+name = "rb-backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rb-typer.workspace = true
+rb-mir.workspace = true
+rb-value.workspace = true
+
+cranelift = "0.108.1"
+cranelift-jit = "0.108.1"
+cranelift-module = "0.108.1"
+cranelift-native = "0.108.1"
