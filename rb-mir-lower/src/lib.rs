@@ -91,9 +91,6 @@ impl Lower<'_> {
       hir::Expr::Literal(hir::Literal::Nil) => mir::Expr::Literal(mir::Literal::Nil),
       hir::Expr::Literal(hir::Literal::Bool(v)) => mir::Expr::Literal(mir::Literal::Bool(v)),
       hir::Expr::Literal(hir::Literal::Int(v)) => mir::Expr::Literal(mir::Literal::Int(v)),
-      hir::Expr::Literal(hir::Literal::String(ref v)) => {
-        mir::Expr::Literal(mir::Literal::String(v.clone()))
-      }
 
       // TODO: It'd be nice to remove StringInterp from MIR
       hir::Expr::StringInterp(ref segments) => {

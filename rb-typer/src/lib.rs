@@ -157,7 +157,6 @@ impl<'a> Typer<'a> {
         hir::Literal::Nil => VType::Literal(ty::Literal::Unit),
         hir::Literal::Bool(_) => VType::Literal(ty::Literal::Bool),
         hir::Literal::Int(_) => VType::Literal(ty::Literal::Int),
-        hir::Literal::String(_) => VType::Literal(ty::Literal::String),
       },
 
       hir::Expr::StringInterp(ref segments) => {

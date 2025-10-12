@@ -192,30 +192,25 @@ impl FunctionLower<'_, '_> {
         let start = lit.syntax().text_range().start();
         let text = lit.syntax().text().to_string();
 
-        if lit.interpolations().take(1).count() != 0 {
-          let mut segments = vec![];
-          let mut prev = 1;
+        let mut segments = vec![];
+        let mut prev = 1;
 
-          for escape in lit.interpolations() {
-            let left = u32::from(escape.syntax().text_range().start() - start) as usize;
+        for escape in lit.interpolations() {
+          let left = u32::from(escape.syntax().text_range().start() - start) as usize;
 
-            if left != prev {
-              segments.push(StringInterp::Literal(text[prev..left].to_string()));
-            }
-
-            let expr = self.expr(escape.expr().unwrap());
-            segments.push(StringInterp::Expr(expr));
-
-            prev = u32::from(escape.syntax().text_range().end() - start) as usize;
+          if left != prev {
+            segments.push(StringInterp::Literal(text[prev..left].to_string()));
           }
 
-          hir::Expr::StringInterp(segments)
-        } else {
-          // Chop of the double quotes.
-          let str = text[1..text.len() - 1].to_string();
+          let expr = self.expr(escape.expr().unwrap());
+          segments.push(StringInterp::Expr(expr));
 
-          hir::Expr::Literal(hir::Literal::String(str))
+          prev = u32::from(escape.syntax().text_range().end() - start) as usize;
         }
+
+        segments.push(StringInterp::Literal(text[prev..text.len() - 1].to_string()));
+
+        hir::Expr::StringInterp(segments)
       }
 
       cst::Expr::ArrayExpr(ref arr) => {
