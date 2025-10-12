@@ -210,7 +210,7 @@ impl FunctionLower<'_, '_> {
 
         segments.push(StringInterp::Literal(text[prev..text.len() - 1].to_string()));
 
-        hir::Expr::StringInterp(segments)
+        hir::Expr::String(segments)
       }
 
       cst::Expr::ArrayExpr(ref arr) => {

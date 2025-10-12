@@ -89,7 +89,7 @@ impl Highlighter<'_> {
       hir::Expr::Literal(hir::Literal::Bool(_)) => self.token(expr, HighlightKind::Number),
       hir::Expr::Literal(hir::Literal::String(_)) => self.token(expr, HighlightKind::String),
 
-      hir::Expr::StringInterp(ref segments) => {
+      hir::Expr::String(ref segments) => {
         self.token(expr, HighlightKind::String);
 
         for s in segments {

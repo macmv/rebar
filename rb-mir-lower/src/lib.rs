@@ -93,7 +93,7 @@ impl Lower<'_> {
       hir::Expr::Literal(hir::Literal::Int(v)) => mir::Expr::Literal(mir::Literal::Int(v)),
 
       // TODO: It'd be nice to remove StringInterp from MIR
-      hir::Expr::StringInterp(ref segments) => {
+      hir::Expr::String(ref segments) => {
         let segments = segments
           .iter()
           .map(|segment| match segment {

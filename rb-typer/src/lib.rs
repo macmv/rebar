@@ -159,7 +159,7 @@ impl<'a> Typer<'a> {
         hir::Literal::Int(_) => VType::Literal(ty::Literal::Int),
       },
 
-      hir::Expr::StringInterp(ref segments) => {
+      hir::Expr::String(ref segments) => {
         for segment in segments {
           match segment {
             hir::StringInterp::Literal(_) => {}

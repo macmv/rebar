@@ -40,7 +40,7 @@ pub enum Expr {
   Literal(Literal),
   Name(String),
 
-  StringInterp(Vec<StringInterp>),
+  String(Vec<StringInterp>),
   Array(Vec<ExprId>),
 
   Call(ExprId, Vec<ExprId>),
