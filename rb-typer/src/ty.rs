@@ -23,7 +23,7 @@ pub struct Environment {
 
 /// A type with variables in it. Internal to the typer.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum VType {
+pub(crate) enum VType {
   Literal(Literal),
 
   // TODO: Should arrays have a length in the type?
@@ -43,7 +43,6 @@ pub enum VType {
   #[allow(dead_code)]
   Union(Vec<VType>),
 
-  // TODO: Get this out of the public API.
   Var(VarId),
 
   // FIXME: Replace with resolved Path.
