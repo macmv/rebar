@@ -600,7 +600,7 @@ fn trim_indent(mut text: &str) -> String {
     .collect()
 }
 
-fn lines_with_ends(text: &str) -> LinesWithEnds { LinesWithEnds { text } }
+fn lines_with_ends(text: &str) -> LinesWithEnds<'_> { LinesWithEnds { text } }
 
 struct LinesWithEnds<'a> {
   text: &'a str,

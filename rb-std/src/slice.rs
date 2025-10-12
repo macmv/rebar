@@ -33,7 +33,7 @@ impl<'a> RbSlice<'a> {
 
   pub fn as_ptr(&self) -> *const i64 { self.elems.as_ptr() }
 
-  pub fn iter(&self) -> ValueIter {
+  pub fn iter(&self) -> ValueIter<'_> {
     ValueIter {
       parser: RebarArgsParser::new(self.ctx, self.elems.as_ptr() as *const RebarArgs),
       vt:     self.vt,

@@ -204,7 +204,7 @@ impl JIT {
     }
   }
 
-  pub fn new_thread(&self) -> ThreadCtx {
+  pub fn new_thread(&self) -> ThreadCtx<'_> {
     let ctx = self.module.make_context();
 
     ThreadCtx {
@@ -218,7 +218,7 @@ impl JIT {
     }
   }
 
-  fn intrinsics(&self) -> Intrinsics<IntrinsicDecl> {
+  fn intrinsics(&self) -> Intrinsics<IntrinsicDecl<'_>> {
     self
       .intrinsics
       .map(|id| IntrinsicDecl { id, decl: self.module.declarations().get_function_decl(id) })

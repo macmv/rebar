@@ -145,7 +145,10 @@ fn eval_mir(env: RuntimeEnvironment, functions: Vec<rb_mir::ast::Function>) {
 }
 
 impl RuntimeEnvironment {
-  fn build(&mut self, hir: &rb_hir::ast::SourceFile) -> (rb_typer::Environment, rb_mir_lower::Env) {
+  fn build(
+    &mut self,
+    hir: &rb_hir::ast::SourceFile,
+  ) -> (rb_typer::Environment, rb_mir_lower::Env<'_>) {
     let mut typer_env = self.env.typer_env();
 
     for (id, s) in hir.structs.values().enumerate() {
@@ -176,7 +179,7 @@ impl RuntimeEnvironment {
     (typer_env, mir_env)
   }
 
-  fn mir_env(&self) -> rb_mir_lower::Env {
+  fn mir_env(&self) -> rb_mir_lower::Env<'_> {
     rb_mir_lower::Env {
       ctx:   &self.env.mir_ctx,
       items: self

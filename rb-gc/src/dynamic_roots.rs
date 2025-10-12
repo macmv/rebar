@@ -63,7 +63,7 @@ impl DynamicRootSet {
   /// Panics if the handle doesn't belong to this root set. For the
   /// non-panicking variant, use [`try_fetch`](Self::try_fetch).
   #[inline]
-  pub fn fetch<R: for<'r> Rootable<'r>>(&self, root: &DynamicRoot<R>) -> Gc<Root<R>> {
+  pub fn fetch<R: for<'r> Rootable<'r>>(&self, root: &DynamicRoot<R>) -> Gc<Root<'_, R>> {
     if self.contains(root) {
       unsafe { mem::transmute::<Gc<Root<'static, R>>, Gc<Root<R>>>(root.ptr) }
     } else {
@@ -77,7 +77,7 @@ impl DynamicRootSet {
   pub fn try_fetch<R: for<'r> Rootable<'r>>(
     &self,
     root: &DynamicRoot<R>,
-  ) -> Result<Gc<Root<R>>, MismatchedRootSet> {
+  ) -> Result<Gc<Root<'_, R>>, MismatchedRootSet> {
     if self.contains(root) {
       Ok(unsafe { mem::transmute::<Gc<Root<'static, R>>, Gc<Root<R>>>(root.ptr) })
     } else {

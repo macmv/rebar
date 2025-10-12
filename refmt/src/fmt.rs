@@ -30,7 +30,7 @@ struct FormatterContext<'a> {
 }
 
 impl Formatter {
-  fn ctx(&self) -> FormatterContext {
+  fn ctx(&self) -> FormatterContext<'_> {
     FormatterContext { formatter: self, indent: 0, out: String::new(), multiline: false }
   }
 

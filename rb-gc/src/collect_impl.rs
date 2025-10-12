@@ -23,6 +23,7 @@ macro_rules! static_collect {
     where
       $type: 'static,
     {
+      #[allow(dead_code)]
       #[inline]
       fn needs_trace() -> bool { false }
     }
@@ -99,6 +100,7 @@ unsafe impl<T: ?Sized + Collect<C>, C> Collect<C> for Box<T> {
 
 unsafe impl<T: Collect<C>, C> Collect<C> for [T] {
   #[inline]
+  #[allow(dead_code)]
   fn needs_trace() -> bool { T::needs_trace() }
 
   #[inline]
