@@ -139,8 +139,7 @@ fn compile_mir(env: RuntimeEnvironment, functions: Vec<rb_mir::ast::Function>) {
     function_ids.push(compiler.define_function(func).unwrap());
   }
 
-  compiler.finalize();
-  compiler.eval(*function_ids.last().unwrap());
+  compiler.finish();
 }
 
 fn eval_mir(env: RuntimeEnvironment, functions: Vec<rb_mir::ast::Function>) {

@@ -9,6 +9,6 @@ rb-mir.workspace = true
 rb-value.workspace = true
 
 cranelift = "0.108.1"
-cranelift-jit = "0.108.1"
+cranelift-object = "0.108.1"
 cranelift-module = "0.108.1"
 cranelift-native = "0.108.1"

@@ -4,8 +4,8 @@ use codegen::{
   CompiledCode,
 };
 use cranelift::prelude::*;
-use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, FuncId, FunctionDeclaration, Linkage, Module};
+use cranelift_object::{ObjectBuilder, ObjectModule};
 use isa::{CallConv, TargetFrontendConfig, TargetIsa};
 use rb_mir::{
   ast::{self as mir, UserFunctionId},
@@ -24,7 +24,7 @@ use rb_value::{DynamicValueType, IntrinsicImpls, ParamKind, ValueType};
 
 pub struct Compiler {
   mir_ctx: MirContext,
-  module:  JITModule,
+  module:  ObjectModule,
 
   // TODO: Use this for string literals at the very least.
   #[allow(dead_code)]
@@ -112,13 +112,13 @@ macro_rules! intrinsics {
     }
 
     impl Intrinsics<FuncId> {
-      pub fn prepare(builder: &mut JITBuilder, impls: &IntrinsicImpls) {
-        $(
-          builder.symbol(concat!("__", stringify!($name)), impls.$name as *const _);
-        )*
+      pub fn prepare(_builder: &mut ObjectBuilder, _impls: &IntrinsicImpls) {
+        // $(
+        //   builder.symbol(concat!("__", stringify!($name)), impls.$name as *const _);
+        // )*
       }
 
-      pub fn build(module: &mut JITModule) -> Self {
+      pub fn build(module: &mut ObjectModule) -> Self {
         Intrinsics {
           $(
             $name: module.declare_function(
@@ -189,11 +189,12 @@ impl Compiler {
       panic!("host machine is not supported: {}", msg);
     });
     let isa = isa_builder.finish(settings::Flags::new(flag_builder)).unwrap();
-    let mut builder = JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
+    let mut builder =
+      ObjectBuilder::new(isa, "foo", cranelift_module::default_libcall_names()).unwrap();
 
     Intrinsics::prepare(&mut builder, &intrinsics);
 
-    let mut module = JITModule::new(builder);
+    let mut module = ObjectModule::new(builder);
 
     Compiler {
       mir_ctx,
@@ -224,15 +225,11 @@ impl Compiler {
       .map(|id| IntrinsicDecl { id, decl: self.module.declarations().get_function_decl(id) })
   }
 
-  pub fn finalize(&mut self) { self.module.finalize_definitions().unwrap(); }
+  pub fn finish(self) {
+    let object = self.module.finish();
 
-  pub fn eval(&mut self, id: FuncId) {
-    let code = self.module.get_finalized_function(id);
-
-    unsafe {
-      let code: fn() = std::mem::transmute(code);
-      code();
-    }
+    let out = std::fs::File::create("out.o").unwrap();
+    object.object.write_stream(out).unwrap();
   }
 }
 
