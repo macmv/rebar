@@ -125,7 +125,7 @@ pub fn run(
 }
 
 fn compile_mir(env: RuntimeEnvironment, functions: Vec<rb_mir::ast::Function>) {
-  let mut compiler = rb_backend::Compiler::new(env.env.mir_ctx.clone(), env.intrinsics());
+  let mut compiler = rb_backend::Compiler::new(env.env.mir_ctx.clone());
 
   for func in &functions {
     compiler.declare_function(func);

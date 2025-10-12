@@ -1,10 +1,10 @@
 use codegen::{
   control::ControlPlane,
-  ir::{self, FuncRef, Inst},
+  ir::{self, FuncRef},
   CompiledCode,
 };
 use cranelift::prelude::*;
-use cranelift_module::{DataDescription, FuncId, FunctionDeclaration, Linkage, Module};
+use cranelift_module::{DataDescription, FuncId, Linkage, Module};
 use cranelift_object::{ObjectBuilder, ObjectModule};
 use isa::{CallConv, TargetFrontendConfig, TargetIsa};
 use rb_mir::{
@@ -13,14 +13,14 @@ use rb_mir::{
 };
 use rb_typer::{Literal, Type};
 use slot::Slot;
-use std::collections::HashMap;
+use std::{collections::HashMap, io::BufWriter};
 
 mod r_value;
 mod slot;
 
 use r_value::RValue;
 
-use rb_value::{DynamicValueType, IntrinsicImpls, ParamKind, ValueType};
+use rb_value::{DynamicValueType, IntrinsicImpls, ValueType};
 
 pub struct Compiler {
   mir_ctx: MirContext,
@@ -30,7 +30,6 @@ pub struct Compiler {
   #[allow(dead_code)]
   data_description: DataDescription,
 
-  intrinsics: Intrinsics<FuncId>,
   user_funcs: HashMap<mir::UserFunctionId, (FuncId, Signature)>,
 }
 
@@ -41,14 +40,7 @@ pub struct ThreadCtx<'a> {
 
   isa: &'a dyn TargetIsa,
 
-  intrinsics: Intrinsics<IntrinsicDecl<'a>>,
   user_funcs: &'a HashMap<mir::UserFunctionId, (FuncId, Signature)>,
-}
-
-#[derive(Clone, Copy)]
-struct IntrinsicDecl<'a> {
-  id:   FuncId,
-  decl: &'a FunctionDeclaration,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -69,14 +61,6 @@ macro_rules! intrinsics {
         #[allow(non_upper_case_globals)]
         pub const $name: IntrinsicId = IntrinsicId($id);
       )*
-    }
-
-    impl<T: Copy> Intrinsics<T> {
-      fn map<U>(&self, mut f: impl FnMut(T) -> U) -> Intrinsics<U> {
-        Intrinsics {
-          $($name: f(self.$name)),*
-        }
-      }
     }
 
     impl<T> Intrinsics<T> where T: Copy {
@@ -145,25 +129,14 @@ macro_rules! intrinsics {
 
 intrinsics!(
   0: call(I64, I64, I64),
-  1: push_frame(),
-  2: pop_frame(),
-  3: gc_collect(),
-  4: track(I64),
-  5: string_append_value(I64, I64),
-  6: string_append_str(I64, I64, I64),
-  7: string_new() -> I64,
-  8: array_new(I64, I64) -> I64,
-  9: value_equals(I64, I64) -> I8,
 );
 
 pub struct FuncBuilder<'a> {
-  ctx:            &'a MirContext,
-  isa:            &'a dyn TargetIsa,
-  intrinsic_defs: &'a Intrinsics<IntrinsicDecl<'a>>,
+  ctx: &'a MirContext,
+  isa: &'a dyn TargetIsa,
 
-  builder:    FunctionBuilder<'a>,
-  mir:        &'a mir::Function,
-  intrinsics: Intrinsics<Option<FuncRef>>,
+  builder: FunctionBuilder<'a>,
+  mir:     &'a mir::Function,
 
   // Note that `VarId` and `Variable` are entirely distinct.
   //
@@ -180,7 +153,7 @@ const DEBUG: bool = false;
 
 impl Compiler {
   #[allow(clippy::new_without_default)]
-  pub fn new(mir_ctx: MirContext, intrinsics: IntrinsicImpls) -> Self {
+  pub fn new(mir_ctx: MirContext) -> Self {
     let mut flag_builder = settings::builder();
     flag_builder.set("use_colocated_libcalls", "false").unwrap();
     flag_builder.set("is_pic", "false").unwrap();
@@ -189,17 +162,14 @@ impl Compiler {
       panic!("host machine is not supported: {}", msg);
     });
     let isa = isa_builder.finish(settings::Flags::new(flag_builder)).unwrap();
-    let mut builder =
+    let builder =
       ObjectBuilder::new(isa, "foo", cranelift_module::default_libcall_names()).unwrap();
 
-    Intrinsics::prepare(&mut builder, &intrinsics);
-
-    let mut module = ObjectModule::new(builder);
+    let module = ObjectModule::new(builder);
 
     Compiler {
       mir_ctx,
       data_description: DataDescription::new(),
-      intrinsics: Intrinsics::build(&mut module),
       module,
       user_funcs: HashMap::new(),
     }
@@ -214,22 +184,20 @@ impl Compiler {
       ctx,
       isa: self.module.isa(),
 
-      intrinsics: self.intrinsics(),
       user_funcs: &self.user_funcs,
     }
-  }
-
-  fn intrinsics(&self) -> Intrinsics<IntrinsicDecl<'_>> {
-    self
-      .intrinsics
-      .map(|id| IntrinsicDecl { id, decl: self.module.declarations().get_function_decl(id) })
   }
 
   pub fn finish(self) {
     let object = self.module.finish();
 
     let out = std::fs::File::create("out.o").unwrap();
-    object.object.write_stream(out).unwrap();
+    object.object.write_stream(BufWriter::new(out)).unwrap();
+
+    let status = std::process::Command::new("wild").arg("out.o").status().unwrap();
+    if !status.success() {
+      panic!("linker failed");
+    }
   }
 }
 
@@ -257,10 +225,8 @@ impl ThreadCtx<'_> {
     FuncBuilder {
       ctx: self.mir_ctx,
       isa: self.isa,
-      intrinsic_defs: &self.intrinsics,
       builder,
       mir,
-      intrinsics: Intrinsics::all(None),
       locals: HashMap::new(),
       next_variable: 0,
       user_funcs,
@@ -318,30 +284,6 @@ impl FuncBuilder<'_> {
     }
   }
 
-  fn call_intrinsic(&mut self, intrinsic: IntrinsicId, args: &[ir::Value]) -> Inst {
-    let intrinsic_ref = &mut self.intrinsics[intrinsic];
-
-    if intrinsic_ref.is_none() {
-      let def = self.intrinsic_defs[intrinsic];
-
-      let signature = self.builder.func.import_signature(def.decl.signature.clone());
-      let user_name_ref = self.builder.func.declare_imported_user_function(ir::UserExternalName {
-        namespace: 0,
-        index:     def.id.as_u32(),
-      });
-      let colocated = def.decl.linkage.is_final();
-      let func = self.builder.func.import_function(ir::ExtFuncData {
-        name: ir::ExternalName::user(user_name_ref),
-        signature,
-        colocated,
-      });
-
-      *intrinsic_ref = Some(func);
-    }
-
-    self.builder.ins().call(intrinsic_ref.unwrap(), args)
-  }
-
   fn translate(mut self) {
     let entry_block = self.builder.create_block();
 
@@ -373,8 +315,6 @@ impl FuncBuilder<'_> {
     self.builder.switch_to_block(entry_block);
     self.builder.seal_block(entry_block);
 
-    self.call_intrinsic(intrinsic::push_frame, &[]);
-
     for (id, values) in param_values.into_iter().enumerate() {
       let len = values.len();
       let slot = Slot::<Variable>::new(&mut self, len);
@@ -387,8 +327,6 @@ impl FuncBuilder<'_> {
       let _res = self.compile_stmt(stmt);
       // self.def_var(return_variable, res.to_ir());
     }
-
-    self.call_intrinsic(intrinsic::pop_frame, &[]);
 
     // Emit the return instruction.
     self.builder.ins().return_(&[]);
@@ -415,10 +353,9 @@ impl Compiler {
       }
     }
 
-    let id = self
-      .module
-      .declare_function(&format!("fooooooo_{}", func.id.0), Linkage::Local, &sig)
-      .unwrap();
+    let name = if func.id.0 == 0 { "_start".into() } else { format!("foooo_{}", func.id.0) };
+
+    let id = self.module.declare_function(&name, Linkage::Export, &sig).unwrap();
     self.user_funcs.insert(func.id, (id, sig));
   }
 
@@ -457,34 +394,7 @@ impl FuncBuilder<'_> {
         slot.copy_from(&mut self.builder, &ir);
         self.locals.insert(id, slot);
 
-        if self.type_needs_gc(ty) {
-          let arg_ptr = self.stack_slot_unsized(&value);
-
-          self.call_intrinsic(intrinsic::track, &[arg_ptr]);
-        }
-
-        self.call_intrinsic(intrinsic::gc_collect, &[]);
-
         RValue::nil()
-      }
-    }
-  }
-
-  fn type_needs_gc(&self, ty: &Type) -> bool {
-    match ty {
-      Type::Literal(Literal::Unit) => false,
-      Type::Literal(Literal::Int) => false,
-      Type::Literal(Literal::Bool) => false,
-      Type::Literal(Literal::String) => true,
-      Type::Array(_) => true,
-      Type::Union(vs) => vs.iter().any(|v| self.type_needs_gc(v)),
-
-      // TODO: uhhhhhhhhhh
-      Type::Function(..) => false,
-
-      Type::Struct(id) => {
-        let id = self.ctx.struct_paths[id];
-        self.ctx.structs[&id].fields.iter().any(|(_, ty)| self.type_needs_gc(ty))
       }
     }
   }
@@ -495,106 +405,12 @@ impl FuncBuilder<'_> {
         mir::Literal::Nil => RValue::nil(),
         mir::Literal::Bool(v) => RValue::bool(self.builder.ins().iconst(ir::types::I8, *v as i64)),
         mir::Literal::Int(i) => RValue::int(self.builder.ins().iconst(ir::types::I64, *i)),
-        mir::Literal::String(i) => {
-          let str = self.call_intrinsic(intrinsic::string_new, &[]);
-          let str = self.builder.inst_results(str)[0];
-
-          let mut to_leak = i.clone();
-          to_leak.shrink_to_fit();
-
-          let len = to_leak.len();
-          let ptr = to_leak.as_ptr();
-
-          let ptr = self.builder.ins().iconst(ir::types::I64, ptr as i64);
-          let len = self.builder.ins().iconst(ir::types::I64, len as i64);
-
-          // TODO: Throw this in a GC or something.
-          String::leak(to_leak);
-
-          self.call_intrinsic(intrinsic::string_append_str, &[str, ptr, len]);
-
-          RValue::TypedDyn(ValueType::String, Slot::Single(str))
-        }
+        mir::Literal::String(_) => todo!("string literals"),
       },
 
-      mir::Expr::StringInterp(ref segments) => {
-        // This is a bit of nonsense, but here we go:
-        //
-        // - First, we make a new string to work with.
-        // - Second, we start appending things:
-        //   - String literals are easy, those get baked into the binary and appended
-        //     directly.
-        //   - Expressions get compiled in inline. The result of the expression is then
-        //     sent to a native function to stringify it, which will append to our
-        //     string in the heap.
-        // - Once we're done, we can throw the resulting string onto the heap, now that
-        //   we're done mutating it.
+      mir::Expr::StringInterp(_) => todo!("interpolated strings"),
 
-        // We track this in the GC later, once we're done mutating it. For now, manually
-        // drop it so we don't double free.
-        let ret = self.call_intrinsic(intrinsic::string_new, &[]);
-        let str = self.builder.inst_results(ret)[0];
-
-        for segment in segments {
-          match segment {
-            mir::StringInterp::Literal(s) => {
-              let mut v = String::from(s);
-              v.shrink_to_fit();
-
-              let len = v.len();
-              let ptr = v.as_ptr();
-
-              let ptr = self.builder.ins().iconst(ir::types::I64, ptr as i64);
-              let len = self.builder.ins().iconst(ir::types::I64, len as i64);
-
-              // TODO: Keep this in a memoized string table.
-              String::leak(v);
-
-              self.call_intrinsic(intrinsic::string_append_str, &[str, ptr, len]);
-            }
-
-            mir::StringInterp::Expr(e) => {
-              let value = self.compile_expr(*e);
-              let arg_ptr = self.stack_slot_unsized(&value);
-
-              self.call_intrinsic(intrinsic::string_append_value, &[str, arg_ptr]);
-            }
-          };
-        }
-
-        RValue::TypedDyn(ValueType::String, Slot::Single(str))
-      }
-
-      mir::Expr::Array(ref exprs, ref ty) => {
-        let vt = DynamicValueType::for_type(self.ctx, ty);
-        let slot_size = vt.len(self.ctx);
-
-        let result_ptr = {
-          let vt = self.builder.ins().iconst(ir::types::I64, vt.encode());
-          let len = self.builder.ins().iconst(ir::types::I64, exprs.len() as i64);
-
-          let result_ptr = self.call_intrinsic(intrinsic::array_new, &[len, vt]);
-          self.builder.inst_results(result_ptr)[0]
-        };
-
-        // `result_ptr` points to an `RbArray`, which has the elements pointer as the
-        // first element. So pick that pointer out, and use that when filling in
-        // elements.
-        let first_ptr = self.builder.ins().load(ir::types::I64, MemFlags::new(), result_ptr, 0);
-
-        for (i, expr) in exprs.iter().enumerate() {
-          let to_append = self.compile_expr(*expr);
-          let ir = to_append.to_ir(vt.param_kind(self.ctx), self);
-          assert_eq!(ir.len(), slot_size as usize);
-
-          let offset = self.builder.ins().iconst(ir::types::I64, i as i64 * slot_size as i64 * 8);
-          let element_ptr = self.builder.ins().iadd(first_ptr, offset);
-
-          ir.copy_to(self, element_ptr);
-        }
-
-        RValue::TypedDyn(ValueType::Array, Slot::Single(result_ptr))
-      }
+      mir::Expr::Array(_, _) => todo!("array literals"),
 
       mir::Expr::Local(id, ref ty) => {
         let var = &self.locals[&id];
@@ -629,15 +445,12 @@ impl FuncBuilder<'_> {
       }
 
       mir::Expr::Block(ref stmts) => {
-        // FIXME: Make a new scope so that locals don't leak.
         let mut return_value = RValue::nil();
-        self.call_intrinsic(intrinsic::push_frame, &[]);
 
         for &stmt in stmts {
           return_value = self.compile_stmt(stmt);
         }
 
-        self.call_intrinsic(intrinsic::pop_frame, &[]);
         return_value
       }
 
@@ -802,16 +615,7 @@ impl FuncBuilder<'_> {
 
             (Some(a), Some(b)) if a != b => RValue::const_bool(false),
 
-            // TODO: Theres a couple more branches we could optimize for here, but the dynamic path
-            // is nice to fall back on.
-            (_, _) => {
-              let l_addr = self.stack_slot_unsized(&lhs);
-              let r_addr = self.stack_slot_unsized(&rhs);
-
-              let ret = self.call_intrinsic(intrinsic::value_equals, &[l_addr, r_addr]);
-
-              RValue::bool(self.builder.inst_results(ret)[0])
-            }
+            (_, _) => todo!("equality for {lhs:?} and {rhs:?}"),
           },
 
           _ => {
@@ -1051,7 +855,7 @@ impl FuncBuilder<'_> {
 
   fn call_native(
     &mut self,
-    native: ir::Value,
+    _native: ir::Value,
     args: &[Slot],
     arg_types: &[Type],
     ret_ty: &Type,
@@ -1080,10 +884,10 @@ impl FuncBuilder<'_> {
       slot_index += ir.len();
     }
 
-    let arg_ptr = self.builder.ins().stack_addr(ir::types::I64, arg_slot, 0);
-    let ret_ptr = self.builder.ins().stack_addr(ir::types::I64, ret_slot, 0);
+    let _arg_ptr = self.builder.ins().stack_addr(ir::types::I64, arg_slot, 0);
+    let _ret_ptr = self.builder.ins().stack_addr(ir::types::I64, ret_slot, 0);
 
-    self.call_intrinsic(intrinsic::call, &[native, arg_ptr, ret_ptr]);
+    // self.call_intrinsic(intrinsic::call, &[native, arg_ptr, ret_ptr]);
 
     match ret_dvt {
       DynamicValueType::Const(vt) => {
@@ -1092,28 +896,6 @@ impl FuncBuilder<'_> {
       DynamicValueType::Union(_) => {
         RValue::Untyped(Slot::Multiple(ret_dvt.len(self.ctx) as usize, ret_slot))
       }
-    }
-  }
-
-  /// Creates a stack slot that stores a single unsized value, and returns the
-  /// address to that slot. Used when calling native functions.
-  fn stack_slot_unsized(&mut self, value: &RValue) -> ir::Value {
-    let ir = value.to_ir(ParamKind::Unsized, self);
-
-    match ir {
-      Slot::Empty => {
-        let dangling: *const i64 = std::ptr::dangling();
-        self.builder.ins().iconst(ir::types::I64, dangling as i64)
-      }
-      Slot::Single(v) => {
-        let slot = self
-          .builder
-          .create_sized_stack_slot(StackSlotData { kind: StackSlotKind::ExplicitSlot, size: 8 });
-
-        self.builder.ins().stack_store(v, slot, 0);
-        self.builder.ins().stack_addr(ir::types::I64, slot, 0)
-      }
-      Slot::Multiple(_, slot) => self.builder.ins().stack_addr(ir::types::I64, slot, 0),
     }
   }
 }
