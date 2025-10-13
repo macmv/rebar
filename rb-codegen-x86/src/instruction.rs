@@ -14,6 +14,19 @@ const _INSTR_SIZE: () = assert!(std::mem::size_of::<Instruction>() == 16);
 const _REX_SIZE: () = assert!(std::mem::size_of::<Option<Rex>>() == 1);
 
 #[derive(Clone, Copy)]
+#[repr(u8)]
+pub enum Register {
+  Eax,
+  Ecx,
+  Edx,
+  Ebx,
+  Esp,
+  Ebp,
+  Esi,
+  Edi,
+}
+
+#[derive(Clone, Copy)]
 pub struct Opcode {
   code: [u8; 3],
   len:  u8,
@@ -121,6 +134,10 @@ impl Instruction {
   pub fn with_rex(mut self, rex: Rex) -> Self {
     self.rex = Some(rex);
     self
+  }
+
+  pub fn with_reg(self, reg: Register) -> Self {
+    self.with_mod_rm(ModRm::from_parts(0b11, 0, reg as u8))
   }
 
   pub fn with_mod_rm(mut self, mod_rm: ModRm) -> Self {
