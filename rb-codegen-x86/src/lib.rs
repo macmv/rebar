@@ -4,7 +4,7 @@ use object::{
   Endianness, elf,
   write::{
     StreamingBuffer,
-    elf::{FileHeader, SectionHeader, Writer},
+    elf::{FileHeader, SectionHeader, Sym, Writer},
   },
 };
 
@@ -21,16 +21,24 @@ fn foo() {
 
   writer.reserve_file_header();
 
+  let start = writer.add_string(b"_start");
   let text_name = writer.add_section_name(b".text");
 
   writer.reserve_null_section_index();
   writer.reserve_strtab_section_index();
   writer.reserve_shstrtab_section_index();
-  writer.reserve_section_index();
+  writer.reserve_symtab_section_index();
+  let text_section = writer.reserve_section_index();
+
+  writer.reserve_null_symbol_index();
+  writer.reserve_symbol_index(Some(text_section));
+
   writer.reserve_section_headers();
+
   writer.reserve_strtab();
   writer.reserve_shstrtab();
-  let text_offset = writer.reserve(text.len(), 4096);
+  writer.reserve_symtab();
+  let text_offset = writer.reserve(text.len(), 16);
 
   writer
     .write_file_header(&FileHeader {
@@ -46,6 +54,7 @@ fn foo() {
   writer.write_null_section_header();
   writer.write_strtab_section_header();
   writer.write_shstrtab_section_header();
+  writer.write_symtab_section_header(1);
   writer.write_section_header(&SectionHeader {
     name:         Some(text_name),
     sh_type:      elf::SHT_PROGBITS,
@@ -61,7 +70,17 @@ fn foo() {
 
   writer.write_strtab();
   writer.write_shstrtab();
-  writer.write_align(4096);
+  writer.write_null_symbol();
+  writer.write_symbol(&Sym {
+    name:     Some(start),
+    section:  Some(text_section),
+    st_info:  ((elf::STB_GLOBAL as u8) << 4) | (elf::STT_FUNC as u8),
+    st_other: 0,
+    st_shndx: 0,
+    st_value: 0,
+    st_size:  text.len() as u64,
+  });
+  writer.write_align(16);
   writer.write(text);
 
   debug_assert_eq!(writer.reserved_len(), writer.len());
