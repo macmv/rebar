@@ -139,11 +139,13 @@ impl Instruction {
     (buf, len)
   }
 
+  /// Adds a Rex prefix.
   pub const fn with_rex(mut self, rex: Rex) -> Self {
     self.rex = Some(rex);
     self
   }
 
+  /// Sets the `reg` field of the ModR/M byte.
   pub const fn with_reg(mut self, reg: Register) -> Self {
     if self.mod_reg.is_none() {
       self.mod_reg = Some(ModReg::ZERO);
@@ -152,6 +154,7 @@ impl Instruction {
     self
   }
 
+  /// Sets the `mod` and `r/m` fields of the ModR/M byte.
   pub const fn with_mod(mut self, modifier: u8, rm: Register) -> Self {
     if self.mod_reg.is_none() {
       self.mod_reg = Some(ModReg::ZERO);
@@ -160,19 +163,21 @@ impl Instruction {
     self
   }
 
+  /// Sets the ModR/M byte to assign to the given register with a constant
+  /// displacement.
   pub const fn with_disp(self, reg: Register, disp: i32) -> Self {
     self
       .with_mod_reg(ModReg::from_parts(0b00, reg as u8, 0b101))
       .with_immediate(Immediate::i32(disp as u32))
   }
 
+  /// Sets the ModR/M byte.
   pub const fn with_mod_reg(mut self, mod_reg: ModReg) -> Self {
     self.mod_reg = Some(mod_reg);
     self
   }
 
-  // NB: This will always be encoded in the minimum number of bytes needed to
-  // store the given immediate.
+  /// Sets the immediate value.
   pub const fn with_immediate(mut self, immediate: Immediate) -> Self {
     self.immediate = immediate;
     self
