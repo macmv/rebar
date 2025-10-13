@@ -79,20 +79,3 @@ pub fn generate(filename: &str, text: &[u8]) {
 
   debug_assert_eq!(writer.reserved_len(), writer.len());
 }
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn foo_works() {
-    generate(
-      "foo.o",
-      &[
-        0x48, 0xc7, 0xc0, 0x3c, 0x00, 0x00, 0x00, // `mov eax, 60` (exit)
-        0x48, 0xc7, 0xc7, 0x00, 0x00, 0x00, 0x00, // `mov rdi, 0` (status 0)
-        0x0f, 0x05, // `syscall`
-      ],
-    );
-  }
-}

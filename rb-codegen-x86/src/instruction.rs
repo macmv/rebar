@@ -26,17 +26,17 @@ pub struct Opcode {
 pub struct ModRm(u8);
 
 impl From<u8> for Opcode {
-  fn from(byte: u8) -> Self { Opcode { code: [byte, 0, 0], len: 1 } }
+  fn from(byte: u8) -> Self { Opcode::new([byte]) }
 }
 impl From<[u8; 2]> for Opcode {
-  fn from(bytes: [u8; 2]) -> Self { Opcode { code: [bytes[0], bytes[1], 0], len: 2 } }
+  fn from(bytes: [u8; 2]) -> Self { Opcode::new(bytes) }
 }
 impl From<[u8; 3]> for Opcode {
-  fn from(bytes: [u8; 3]) -> Self { Opcode { code: bytes, len: 3 } }
+  fn from(bytes: [u8; 3]) -> Self { Opcode::new(bytes) }
 }
 
 impl ModRm {
-  fn from_parts(mod_bits: u8, reg_bits: u8, rm_bits: u8) -> Self {
+  pub fn from_parts(mod_bits: u8, reg_bits: u8, rm_bits: u8) -> Self {
     debug_assert!(mod_bits < 4);
     debug_assert!(reg_bits < 8);
     debug_assert!(rm_bits < 8);
@@ -50,11 +50,26 @@ impl ModRm {
 }
 
 impl Opcode {
+  pub const fn new<const N: usize>(bytes: [u8; N]) -> Self {
+    assert!(N >= 1 && N <= 3);
+    let mut code = [0; 3];
+    unsafe {
+      *code.as_mut_ptr() = bytes[0];
+      if N >= 2 {
+        *code.as_mut_ptr().add(1) = bytes[1];
+      }
+      if N >= 3 {
+        *code.as_mut_ptr().add(2) = bytes[2];
+      }
+    }
+    Opcode { code, len: N as u8 }
+  }
+
   pub fn bytes(&self) -> &[u8] { &self.code[..self.len as usize] }
 }
 
 impl Instruction {
-  fn new(opcode: Opcode) -> Self {
+  pub fn new(opcode: Opcode) -> Self {
     Instruction { rex: None, opcode, mod_rm: None, immediate_set: false, immediate: 0 }
   }
 
@@ -116,4 +131,10 @@ impl Instruction {
   pub fn immediate(&self) -> Option<u64> {
     if self.immediate_set { Some(self.immediate) } else { None }
   }
+}
+
+impl Opcode {
+  pub const MOV_RAX_IMM: Opcode = Opcode::new([0xb8]);
+  pub const MOV_RDI_IMM: Opcode = Opcode::new([0xbf]);
+  pub const SYSCALL: Opcode = Opcode::new([0x0f, 0x05]);
 }
