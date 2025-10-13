@@ -19,7 +19,7 @@ mod tests {
     let data = b"Hello, world!\n";
 
     let instructions = [
-      // `write 0 0x4012a0 3`
+      // `write 0 reloc.foo 3`
       Instruction::new(Opcode::MOV_RM_IMM_16)
         .with_rex(Rex::W)
         .with_reg(Register::Eax)
@@ -28,14 +28,14 @@ mod tests {
         .with_rex(Rex::W)
         .with_reg(Register::Edi)
         .with_immediate(Immediate::i32(0)),
-      Instruction::new(Opcode::MOV_RM_IMM_16)
+      Instruction::new(Opcode::LEA)
         .with_rex(Rex::W)
-        .with_reg(Register::Esi)
-        .with_immediate(Immediate::i32(0x2000)),
+        .with_mod_rm(ModRm::from_parts(0b00, 0b110, 0b101))
+        .with_immediate(Immediate::i32(-4_i32 as u32)),
       Instruction::new(Opcode::MOV_RM_IMM_16)
         .with_rex(Rex::W)
         .with_reg(Register::Edx)
-        .with_immediate(Immediate::i32(3)),
+        .with_immediate(Immediate::i32(data.len() as u32)),
       Instruction::new(Opcode::SYSCALL),
       // `exit 0`
       Instruction::new(Opcode::MOV_RM_IMM_16)

@@ -111,8 +111,10 @@ pub fn generate(filename: &str, text: &[u8], ro_data: &[u8]) {
     st_value: 0,
     st_size:  ro_data.len() as u64,
   });
-  writer
-    .write_relocation(true, &Rel { r_offset: 17, r_sym: 2, r_type: elf::R_X86_64_32, r_addend: 0 });
+  writer.write_relocation(
+    true,
+    &Rel { r_offset: 17, r_sym: 2, r_type: elf::R_X86_64_PC32, r_addend: -4 },
+  );
   writer.write_align(16);
   writer.write(text);
   writer.write(ro_data);
