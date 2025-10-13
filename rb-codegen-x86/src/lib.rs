@@ -17,6 +17,25 @@ mod tests {
     let mut text = vec![];
 
     let instructions = [
+      // `write 0 0x4012a0 3`
+      Instruction::new(Opcode::MOV_RM_IMM_16)
+        .with_rex(Rex::W)
+        .with_reg(Register::Eax)
+        .with_immediate(Immediate::i32(1)),
+      Instruction::new(Opcode::MOV_RM_IMM_16)
+        .with_rex(Rex::W)
+        .with_reg(Register::Edi)
+        .with_immediate(Immediate::i32(0)),
+      Instruction::new(Opcode::MOV_RM_IMM_16)
+        .with_rex(Rex::W)
+        .with_reg(Register::Esi)
+        .with_immediate(Immediate::i32(0x004012a0)),
+      Instruction::new(Opcode::MOV_RM_IMM_16)
+        .with_rex(Rex::W)
+        .with_reg(Register::Edx)
+        .with_immediate(Immediate::i32(3)),
+      Instruction::new(Opcode::SYSCALL),
+      // `exit 0`
       Instruction::new(Opcode::MOV_RM_IMM_16)
         .with_rex(Rex::W)
         .with_reg(Register::Eax)
