@@ -13,7 +13,11 @@ fn foo() {
   let mut buffer = StreamingBuffer::new(BufWriter::new(file));
   let mut writer = Writer::new(Endianness::Little, true, &mut buffer);
 
-  let text = &[0xc3]; // `ret` instruction on x86_64
+  let text = &[
+    0x48, 0xc7, 0xc0, 0x3c, 0x00, 0x00, 0x00, // `mov eax, 60` (exit)
+    0x48, 0xc7, 0xc7, 0x00, 0x00, 0x00, 0x00, // `mov rdi, 0` (status 0)
+    0x0f, 0x05, // `syscall`
+  ];
 
   writer.reserve_file_header();
 
