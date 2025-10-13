@@ -1,11 +1,8 @@
 pub struct Instruction {
-  pub rex:    Option<Rex>,
-  pub opcode: Opcode,
-  pub mod_rm: Option<ModRm>,
-
-  // This is an `Option<u64>` but it only uses 9 bytes instead of 16.
-  immediate_set: bool,
-  immediate:     u64,
+  pub rex:       Option<Rex>,
+  pub opcode:    Opcode,
+  pub mod_rm:    Option<ModRm>,
+  pub immediate: Immediate,
 }
 
 #[derive(Clone, Copy)]
@@ -24,6 +21,13 @@ pub struct Opcode {
 
 #[derive(Clone, Copy)]
 pub struct ModRm(u8);
+
+#[derive(Clone, Copy)]
+#[repr(packed)]
+pub struct Immediate {
+  len:   u8,
+  value: u64,
+}
 
 impl From<u8> for Opcode {
   fn from(byte: u8) -> Self { Opcode::new([byte]) }
@@ -44,9 +48,9 @@ impl ModRm {
     ModRm((mod_bits << 6) | (reg_bits << 3) | rm_bits)
   }
 
-  fn mod_bits(&self) -> u8 { (self.0 >> 6) & 0b11 }
-  fn reg_bits(&self) -> u8 { (self.0 >> 3) & 0b111 }
-  fn rm_bits(&self) -> u8 { self.0 & 0b111 }
+  pub fn mod_bits(&self) -> u8 { (self.0 >> 6) & 0b11 }
+  pub fn reg_bits(&self) -> u8 { (self.0 >> 3) & 0b111 }
+  pub fn rm_bits(&self) -> u8 { self.0 & 0b111 }
 }
 
 impl Opcode {
@@ -68,9 +72,21 @@ impl Opcode {
   pub fn bytes(&self) -> &[u8] { &self.code[..self.len as usize] }
 }
 
+impl Immediate {
+  pub const fn empty() -> Self { Immediate { len: 0, value: 0 } }
+  pub const fn i8(value: u8) -> Self { Immediate { len: 1, value: value as u64 } }
+  pub const fn i16(value: u16) -> Self { Immediate { len: 2, value: value as u64 } }
+  pub const fn i32(value: u32) -> Self { Immediate { len: 4, value: value as u64 } }
+  pub const fn i64(value: u64) -> Self { Immediate { len: 8, value: value as u64 } }
+
+  pub const fn is_empty(&self) -> bool { self.len == 0 }
+  pub const fn len(&self) -> u8 { self.len }
+  pub const fn value(&self) -> u64 { self.value }
+}
+
 impl Instruction {
   pub fn new(opcode: Opcode) -> Self {
-    Instruction { rex: None, opcode, mod_rm: None, immediate_set: false, immediate: 0 }
+    Instruction { rex: None, opcode, mod_rm: None, immediate: Immediate::empty() }
   }
 
   pub fn encode(&self) -> ([u8; 15], usize) {
@@ -92,17 +108,9 @@ impl Instruction {
       len += 1;
     }
 
-    if let Some(imm) = self.immediate() {
-      let imm_bytes = imm.to_le_bytes();
-      let imm_len = if imm <= u8::MAX as u64 {
-        1
-      } else if imm <= u16::MAX as u64 {
-        2
-      } else if imm <= u32::MAX as u64 {
-        4
-      } else {
-        8
-      };
+    if !self.immediate.is_empty() {
+      let imm_bytes = self.immediate.value().to_le_bytes();
+      let imm_len = self.immediate.len() as usize;
       buf[len..len + imm_len].copy_from_slice(&imm_bytes[..imm_len]);
       len += imm_len;
     }
@@ -122,19 +130,16 @@ impl Instruction {
 
   // NB: This will always be encoded in the minimum number of bytes needed to
   // store the given immediate.
-  pub fn with_immediate(mut self, immediate: u64) -> Self {
-    self.immediate_set = true;
+  pub fn with_immediate(mut self, immediate: Immediate) -> Self {
     self.immediate = immediate;
     self
   }
 
-  pub fn immediate(&self) -> Option<u64> {
-    if self.immediate_set { Some(self.immediate) } else { None }
-  }
+  pub fn immediate(&self) -> Immediate { self.immediate }
 }
 
 impl Opcode {
-  pub const MOV_RAX_IMM: Opcode = Opcode::new([0xb8]);
-  pub const MOV_RDI_IMM: Opcode = Opcode::new([0xbf]);
+  pub const MOV_RM_IMM_8: Opcode = Opcode::new([0xc6]);
+  pub const MOV_RM_IMM_16: Opcode = Opcode::new([0xc7]);
   pub const SYSCALL: Opcode = Opcode::new([0x0f, 0x05]);
 }
