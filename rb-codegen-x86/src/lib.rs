@@ -31,7 +31,7 @@ mod tests {
       Instruction::new(Opcode::MOV_RM_IMM_16)
         .with_rex(Rex::W)
         .with_reg(Register::Esi)
-        .with_immediate(Immediate::i32(0x004012a0)),
+        .with_immediate(Immediate::i32(0x2000)),
       Instruction::new(Opcode::MOV_RM_IMM_16)
         .with_rex(Rex::W)
         .with_reg(Register::Edx)
