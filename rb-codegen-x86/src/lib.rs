@@ -22,29 +22,26 @@ mod tests {
       // `write 0 reloc.foo 3`
       Instruction::new(Opcode::MOV_RM_IMM_16)
         .with_rex(Rex::W)
-        .with_reg(Register::Eax)
+        .with_reg(Register::Eax, Register::Eax)
         .with_immediate(Immediate::i32(1)),
       Instruction::new(Opcode::MOV_RM_IMM_16)
         .with_rex(Rex::W)
-        .with_reg(Register::Edi)
+        .with_reg(Register::Eax, Register::Edi)
         .with_immediate(Immediate::i32(0)),
-      Instruction::new(Opcode::LEA)
-        .with_rex(Rex::W)
-        .with_mod_rm(ModRm::from_parts(0b00, 0b110, 0b101))
-        .with_immediate(Immediate::i32(-4_i32 as u32)),
+      Instruction::new(Opcode::LEA).with_rex(Rex::W).with_disp(Register::Esi, -4),
       Instruction::new(Opcode::MOV_RM_IMM_16)
         .with_rex(Rex::W)
-        .with_reg(Register::Edx)
+        .with_reg(Register::Eax, Register::Edx)
         .with_immediate(Immediate::i32(data.len() as u32)),
       Instruction::new(Opcode::SYSCALL),
       // `exit 0`
       Instruction::new(Opcode::MOV_RM_IMM_16)
         .with_rex(Rex::W)
-        .with_reg(Register::Eax)
+        .with_reg(Register::Eax, Register::Eax)
         .with_immediate(Immediate::i32(60)),
       Instruction::new(Opcode::MOV_RM_IMM_16)
         .with_rex(Rex::W)
-        .with_reg(Register::Edi)
+        .with_reg(Register::Eax, Register::Edi)
         .with_immediate(Immediate::i32(0)),
       Instruction::new(Opcode::SYSCALL),
     ];

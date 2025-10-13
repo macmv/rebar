@@ -136,8 +136,14 @@ impl Instruction {
     self
   }
 
-  pub fn with_reg(self, reg: Register) -> Self {
-    self.with_mod_rm(ModRm::from_parts(0b11, 0, reg as u8))
+  pub fn with_reg(self, dst: Register, src: Register) -> Self {
+    self.with_mod_rm(ModRm::from_parts(0b11, dst as u8, src as u8))
+  }
+
+  pub fn with_disp(self, reg: Register, disp: i32) -> Self {
+    self
+      .with_mod_rm(ModRm::from_parts(0b00, reg as u8, 0b101))
+      .with_immediate(Immediate::i32(disp as u32))
   }
 
   pub fn with_mod_rm(mut self, mod_rm: ModRm) -> Self {
