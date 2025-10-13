@@ -1,7 +1,7 @@
 pub struct Instruction {
   pub rex:       Option<Rex>,
   pub opcode:    Opcode,
-  pub mod_rm:    Option<ModRm>,
+  pub mod_reg:   Option<ModReg>,
   pub immediate: Immediate,
 }
 
@@ -32,8 +32,8 @@ pub struct Opcode {
   len:  u8,
 }
 
-#[derive(Clone, Copy)]
-pub struct ModRm(u8);
+#[derive(Default, Clone, Copy)]
+pub struct ModReg(u8);
 
 #[derive(Clone, Copy)]
 #[repr(packed)]
@@ -52,18 +52,26 @@ impl From<[u8; 3]> for Opcode {
   fn from(bytes: [u8; 3]) -> Self { Opcode::new(bytes) }
 }
 
-impl ModRm {
-  pub fn from_parts(mod_bits: u8, reg_bits: u8, rm_bits: u8) -> Self {
+impl ModReg {
+  pub const ZERO: ModReg = ModReg(0);
+
+  pub const fn from_parts(mod_bits: u8, reg_bits: u8, rm_bits: u8) -> Self {
     debug_assert!(mod_bits < 4);
     debug_assert!(reg_bits < 8);
     debug_assert!(rm_bits < 8);
 
-    ModRm((mod_bits << 6) | (reg_bits << 3) | rm_bits)
+    ModReg((mod_bits << 6) | (reg_bits << 3) | rm_bits)
   }
 
-  pub fn mod_bits(&self) -> u8 { (self.0 >> 6) & 0b11 }
-  pub fn reg_bits(&self) -> u8 { (self.0 >> 3) & 0b111 }
-  pub fn rm_bits(&self) -> u8 { self.0 & 0b111 }
+  pub const fn set_reg(&mut self, reg: Register) { self.set_reg_bits(reg as u8); }
+  pub const fn set_reg_bits(&mut self, reg: u8) { self.0 = (self.0 & 0b11000111) | (reg << 3); }
+  pub const fn set_mod_rm(&mut self, m: u8, rm: u8) {
+    self.0 = (self.0 & 0b00111000) | ((m & 0b11) << 6) | (rm & 0b111);
+  }
+
+  pub const fn mod_bits(&self) -> u8 { (self.0 >> 6) & 0b11 }
+  pub const fn reg_bits(&self) -> u8 { (self.0 >> 3) & 0b111 }
+  pub const fn rm_bits(&self) -> u8 { self.0 & 0b111 }
 }
 
 impl Opcode {
@@ -98,8 +106,8 @@ impl Immediate {
 }
 
 impl Instruction {
-  pub fn new(opcode: Opcode) -> Self {
-    Instruction { rex: None, opcode, mod_rm: None, immediate: Immediate::empty() }
+  pub const fn new(opcode: Opcode) -> Self {
+    Instruction { rex: None, opcode, mod_reg: None, immediate: Immediate::empty() }
   }
 
   pub fn encode(&self) -> ([u8; 15], usize) {
@@ -116,7 +124,7 @@ impl Instruction {
       .copy_from_slice(&self.opcode.code[..self.opcode.len as usize]);
     len += self.opcode.len as usize;
 
-    if let Some(ModRm(mod_rm)) = self.mod_rm {
+    if let Some(ModReg(mod_rm)) = self.mod_reg {
       buf[len] = mod_rm;
       len += 1;
     }
@@ -131,29 +139,41 @@ impl Instruction {
     (buf, len)
   }
 
-  pub fn with_rex(mut self, rex: Rex) -> Self {
+  pub const fn with_rex(mut self, rex: Rex) -> Self {
     self.rex = Some(rex);
     self
   }
 
-  pub fn with_reg(self, dst: Register, src: Register) -> Self {
-    self.with_mod_rm(ModRm::from_parts(0b11, dst as u8, src as u8))
+  pub const fn with_reg(mut self, reg: Register) -> Self {
+    if self.mod_reg.is_none() {
+      self.mod_reg = Some(ModReg::ZERO);
+    }
+    self.mod_reg.as_mut().unwrap().set_reg(reg);
+    self
   }
 
-  pub fn with_disp(self, reg: Register, disp: i32) -> Self {
+  pub const fn with_mod(mut self, modifier: u8, rm: Register) -> Self {
+    if self.mod_reg.is_none() {
+      self.mod_reg = Some(ModReg::ZERO);
+    }
+    self.mod_reg.as_mut().unwrap().set_mod_rm(modifier, rm as u8);
     self
-      .with_mod_rm(ModRm::from_parts(0b00, reg as u8, 0b101))
+  }
+
+  pub const fn with_disp(self, reg: Register, disp: i32) -> Self {
+    self
+      .with_mod_reg(ModReg::from_parts(0b00, reg as u8, 0b101))
       .with_immediate(Immediate::i32(disp as u32))
   }
 
-  pub fn with_mod_rm(mut self, mod_rm: ModRm) -> Self {
-    self.mod_rm = Some(mod_rm);
+  pub const fn with_mod_reg(mut self, mod_reg: ModReg) -> Self {
+    self.mod_reg = Some(mod_reg);
     self
   }
 
   // NB: This will always be encoded in the minimum number of bytes needed to
   // store the given immediate.
-  pub fn with_immediate(mut self, immediate: Immediate) -> Self {
+  pub const fn with_immediate(mut self, immediate: Immediate) -> Self {
     self.immediate = immediate;
     self
   }
