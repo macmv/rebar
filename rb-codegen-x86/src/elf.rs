@@ -8,7 +8,7 @@ use object::{
   },
 };
 
-pub fn generate(filename: &str, text: &[u8]) {
+pub fn generate(filename: &str, text: &[u8], ro_data: &[u8]) {
   let file = File::create(filename).unwrap();
   let mut buffer = StreamingBuffer::new(BufWriter::new(file));
   let mut writer = Writer::new(Endianness::Little, true, &mut buffer);
@@ -17,12 +17,14 @@ pub fn generate(filename: &str, text: &[u8]) {
 
   let start = writer.add_string(b"_start");
   let text_name = writer.add_section_name(b".text");
+  let ro_data_name = writer.add_section_name(b".rodata");
 
   writer.reserve_null_section_index();
   writer.reserve_strtab_section_index();
   writer.reserve_shstrtab_section_index();
   writer.reserve_symtab_section_index();
   let text_section = writer.reserve_section_index();
+  let ro_data_section = writer.reserve_section_index();
 
   writer.reserve_null_symbol_index();
   writer.reserve_symbol_index(Some(text_section));
@@ -33,6 +35,7 @@ pub fn generate(filename: &str, text: &[u8]) {
   writer.reserve_shstrtab();
   writer.reserve_symtab();
   let text_offset = writer.reserve(text.len(), 16);
+  let ro_data_offset = writer.reserve(ro_data.len(), 1);
 
   writer
     .write_file_header(&FileHeader {
@@ -61,6 +64,18 @@ pub fn generate(filename: &str, text: &[u8]) {
     sh_addralign: 16,
     sh_entsize:   0,
   });
+  writer.write_section_header(&SectionHeader {
+    name:         Some(ro_data_name),
+    sh_type:      elf::SHT_PROGBITS,
+    sh_flags:     u64::from(elf::SHF_ALLOC),
+    sh_addr:      0x2000,
+    sh_offset:    ro_data_offset as u64,
+    sh_size:      ro_data.len() as u64,
+    sh_link:      0,
+    sh_info:      0,
+    sh_addralign: 16,
+    sh_entsize:   0,
+  });
 
   writer.write_strtab();
   writer.write_shstrtab();
@@ -76,6 +91,7 @@ pub fn generate(filename: &str, text: &[u8]) {
   });
   writer.write_align(16);
   writer.write(text);
+  writer.write(ro_data);
 
   debug_assert_eq!(writer.reserved_len(), writer.len());
 }

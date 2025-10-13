@@ -16,6 +16,8 @@ mod tests {
   fn foo_works() {
     let mut text = vec![];
 
+    let data = b"Hello, world!\n";
+
     let instructions = [
       // `write 0 0x4012a0 3`
       Instruction::new(Opcode::MOV_RM_IMM_16)
@@ -52,6 +54,6 @@ mod tests {
       text.extend_from_slice(&bytes[..len]);
     }
 
-    elf::generate("foo.o", &text);
+    elf::generate("foo.o", &text, data);
   }
 }
