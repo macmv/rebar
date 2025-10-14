@@ -1,4 +1,4 @@
-use std::{fs::File, io::BufWriter};
+use std::{fs::File, io::BufWriter, path::Path};
 
 use object::{
   Endianness, elf,
@@ -8,7 +8,7 @@ use object::{
   },
 };
 
-pub fn generate(filename: &str, text: &[u8], ro_data: &[u8], relocs: &[Rel]) {
+pub fn generate(filename: &Path, text: &[u8], ro_data: &[u8], relocs: &[Rel]) {
   let file = File::create(filename).unwrap();
   let mut buffer = StreamingBuffer::new(BufWriter::new(file));
   let mut writer = Writer::new(Endianness::Little, true, &mut buffer);

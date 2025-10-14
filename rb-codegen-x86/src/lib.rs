@@ -90,6 +90,7 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
 mod tests {
 
   use rb_codegen::{Symbol, Variable};
+  use rb_test::temp_dir;
 
   use crate::instruction::Register;
 
@@ -157,7 +158,8 @@ mod tests {
     let data = b"Hello, world!\n";
     let builder = lower(function);
 
-    elf::generate("foo.o", &builder.text, data, &builder.relocs);
+    let dir = temp_dir!();
+    elf::generate(&dir.path().join("foo.o"), &builder.text, data, &builder.relocs);
   }
 
   #[test]
@@ -199,8 +201,9 @@ mod tests {
       text.extend_from_slice(&bytes[..len]);
     }
 
+    let dir = temp_dir!();
     elf::generate(
-      "foo.o",
+      &dir.path().join("foo.o"),
       &text,
       data,
       &[Rel { r_offset: 17, r_sym: 2, r_type: object::elf::R_X86_64_PC32, r_addend: -4 }],
