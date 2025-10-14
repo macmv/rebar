@@ -173,8 +173,12 @@ mod tests {
 
     let dir = temp_dir!();
     let object_path = dir.path().join("foo.o");
+    let binary_path = dir.path().join("a.out");
     elf::generate(&object_path, &builder.text, data, &builder.relocs);
-    link(&[object_path], &dir.path().join("a.out"));
+    link(&[object_path], &binary_path);
+    let output = std::process::Command::new(binary_path).output().expect("failed to execute a.out");
+    assert!(output.status.success());
+    assert_eq!(&output.stdout, data);
   }
 
   #[test]
