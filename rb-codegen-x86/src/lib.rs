@@ -47,7 +47,10 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
           reg.pin_registers(CallingConvention::Syscall, &inst.input);
         }
 
-        _ => {}
+        _ => {
+          reg.pick_inputs(&inst.input);
+          reg.pick_outputs(&inst.output);
+        }
       }
     }
   }
@@ -128,11 +131,80 @@ pub fn link(objects: &[std::path::PathBuf], output: &Path) {
 mod tests {
 
   use rb_codegen::{Symbol, Variable, VariableSize};
-  use rb_test::temp_dir;
+  use rb_test::{Expect, expect, temp_dir};
 
   use crate::instruction::RegisterIndex;
 
   use super::*;
+
+  fn disass(path: &Path, expected: Expect) {
+    let output = std::process::Command::new("objdump")
+      .arg("-Mintel")
+      .arg("-d")
+      .arg(path)
+      .output()
+      .expect("failed to execute objdump");
+    assert!(output.status.success());
+    let output = String::from_utf8(output.stdout).unwrap();
+    let line = output.lines().position(|l| l.contains("<_start>:")).unwrap();
+    let output = output
+      .lines()
+      .skip(line + 1)
+      .map(|l| l.strip_prefix("  ").unwrap_or(l).replace("\t", "  "))
+      .collect::<Vec<_>>()
+      .join("\n")
+      + "\n";
+    expected.assert_eq(&output);
+  }
+
+  #[test]
+  fn mov_small_variables() {
+    let function = rb_codegen::Function {
+      args:   0,
+      rets:   0,
+      blocks: vec![rb_codegen::Block {
+        instructions: vec![
+          rb_codegen::Instruction {
+            opcode: rb_codegen::Opcode::Move,
+            input:  smallvec::smallvec![3.into()],
+            output: smallvec::smallvec![Variable::new(0, VariableSize::Bit8).into()],
+          },
+          rb_codegen::Instruction {
+            opcode: rb_codegen::Opcode::Move,
+            input:  smallvec::smallvec![5.into()],
+            output: smallvec::smallvec![Variable::new(1, VariableSize::Bit16).into()],
+          },
+          rb_codegen::Instruction {
+            opcode: rb_codegen::Opcode::Move,
+            input:  smallvec::smallvec![7.into()],
+            output: smallvec::smallvec![Variable::new(2, VariableSize::Bit32).into()],
+          },
+          rb_codegen::Instruction {
+            opcode: rb_codegen::Opcode::Move,
+            input:  smallvec::smallvec![9.into()],
+            output: smallvec::smallvec![Variable::new(3, VariableSize::Bit64).into()],
+          },
+        ],
+        terminator:   rb_codegen::TerminatorInstruction::Trap,
+      }],
+    };
+
+    let builder = lower(function);
+
+    let dir = temp_dir!();
+    let object_path = dir.path().join("foo.o");
+    elf::generate(&object_path, &builder.text, b"", &builder.relocs);
+    disass(
+      &object_path,
+      expect![@r#"
+         0:  48 c7 c0 03 00 00 00   mov    rax,0x3
+         7:  48 c7 c0 05 00 00 00   mov    rax,0x5
+         e:  48 c7 c0 07 00 00 00   mov    rax,0x7
+        15:  48 c7 c0 09 00 00 00   mov    rax,0x9
+        1c:  cc                     int3
+      "#],
+    );
+  }
 
   #[test]
   fn lower_works() {

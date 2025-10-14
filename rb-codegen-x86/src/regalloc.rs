@@ -1,6 +1,6 @@
 use std::fmt;
 
-use rb_codegen::{InstructionInput, Variable};
+use rb_codegen::{InstructionInput, InstructionOutput, Variable};
 
 use crate::instruction::RegisterIndex;
 
@@ -60,6 +60,28 @@ impl VariableRegisters {
             arg_index += 1;
           }
         }
+      }
+    }
+  }
+
+  pub fn pick_inputs(&mut self, inputs: &[InstructionInput]) {
+    for input in inputs {
+      if let InstructionInput::Var(v) = input {
+        if v.id() as usize >= self.registers.len() {
+          self.registers.resize(v.id() as usize + 1, Register::RAX);
+        }
+        self.set(*v, Register::RAX);
+      }
+    }
+  }
+
+  pub fn pick_outputs(&mut self, outputs: &[InstructionOutput]) {
+    for output in outputs {
+      if let InstructionOutput::Var(v) = output {
+        if v.id() as usize >= self.registers.len() {
+          self.registers.resize(v.id() as usize + 1, Register::RAX);
+        }
+        self.set(*v, Register::RAX);
       }
     }
   }
