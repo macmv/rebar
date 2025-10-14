@@ -950,6 +950,8 @@ version = "0.1.0"
 dependencies = [
  "indexmap 2.11.4",
  "object 0.37.3",
+ "rb-codegen",
+ "smallvec",
 ]
 
 [[package]]

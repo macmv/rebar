@@ -6,26 +6,32 @@ pub struct Function {
   pub blocks: Vec<Block>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BlockId(u32);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Variable(u32);
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Block {
   pub instructions: Vec<Instruction>,
   pub terminator:   TerminatorInstruction,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Instruction {
   pub opcode: Opcode,
   pub input:  SmallVec<[InstructionInput; 2]>,
   pub output: SmallVec<[InstructionOutput; 2]>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TerminatorInstruction {
   Jump(BlockId),
   Return,
   Trap,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Opcode {
   Add,
   Move,
@@ -33,6 +39,7 @@ pub enum Opcode {
   Syscall,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Condition {
   Equal,
   NotEqual,
@@ -42,11 +49,13 @@ pub enum Condition {
   LessEqual,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InstructionInput {
   Var(Variable),
   Imm(u32),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InstructionOutput {
   Var(Variable),
   Syscall,

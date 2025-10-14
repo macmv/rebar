@@ -5,12 +5,70 @@ pub use elf::generate;
 
 pub use instruction::{Immediate, Instruction, ModReg, Opcode, Rex};
 
+#[derive(Default)]
+struct Builder {
+  text: Vec<u8>,
+}
+
+impl Builder {
+  fn instr(&mut self, instr: Instruction) {
+    let (bytes, len) = instr.encode();
+    self.text.extend_from_slice(&bytes[..len]);
+  }
+}
+
+pub fn lower(function: rb_codegen::Function) -> Vec<u8> {
+  let mut builder = Builder::default();
+
+  for block in function.blocks {
+    for inst in block.instructions {
+      match inst.opcode {
+        rb_codegen::Opcode::Syscall => builder.instr(Instruction::new(Opcode::SYSCALL)),
+        op => unimplemented!("opcode {:?}", op),
+      }
+    }
+
+    match block.terminator {
+      rb_codegen::TerminatorInstruction::Return => builder.instr(Instruction::new(Opcode::RET)),
+      _ => unimplemented!(),
+    }
+  }
+
+  builder.text
+}
+
 #[cfg(test)]
 mod tests {
 
   use crate::instruction::Register;
 
   use super::*;
+
+  #[test]
+  fn lower_works() {
+    let function = rb_codegen::Function {
+      args:   0,
+      rets:   0,
+      blocks: vec![rb_codegen::Block {
+        instructions: vec![rb_codegen::Instruction {
+          opcode: rb_codegen::Opcode::Syscall,
+          input:  smallvec::smallvec![
+            rb_codegen::InstructionInput::Imm(1),
+            rb_codegen::InstructionInput::Imm(0),
+            rb_codegen::InstructionInput::Imm(-4_i32 as u32),
+            rb_codegen::InstructionInput::Imm(10),
+          ],
+          output: smallvec::smallvec![],
+        }],
+        terminator:   rb_codegen::TerminatorInstruction::Return,
+      }],
+    };
+
+    let data = b"Hello, world!\n";
+    let text = lower(function);
+
+    elf::generate("foo.o", &text, data);
+  }
 
   #[test]
   fn foo_works() {
