@@ -78,6 +78,7 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
 
     match block.terminator {
       rb_codegen::TerminatorInstruction::Return => builder.instr(Instruction::new(Opcode::RET)),
+      rb_codegen::TerminatorInstruction::Trap => builder.instr(Instruction::new(Opcode::INT3)),
       _ => unimplemented!(),
     }
   }
@@ -149,7 +150,7 @@ mod tests {
             output: smallvec::smallvec![],
           },
         ],
-        terminator:   rb_codegen::TerminatorInstruction::Return,
+        terminator:   rb_codegen::TerminatorInstruction::Trap,
       }],
     };
 

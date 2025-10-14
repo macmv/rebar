@@ -190,6 +190,7 @@ impl Opcode {
   pub const MOV_RM_IMM_8: Opcode = Opcode::new([0xc6]);
   pub const MOV_RM_IMM_16: Opcode = Opcode::new([0xc7]);
   pub const LEA: Opcode = Opcode::new([0x8d]);
+  pub const INT3: Opcode = Opcode::new([0xcc]);
   pub const SYSCALL: Opcode = Opcode::new([0x0f, 0x05]);
   pub const RET: Opcode = Opcode::new([0xc3]);
 }
