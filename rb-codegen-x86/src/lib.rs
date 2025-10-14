@@ -5,6 +5,9 @@ pub use elf::generate;
 
 pub use instruction::{Immediate, Instruction, ModReg, Opcode, Rex};
 use object::write::elf::Rel;
+use rb_codegen::InstructionInput;
+
+use crate::instruction::Register;
 
 #[derive(Default)]
 pub struct Builder {
@@ -31,17 +34,41 @@ impl Builder {
 pub fn lower(function: rb_codegen::Function) -> Builder {
   let mut builder = Builder::default();
 
+  // TODO: Register allocator anyone?
+  let mut reg = Register::Eax;
+  fn next_register(reg: Register) -> Register {
+    match reg {
+      Register::Eax => Register::Edi,
+      Register::Edi => Register::Esi,
+      Register::Esi => Register::Edx,
+      Register::Edx => Register::Eax,
+      _ => unimplemented!("no more registers"),
+    }
+  }
+
   for block in function.blocks {
     for inst in block.instructions {
       match inst.opcode {
         // lea rsi, [rel symbol]
         rb_codegen::Opcode::Lea(symbol) => {
           builder.reloc(symbol.index, 3, -4);
-          builder.instr(
-            Instruction::new(Opcode::LEA)
-              .with_rex(Rex::W)
-              .with_disp(instruction::Register::Esi, -4),
-          );
+          builder.instr(Instruction::new(Opcode::LEA).with_rex(Rex::W).with_disp(reg, -4));
+          reg = next_register(reg);
+        }
+        rb_codegen::Opcode::Move => {
+          match inst.input[0] {
+            // mov rax, imm32
+            InstructionInput::Imm(v) => {
+              builder.instr(
+                Instruction::new(Opcode::MOV_RM_IMM_16)
+                  .with_rex(Rex::W)
+                  .with_mod(0b11, reg)
+                  .with_immediate(Immediate::i32(v)),
+              );
+              reg = next_register(reg);
+            }
+            _ => todo!(),
+          }
         }
         // syscall
         rb_codegen::Opcode::Syscall => builder.instr(Instruction::new(Opcode::SYSCALL)),
@@ -74,19 +101,51 @@ mod tests {
       rets:   0,
       blocks: vec![rb_codegen::Block {
         instructions: vec![
+          // write 0 reloc.foo 14
+          rb_codegen::Instruction {
+            opcode: rb_codegen::Opcode::Move,
+            input:  smallvec::smallvec![1.into()],
+            output: smallvec::smallvec![Variable::new(0).into()],
+          },
+          rb_codegen::Instruction {
+            opcode: rb_codegen::Opcode::Move,
+            input:  smallvec::smallvec![0.into()],
+            output: smallvec::smallvec![Variable::new(1).into()],
+          },
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Lea(Symbol { index: 2 }),
             input:  smallvec::smallvec![],
-            output: smallvec::smallvec![Variable::new(0).into()],
+            output: smallvec::smallvec![Variable::new(2).into()],
+          },
+          rb_codegen::Instruction {
+            opcode: rb_codegen::Opcode::Move,
+            input:  smallvec::smallvec![14.into()],
+            output: smallvec::smallvec![Variable::new(3).into()],
           },
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Syscall,
             input:  smallvec::smallvec![
-              rb_codegen::InstructionInput::Imm(1),
-              rb_codegen::InstructionInput::Imm(0),
               Variable::new(0).into(),
-              rb_codegen::InstructionInput::Imm(10),
+              Variable::new(1).into(),
+              Variable::new(2).into(),
+              Variable::new(3).into(),
             ],
+            output: smallvec::smallvec![],
+          },
+          // exit 0
+          rb_codegen::Instruction {
+            opcode: rb_codegen::Opcode::Move,
+            input:  smallvec::smallvec![60.into()],
+            output: smallvec::smallvec![Variable::new(4).into()],
+          },
+          rb_codegen::Instruction {
+            opcode: rb_codegen::Opcode::Move,
+            input:  smallvec::smallvec![0.into()],
+            output: smallvec::smallvec![Variable::new(5).into()],
+          },
+          rb_codegen::Instruction {
+            opcode: rb_codegen::Opcode::Syscall,
+            input:  smallvec::smallvec![Variable::new(0).into(), Variable::new(1).into(),],
             output: smallvec::smallvec![],
           },
         ],
