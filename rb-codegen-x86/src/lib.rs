@@ -9,7 +9,9 @@ pub use instruction::{Immediate, Instruction, ModReg, Opcode, Rex};
 use object::write::elf::Rel;
 use rb_codegen::InstructionInput;
 
-use crate::instruction::Register;
+use crate::instruction::RegisterIndex;
+
+mod regalloc;
 
 #[derive(Default)]
 pub struct Builder {
@@ -37,13 +39,13 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
   let mut builder = Builder::default();
 
   // TODO: Register allocator anyone?
-  let mut reg = Register::Eax;
-  fn next_register(reg: Register) -> Register {
+  let mut reg = RegisterIndex::Eax;
+  fn next_register(reg: RegisterIndex) -> RegisterIndex {
     match reg {
-      Register::Eax => Register::Edi,
-      Register::Edi => Register::Esi,
-      Register::Esi => Register::Edx,
-      Register::Edx => Register::Eax,
+      RegisterIndex::Eax => RegisterIndex::Edi,
+      RegisterIndex::Edi => RegisterIndex::Esi,
+      RegisterIndex::Esi => RegisterIndex::Edx,
+      RegisterIndex::Edx => RegisterIndex::Eax,
       _ => unimplemented!("no more registers"),
     }
   }
@@ -105,7 +107,7 @@ mod tests {
   use rb_codegen::{Symbol, Variable};
   use rb_test::temp_dir;
 
-  use crate::instruction::Register;
+  use crate::instruction::RegisterIndex;
 
   use super::*;
 
@@ -191,26 +193,26 @@ mod tests {
       // `write 1 reloc.foo 3`
       Instruction::new(Opcode::MOV_RM_IMM_16)
         .with_rex(Rex::W)
-        .with_mod(0b11, Register::Eax)
+        .with_mod(0b11, RegisterIndex::Eax)
         .with_immediate(Immediate::i32(1)),
       Instruction::new(Opcode::MOV_RM_IMM_16)
         .with_rex(Rex::W)
-        .with_mod(0b11, Register::Edi)
+        .with_mod(0b11, RegisterIndex::Edi)
         .with_immediate(Immediate::i32(1)),
-      Instruction::new(Opcode::LEA).with_rex(Rex::W).with_disp(Register::Esi, -4),
+      Instruction::new(Opcode::LEA).with_rex(Rex::W).with_disp(RegisterIndex::Esi, -4),
       Instruction::new(Opcode::MOV_RM_IMM_16)
         .with_rex(Rex::W)
-        .with_mod(0b11, Register::Edx)
+        .with_mod(0b11, RegisterIndex::Edx)
         .with_immediate(Immediate::i32(data.len() as u32)),
       Instruction::new(Opcode::SYSCALL),
       // `exit 0`
       Instruction::new(Opcode::MOV_RM_IMM_16)
         .with_rex(Rex::W)
-        .with_mod(0b11, Register::Eax)
+        .with_mod(0b11, RegisterIndex::Eax)
         .with_immediate(Immediate::i32(60)),
       Instruction::new(Opcode::MOV_RM_IMM_16)
         .with_rex(Rex::W)
-        .with_mod(0b11, Register::Edi)
+        .with_mod(0b11, RegisterIndex::Edi)
         .with_immediate(Immediate::i32(0)),
       Instruction::new(Opcode::SYSCALL),
     ];

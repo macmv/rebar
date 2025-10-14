@@ -14,8 +14,29 @@ const _INSTR_SIZE: () = assert!(std::mem::size_of::<Instruction>() == 16);
 const _REX_SIZE: () = assert!(std::mem::size_of::<Option<Rex>>() == 1);
 
 #[derive(Clone, Copy)]
-#[repr(u8)]
 pub enum Register {
+  Rax,
+  Rcx,
+  Rdx,
+  Rbx,
+  Rsp,
+  Rbp,
+  Rsi,
+  Rdi,
+
+  Eax,
+  Ecx,
+  Edx,
+  Ebx,
+  Esp,
+  Ebp,
+  Esi,
+  Edi,
+}
+
+#[derive(Clone, Copy)]
+#[repr(u8)]
+pub enum RegisterIndex {
   Eax,
   Ecx,
   Edx,
@@ -63,7 +84,7 @@ impl ModReg {
     ModReg((mod_bits << 6) | (reg_bits << 3) | rm_bits)
   }
 
-  pub const fn set_reg(&mut self, reg: Register) { self.set_reg_bits(reg as u8); }
+  pub const fn set_reg(&mut self, reg: RegisterIndex) { self.set_reg_bits(reg as u8); }
   pub const fn set_reg_bits(&mut self, reg: u8) { self.0 = (self.0 & 0b11000111) | (reg << 3); }
   pub const fn set_mod_rm(&mut self, m: u8, rm: u8) {
     self.0 = (self.0 & 0b00111000) | ((m & 0b11) << 6) | (rm & 0b111);
@@ -146,7 +167,7 @@ impl Instruction {
   }
 
   /// Sets the `reg` field of the ModR/M byte.
-  pub const fn with_reg(mut self, reg: Register) -> Self {
+  pub const fn with_reg(mut self, reg: RegisterIndex) -> Self {
     if self.mod_reg.is_none() {
       self.mod_reg = Some(ModReg::ZERO);
     }
@@ -155,7 +176,7 @@ impl Instruction {
   }
 
   /// Sets the `mod` and `r/m` fields of the ModR/M byte.
-  pub const fn with_mod(mut self, modifier: u8, rm: Register) -> Self {
+  pub const fn with_mod(mut self, modifier: u8, rm: RegisterIndex) -> Self {
     if self.mod_reg.is_none() {
       self.mod_reg = Some(ModReg::ZERO);
     }
@@ -165,7 +186,7 @@ impl Instruction {
 
   /// Sets the ModR/M byte to assign to the given register with a constant
   /// displacement.
-  pub const fn with_disp(self, reg: Register, disp: i32) -> Self {
+  pub const fn with_disp(self, reg: RegisterIndex, disp: i32) -> Self {
     self
       .with_mod_reg(ModReg::from_parts(0b00, reg as u8, 0b101))
       .with_immediate(Immediate::i32(disp as u32))
