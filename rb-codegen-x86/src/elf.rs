@@ -53,10 +53,12 @@ pub fn generate(filename: &Path, text: &[u8], ro_data: &[u8], relocs: &[Rel]) {
     })
     .unwrap();
 
+  let non_local_symbol_start = 2;
+
   writer.write_null_section_header();
   writer.write_strtab_section_header();
   writer.write_shstrtab_section_header();
-  writer.write_symtab_section_header(3);
+  writer.write_symtab_section_header(non_local_symbol_start);
   writer.write_relocation_section_header(
     relocation_name,
     text_section,
@@ -69,7 +71,7 @@ pub fn generate(filename: &Path, text: &[u8], ro_data: &[u8], relocs: &[Rel]) {
     name:         Some(text_name),
     sh_type:      elf::SHT_PROGBITS,
     sh_flags:     u64::from(elf::SHF_ALLOC | elf::SHF_EXECINSTR),
-    sh_addr:      0x1000,
+    sh_addr:      0,
     sh_offset:    text_offset as u64,
     sh_size:      text.len() as u64,
     sh_link:      0,
@@ -92,16 +94,9 @@ pub fn generate(filename: &Path, text: &[u8], ro_data: &[u8], relocs: &[Rel]) {
 
   writer.write_strtab();
   writer.write_shstrtab();
+
+  // 2 local symbols
   writer.write_null_symbol();
-  writer.write_symbol(&Sym {
-    name:     Some(start),
-    section:  Some(text_section),
-    st_info:  ((elf::STB_GLOBAL as u8) << 4) | (elf::STT_FUNC as u8),
-    st_other: 0,
-    st_shndx: 0,
-    st_value: 0,
-    st_size:  text.len() as u64,
-  });
   writer.write_symbol(&Sym {
     name:     Some(foo),
     section:  Some(ro_data_section),
@@ -111,6 +106,18 @@ pub fn generate(filename: &Path, text: &[u8], ro_data: &[u8], relocs: &[Rel]) {
     st_value: 0,
     st_size:  ro_data.len() as u64,
   });
+
+  // all non-local symbols must be defined after.
+  writer.write_symbol(&Sym {
+    name:     Some(start),
+    section:  Some(text_section),
+    st_info:  ((elf::STB_GLOBAL as u8) << 4) | (elf::STT_FUNC as u8),
+    st_other: 0,
+    st_shndx: 0,
+    st_value: 0,
+    st_size:  text.len() as u64,
+  });
+
   for reloc in relocs {
     writer.write_relocation(true, &reloc);
   }

@@ -128,7 +128,7 @@ mod tests {
             output: smallvec::smallvec![Variable::new(1).into()],
           },
           rb_codegen::Instruction {
-            opcode: rb_codegen::Opcode::Lea(Symbol { index: 2 }),
+            opcode: rb_codegen::Opcode::Lea(Symbol { index: 1 }),
             input:  smallvec::smallvec![],
             output: smallvec::smallvec![Variable::new(2).into()],
           },
@@ -221,7 +221,7 @@ mod tests {
       &dir.path().join("foo.o"),
       &text,
       data,
-      &[Rel { r_offset: 17, r_sym: 2, r_type: object::elf::R_X86_64_PC32, r_addend: -4 }],
+      &[Rel { r_offset: 17, r_sym: 1, r_type: object::elf::R_X86_64_PC32, r_addend: -4 }],
     );
   }
 }
