@@ -1,6 +1,8 @@
 mod elf;
 mod instruction;
 
+use std::path::Path;
+
 pub use elf::generate;
 
 pub use instruction::{Immediate, Instruction, ModReg, Opcode, Rex};
@@ -86,6 +88,17 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
   builder
 }
 
+pub fn link(objects: &[std::path::PathBuf], output: &Path) {
+  let mut cmd = std::process::Command::new("ld");
+  cmd.arg("-pie");
+  cmd.arg("-o").arg(&output);
+  for obj in objects {
+    cmd.arg(obj);
+  }
+  let status = cmd.status().expect("failed to execute ld");
+  assert!(status.success(), "ld failed");
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -159,7 +172,9 @@ mod tests {
     let builder = lower(function);
 
     let dir = temp_dir!();
-    elf::generate(&dir.path().join("foo.o"), &builder.text, data, &builder.relocs);
+    let object_path = dir.path().join("foo.o");
+    elf::generate(&object_path, &builder.text, data, &builder.relocs);
+    link(&[object_path], &dir.path().join("a.out"));
   }
 
   #[test]
