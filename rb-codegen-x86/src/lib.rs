@@ -138,6 +138,24 @@ mod tests {
   use super::*;
 
   fn disass(path: &Path, expected: Expect) {
+    let output = std::process::Command::new("r2")
+      .arg("-e scr.color=0")
+      .arg("-e asm.comments=false")
+      .arg("-e asm.nbytes=10")
+      .arg("-qc")
+      .arg("pD `iS~.text[2]`")
+      .arg(path)
+      .output()
+      .expect("failed to execute objdump");
+    assert!(output.status.success());
+    let output = String::from_utf8(output.stdout).unwrap();
+    let output =
+      output.lines().skip(2).map(|l| l.trim_start()).collect::<Vec<_>>().join("\n") + "\n";
+    expected.assert_eq(&output);
+  }
+
+  #[allow(unused)]
+  fn disass_objdump(path: &Path, expected: Expect) {
     let output = std::process::Command::new("objdump")
       .arg("-Mintel")
       .arg("-d")
@@ -197,11 +215,11 @@ mod tests {
     disass(
       &object_path,
       expect![@r#"
-         0:  48 c7 c0 03 00 00 00   mov    rax,0x3
-         7:  48 c7 c0 05 00 00 00   mov    rax,0x5
-         e:  48 c7 c0 07 00 00 00   mov    rax,0x7
-        15:  48 c7 c0 09 00 00 00   mov    rax,0x9
-        1c:  cc                     int3
+        0x08000250      48c7c003000000         mov rax, 3
+        0x08000257      48c7c005000000         mov rax, 5
+        0x0800025e      48c7c007000000         mov rax, 7
+        0x08000265      48c7c009000000         mov rax, 9
+        0x0800026c      cc                     int3
       "#],
     );
   }
