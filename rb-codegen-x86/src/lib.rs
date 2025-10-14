@@ -127,7 +127,7 @@ pub fn link(objects: &[std::path::PathBuf], output: &Path) {
 #[cfg(test)]
 mod tests {
 
-  use rb_codegen::{Symbol, Variable};
+  use rb_codegen::{Symbol, Variable, VariableSize};
   use rb_test::temp_dir;
 
   use crate::instruction::RegisterIndex;
@@ -136,6 +136,13 @@ mod tests {
 
   #[test]
   fn lower_works() {
+    let v0 = Variable::new(0, VariableSize::Bit64);
+    let v1 = Variable::new(1, VariableSize::Bit64);
+    let v2 = Variable::new(2, VariableSize::Bit64);
+    let v3 = Variable::new(3, VariableSize::Bit64);
+    let v4 = Variable::new(4, VariableSize::Bit64);
+    let v5 = Variable::new(5, VariableSize::Bit64);
+
     let function = rb_codegen::Function {
       args:   0,
       rets:   0,
@@ -145,47 +152,42 @@ mod tests {
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Move,
             input:  smallvec::smallvec![1.into()],
-            output: smallvec::smallvec![Variable::new(0).into()],
+            output: smallvec::smallvec![v0.into()],
           },
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Move,
             input:  smallvec::smallvec![1.into()],
-            output: smallvec::smallvec![Variable::new(1).into()],
+            output: smallvec::smallvec![v1.into()],
           },
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Lea(Symbol { index: 1 }),
             input:  smallvec::smallvec![],
-            output: smallvec::smallvec![Variable::new(2).into()],
+            output: smallvec::smallvec![v2.into()],
           },
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Move,
             input:  smallvec::smallvec![14.into()],
-            output: smallvec::smallvec![Variable::new(3).into()],
+            output: smallvec::smallvec![v3.into()],
           },
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Syscall,
-            input:  smallvec::smallvec![
-              Variable::new(0).into(),
-              Variable::new(1).into(),
-              Variable::new(2).into(),
-              Variable::new(3).into(),
-            ],
+            input:  smallvec::smallvec![v0.into(), v1.into(), v2.into(), v3.into()],
             output: smallvec::smallvec![],
           },
           // exit 0
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Move,
             input:  smallvec::smallvec![60.into()],
-            output: smallvec::smallvec![Variable::new(4).into()],
+            output: smallvec::smallvec![v4.into()],
           },
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Move,
             input:  smallvec::smallvec![0.into()],
-            output: smallvec::smallvec![Variable::new(5).into()],
+            output: smallvec::smallvec![v5.into()],
           },
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Syscall,
-            input:  smallvec::smallvec![Variable::new(4).into(), Variable::new(5).into(),],
+            input:  smallvec::smallvec![v4.into(), v5.into(),],
             output: smallvec::smallvec![],
           },
         ],

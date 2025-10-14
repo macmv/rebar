@@ -33,7 +33,7 @@ impl VariableRegisters {
     let needed = inputs
       .iter()
       .filter_map(|input| match input {
-        InstructionInput::Var(v) => Some(v.as_u32()),
+        InstructionInput::Var(v) => Some(v.id()),
         _ => None,
       })
       .max()
@@ -64,11 +64,9 @@ impl VariableRegisters {
     }
   }
 
-  pub fn set(&mut self, var: Variable, reg: Register) {
-    self.registers[var.as_u32() as usize] = reg;
-  }
+  pub fn set(&mut self, var: Variable, reg: Register) { self.registers[var.id() as usize] = reg; }
 
-  pub fn get(&self, var: Variable) -> Register { self.registers[var.as_u32() as usize] }
+  pub fn get(&self, var: Variable) -> Register { self.registers[var.id() as usize] }
 }
 
 macro_rules! registers {

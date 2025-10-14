@@ -11,6 +11,17 @@ pub struct BlockId(u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Variable(u32);
 
+// This gets encoded into the high bits of `Variable`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum VariableSize {
+  Bit1,
+  Bit8,
+  Bit16,
+  Bit32,
+  Bit64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Block {
   pub instructions: Vec<Instruction>,
@@ -73,9 +84,22 @@ impl BlockId {
   pub const fn as_u32(&self) -> u32 { self.0 }
 }
 impl Variable {
-  pub const fn new(id: u32) -> Self { Variable(id) }
+  pub const fn new(id: u32, size: VariableSize) -> Self {
+    // SAFETY: We need this check to ensure that `size()` is safe.
+    assert!(id < (1 << 28), "variable id too large");
 
-  pub const fn as_u32(&self) -> u32 { self.0 }
+    Variable(id | ((size as u32) << 28))
+  }
+
+  /// Returns the variable id.
+  pub const fn id(&self) -> u32 { self.0 & 0x0fff_ffff }
+
+  pub const fn size(&self) -> VariableSize {
+    let bits = (self.0 >> 28) as u8;
+    debug_assert!(bits <= VariableSize::Bit64 as u8, "invalid VariableSize bits");
+    // SAFETY: `new` ensures that the bits are valid.
+    unsafe { std::mem::transmute(bits) }
+  }
 }
 
 impl From<Variable> for InstructionInput {
