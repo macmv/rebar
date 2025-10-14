@@ -10,6 +10,7 @@ rb-codegen.workspace = true
 indexmap = "2.11.4"
 object = { version = "0.37.3", default-features = false, features = ["elf", "std", "write_core"] }
 smallvec = "1.15.1"
+bitflags = "2.9.4"
 
 [dev-dependencies]
 rb-test.workspace = true

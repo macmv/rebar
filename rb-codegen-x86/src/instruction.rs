@@ -1,17 +1,21 @@
+use bitflags::bitflags;
+
 pub struct Instruction {
-  pub rex:       Option<Rex>,
+  pub prefix:    Prefix,
   pub opcode:    Opcode,
   pub mod_reg:   Option<ModReg>,
   pub immediate: Immediate,
 }
 
-#[derive(Clone, Copy)]
-pub enum Rex {
-  W,
+bitflags! {
+  #[derive(Clone, Copy)]
+  pub struct Prefix: u8 {
+    const OperandSizeOverride = 0b01;
+    const RexW                = 0b10;
+  }
 }
 
 const _INSTR_SIZE: () = assert!(std::mem::size_of::<Instruction>() == 16);
-const _REX_SIZE: () = assert!(std::mem::size_of::<Option<Rex>>() == 1);
 
 #[derive(Clone, Copy)]
 #[repr(u8)]
@@ -107,16 +111,18 @@ impl Immediate {
 
 impl Instruction {
   pub const fn new(opcode: Opcode) -> Self {
-    Instruction { rex: None, opcode, mod_reg: None, immediate: Immediate::empty() }
+    Instruction { prefix: Prefix::empty(), opcode, mod_reg: None, immediate: Immediate::empty() }
   }
 
   pub fn encode(&self) -> ([u8; 15], usize) {
     let mut buf = [0; 15];
     let mut len = 0;
-    if let Some(rex) = self.rex {
-      buf[len] = match rex {
-        Rex::W => 0x48,
-      };
+    if self.prefix.contains(Prefix::OperandSizeOverride) {
+      buf[len] = 0x66;
+      len += 1;
+    }
+    if self.prefix.contains(Prefix::RexW) {
+      buf[len] = 0x48;
       len += 1;
     }
 
@@ -139,9 +145,9 @@ impl Instruction {
     (buf, len)
   }
 
-  /// Adds a Rex prefix.
-  pub const fn with_rex(mut self, rex: Rex) -> Self {
-    self.rex = Some(rex);
+  /// Adds a prefix.
+  pub const fn with_prefix(mut self, prefix: Prefix) -> Self {
+    self.prefix.0.0 |= prefix.0.0;
     self
   }
 
