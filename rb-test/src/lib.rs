@@ -156,6 +156,10 @@ use std::{
   path::{Path, PathBuf},
 };
 
+mod file;
+
+pub use file::*;
+
 const HELP: &str = "
 You can update all `expect!` tests by running:
 
