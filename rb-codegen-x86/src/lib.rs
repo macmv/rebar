@@ -7,9 +7,9 @@ pub use elf::generate;
 
 pub use instruction::{Immediate, Instruction, ModReg, Opcode, Rex};
 use object::write::elf::Rel;
-use rb_codegen::InstructionInput;
+use rb_codegen::{InstructionInput, InstructionOutput};
 
-use crate::instruction::RegisterIndex;
+use crate::regalloc::{CallingConvention, VariableRegisters};
 
 mod regalloc;
 
@@ -38,38 +38,45 @@ impl Builder {
 pub fn lower(function: rb_codegen::Function) -> Builder {
   let mut builder = Builder::default();
 
-  // TODO: Register allocator anyone?
-  let mut reg = RegisterIndex::Eax;
-  fn next_register(reg: RegisterIndex) -> RegisterIndex {
-    match reg {
-      RegisterIndex::Eax => RegisterIndex::Edi,
-      RegisterIndex::Edi => RegisterIndex::Esi,
-      RegisterIndex::Esi => RegisterIndex::Edx,
-      RegisterIndex::Edx => RegisterIndex::Eax,
-      _ => unimplemented!("no more registers"),
+  let mut reg = VariableRegisters::new();
+
+  for block in &function.blocks {
+    for inst in &block.instructions {
+      match inst.opcode {
+        rb_codegen::Opcode::Syscall => {
+          reg.pin_registers(CallingConvention::Syscall, &inst.input);
+        }
+
+        _ => {}
+      }
     }
   }
 
-  for block in function.blocks {
-    for inst in block.instructions {
+  for block in &function.blocks {
+    for inst in &block.instructions {
       match inst.opcode {
-        // lea rsi, [rel symbol]
-        rb_codegen::Opcode::Lea(symbol) => {
-          builder.reloc(symbol.index, 3, -4);
-          builder.instr(Instruction::new(Opcode::LEA).with_rex(Rex::W).with_disp(reg, -4));
-          reg = next_register(reg);
-        }
+        rb_codegen::Opcode::Lea(symbol) => match inst.output[0] {
+          // lea reg, [rel symbol]
+          InstructionOutput::Var(v) => {
+            builder.reloc(symbol.index, 3, -4);
+            let reg = reg.get(v);
+            assert_eq!(reg.size(), 8, "lead only supports 64-bit registers");
+            builder
+              .instr(Instruction::new(Opcode::LEA).with_rex(Rex::W).with_disp(reg.index(), -4));
+          }
+          _ => todo!(),
+        },
         rb_codegen::Opcode::Move => {
-          match inst.input[0] {
-            // mov rax, imm32
-            InstructionInput::Imm(v) => {
+          match (inst.output[0], inst.input[0]) {
+            // mov reg, imm32
+            (InstructionOutput::Var(o), InstructionInput::Imm(i)) => {
+              let reg = reg.get(o);
               builder.instr(
                 Instruction::new(Opcode::MOV_RM_IMM_16)
                   .with_rex(Rex::W)
-                  .with_mod(0b11, reg)
-                  .with_immediate(Immediate::i32(v)),
+                  .with_mod(0b11, reg.index())
+                  .with_immediate(Immediate::i32(i)),
               );
-              reg = next_register(reg);
             }
             _ => todo!(),
           }

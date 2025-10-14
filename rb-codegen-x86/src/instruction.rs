@@ -14,27 +14,6 @@ const _INSTR_SIZE: () = assert!(std::mem::size_of::<Instruction>() == 16);
 const _REX_SIZE: () = assert!(std::mem::size_of::<Option<Rex>>() == 1);
 
 #[derive(Clone, Copy)]
-pub enum Register {
-  Rax,
-  Rcx,
-  Rdx,
-  Rbx,
-  Rsp,
-  Rbp,
-  Rsi,
-  Rdi,
-
-  Eax,
-  Ecx,
-  Edx,
-  Ebx,
-  Esp,
-  Ebp,
-  Esi,
-  Edi,
-}
-
-#[derive(Clone, Copy)]
 #[repr(u8)]
 pub enum RegisterIndex {
   Eax,
