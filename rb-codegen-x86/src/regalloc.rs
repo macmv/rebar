@@ -1,6 +1,6 @@
 use std::fmt;
 
-use rb_codegen::{InstructionInput, InstructionOutput, Variable};
+use rb_codegen::{InstructionInput, InstructionOutput, Variable, VariableSize};
 
 use crate::instruction::RegisterIndex;
 
@@ -78,10 +78,19 @@ impl VariableRegisters {
   pub fn pick_outputs(&mut self, outputs: &[InstructionOutput]) {
     for output in outputs {
       if let InstructionOutput::Var(v) = output {
+        let size = match v.size() {
+          VariableSize::Bit1 => continue,
+          VariableSize::Bit8 => RegisterSize::Bit8,
+          VariableSize::Bit16 => RegisterSize::Bit16,
+          VariableSize::Bit32 => RegisterSize::Bit32,
+          VariableSize::Bit64 => RegisterSize::Bit64,
+        };
+
         if v.id() as usize >= self.registers.len() {
           self.registers.resize(v.id() as usize + 1, Register::RAX);
         }
-        self.set(*v, Register::RAX);
+
+        self.set(*v, Register::RAX.with_size(size));
       }
     }
   }
@@ -89,6 +98,10 @@ impl VariableRegisters {
   pub fn set(&mut self, var: Variable, reg: Register) { self.registers[var.id() as usize] = reg; }
 
   pub fn get(&self, var: Variable) -> Register { self.registers[var.id() as usize] }
+}
+
+impl Register {
+  pub fn with_size(self, size: RegisterSize) -> Self { Register { size, index: self.index } }
 }
 
 macro_rules! registers {

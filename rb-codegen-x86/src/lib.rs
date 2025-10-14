@@ -83,6 +83,7 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
                 ),
                 RegisterSize::Bit16 => builder.instr(
                   Instruction::new(Opcode::MOV_RM_IMM_16)
+                    .with_prefix(Prefix::OperandSizeOverride)
                     .with_mod(0b11, reg.index)
                     .with_immediate(Immediate::i16(i.try_into().unwrap())),
                 ),
@@ -217,11 +218,11 @@ mod tests {
     disass(
       &object_path,
       expect![@r#"
-        0x08000250      48c7c003000000         mov rax, 3
-        0x08000257      48c7c005000000         mov rax, 5
-        0x0800025e      48c7c007000000         mov rax, 7
-        0x08000265      48c7c009000000         mov rax, 9
-        0x0800026c      cc                     int3
+        0x08000250      c6c003                 mov al, 3
+        0x08000253      66c7c00500             mov ax, 5
+        0x08000258      c7c007000000           mov eax, 7
+        0x0800025e      48c7c009000000         mov rax, 9
+        0x08000265      cc                     int3
       "#],
     );
   }
