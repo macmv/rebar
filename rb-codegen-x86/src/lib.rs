@@ -89,14 +89,14 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
 }
 
 pub fn link(objects: &[std::path::PathBuf], output: &Path) {
-  let mut cmd = std::process::Command::new("ld");
+  let mut cmd = std::process::Command::new("wild");
   cmd.arg("-pie");
   cmd.arg("-o").arg(&output);
   for obj in objects {
     cmd.arg(obj);
   }
-  let status = cmd.status().expect("failed to execute ld");
-  assert!(status.success(), "ld failed");
+  let status = cmd.status().expect("failed to execute wild");
+  assert!(status.success(), "wild failed");
 }
 
 #[cfg(test)]
