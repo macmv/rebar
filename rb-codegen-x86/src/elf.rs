@@ -25,7 +25,9 @@ pub fn generate(filename: &Path, text: &[u8], ro_data: &[u8], relocs: &[Rel]) {
   writer.reserve_strtab_section_index();
   writer.reserve_shstrtab_section_index();
   let symtab_section = writer.reserve_symtab_section_index();
-  let _relocation_section = writer.reserve_section_index();
+  if !relocs.is_empty() {
+    writer.reserve_section_index();
+  }
   let text_section = writer.reserve_section_index();
   let ro_data_section = writer.reserve_section_index();
 
@@ -38,7 +40,8 @@ pub fn generate(filename: &Path, text: &[u8], ro_data: &[u8], relocs: &[Rel]) {
   writer.reserve_strtab();
   writer.reserve_shstrtab();
   writer.reserve_symtab();
-  let relocations_offset = writer.reserve_relocations(1, true);
+  let relocations_offset =
+    if relocs.is_empty() { None } else { Some(writer.reserve_relocations(relocs.len(), true)) };
   let text_offset = writer.reserve(text.len(), 16);
   let ro_data_offset = writer.reserve(ro_data.len(), 1);
 
@@ -59,14 +62,16 @@ pub fn generate(filename: &Path, text: &[u8], ro_data: &[u8], relocs: &[Rel]) {
   writer.write_strtab_section_header();
   writer.write_shstrtab_section_header();
   writer.write_symtab_section_header(non_local_symbol_start);
-  writer.write_relocation_section_header(
-    relocation_name,
-    text_section,
-    symtab_section,
-    relocations_offset,
-    1,
-    true,
-  );
+  if let Some(relocations_offset) = relocations_offset {
+    writer.write_relocation_section_header(
+      relocation_name,
+      text_section,
+      symtab_section,
+      relocations_offset,
+      1,
+      true,
+    );
+  }
   writer.write_section_header(&SectionHeader {
     name:         Some(text_name),
     sh_type:      elf::SHT_PROGBITS,
