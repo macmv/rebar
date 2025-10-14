@@ -8,7 +8,7 @@ use object::{
   },
 };
 
-pub fn generate(filename: &str, text: &[u8], ro_data: &[u8]) {
+pub fn generate(filename: &str, text: &[u8], ro_data: &[u8], relocs: &[Rel]) {
   let file = File::create(filename).unwrap();
   let mut buffer = StreamingBuffer::new(BufWriter::new(file));
   let mut writer = Writer::new(Endianness::Little, true, &mut buffer);
@@ -111,10 +111,9 @@ pub fn generate(filename: &str, text: &[u8], ro_data: &[u8]) {
     st_value: 0,
     st_size:  ro_data.len() as u64,
   });
-  writer.write_relocation(
-    true,
-    &Rel { r_offset: 17, r_sym: 2, r_type: elf::R_X86_64_PC32, r_addend: -4 },
-  );
+  for reloc in relocs {
+    writer.write_relocation(true, &reloc);
+  }
   writer.write_align(16);
   writer.write(text);
   writer.write(ro_data);
