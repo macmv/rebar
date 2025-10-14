@@ -116,7 +116,7 @@ mod tests {
       rets:   0,
       blocks: vec![rb_codegen::Block {
         instructions: vec![
-          // write 0 reloc.foo 14
+          // write 1 reloc.foo 14
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Move,
             input:  smallvec::smallvec![1.into()],
@@ -124,7 +124,7 @@ mod tests {
           },
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Move,
-            input:  smallvec::smallvec![0.into()],
+            input:  smallvec::smallvec![1.into()],
             output: smallvec::smallvec![Variable::new(1).into()],
           },
           rb_codegen::Instruction {
@@ -184,7 +184,7 @@ mod tests {
     let data = b"Hello, world!\n";
 
     let instructions = [
-      // `write 0 reloc.foo 3`
+      // `write 1 reloc.foo 3`
       Instruction::new(Opcode::MOV_RM_IMM_16)
         .with_rex(Rex::W)
         .with_mod(0b11, Register::Eax)
@@ -192,7 +192,7 @@ mod tests {
       Instruction::new(Opcode::MOV_RM_IMM_16)
         .with_rex(Rex::W)
         .with_mod(0b11, Register::Edi)
-        .with_immediate(Immediate::i32(0)),
+        .with_immediate(Immediate::i32(1)),
       Instruction::new(Opcode::LEA).with_rex(Rex::W).with_disp(Register::Esi, -4),
       Instruction::new(Opcode::MOV_RM_IMM_16)
         .with_rex(Rex::W)
