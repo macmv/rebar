@@ -160,7 +160,7 @@ mod tests {
           },
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Syscall,
-            input:  smallvec::smallvec![Variable::new(0).into(), Variable::new(1).into(),],
+            input:  smallvec::smallvec![Variable::new(4).into(), Variable::new(5).into(),],
             output: smallvec::smallvec![],
           },
         ],
