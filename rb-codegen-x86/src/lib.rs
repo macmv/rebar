@@ -9,7 +9,7 @@ pub use instruction::{Immediate, Instruction, ModReg, Opcode, Rex};
 use object::write::elf::Rel;
 use rb_codegen::{InstructionInput, InstructionOutput};
 
-use crate::regalloc::{CallingConvention, VariableRegisters};
+use crate::regalloc::{CallingConvention, RegisterSize, VariableRegisters};
 
 mod regalloc;
 
@@ -60,9 +60,8 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
           InstructionOutput::Var(v) => {
             builder.reloc(symbol.index, 3, -4);
             let reg = reg.get(v);
-            assert_eq!(reg.size(), 8, "lead only supports 64-bit registers");
-            builder
-              .instr(Instruction::new(Opcode::LEA).with_rex(Rex::W).with_disp(reg.index(), -4));
+            assert_eq!(reg.size, RegisterSize::Bit64, "lead only supports 64-bit registers");
+            builder.instr(Instruction::new(Opcode::LEA).with_rex(Rex::W).with_disp(reg.index, -4));
           }
           _ => todo!(),
         },
@@ -74,7 +73,7 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
               builder.instr(
                 Instruction::new(Opcode::MOV_RM_IMM_16)
                   .with_rex(Rex::W)
-                  .with_mod(0b11, reg.index())
+                  .with_mod(0b11, reg.index)
                   .with_immediate(Immediate::i32(i)),
               );
             }
