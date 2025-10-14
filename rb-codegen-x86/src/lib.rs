@@ -70,12 +70,29 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
             // mov reg, imm32
             (InstructionOutput::Var(o), InstructionInput::Imm(i)) => {
               let reg = reg.get(o);
-              builder.instr(
-                Instruction::new(Opcode::MOV_RM_IMM_16)
-                  .with_rex(Rex::W)
-                  .with_mod(0b11, reg.index)
-                  .with_immediate(Immediate::i32(i)),
-              );
+              match reg.size {
+                RegisterSize::Bit8 => builder.instr(
+                  Instruction::new(Opcode::MOV_RM_IMM_8)
+                    .with_mod(0b11, reg.index)
+                    .with_immediate(Immediate::i8(i.try_into().unwrap())),
+                ),
+                RegisterSize::Bit16 => builder.instr(
+                  Instruction::new(Opcode::MOV_RM_IMM_16)
+                    .with_mod(0b11, reg.index)
+                    .with_immediate(Immediate::i16(i.try_into().unwrap())),
+                ),
+                RegisterSize::Bit32 => builder.instr(
+                  Instruction::new(Opcode::MOV_RM_IMM_16)
+                    .with_mod(0b11, reg.index)
+                    .with_immediate(Immediate::i32(i)),
+                ),
+                RegisterSize::Bit64 => builder.instr(
+                  Instruction::new(Opcode::MOV_RM_IMM_16)
+                    .with_rex(Rex::W)
+                    .with_mod(0b11, reg.index)
+                    .with_immediate(Immediate::i32(i)),
+                ),
+              }
             }
             _ => todo!(),
           }

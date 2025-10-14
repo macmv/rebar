@@ -9,14 +9,12 @@ pub struct VariableRegisters {
 }
 
 #[derive(Clone, Copy)]
-#[allow(unused)]
 pub struct Register {
   pub size:  RegisterSize,
   pub index: RegisterIndex,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(unused)]
 pub enum RegisterSize {
   Bit8,
   Bit16,
