@@ -64,7 +64,7 @@ pub enum Condition {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InstructionInput {
   Var(Variable),
-  Imm(u32),
+  Imm(u64),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,8 +105,8 @@ impl Variable {
 impl From<Variable> for InstructionInput {
   fn from(v: Variable) -> Self { InstructionInput::Var(v) }
 }
-impl From<u32> for InstructionInput {
-  fn from(v: u32) -> Self { InstructionInput::Imm(v) }
+impl From<u64> for InstructionInput {
+  fn from(v: u64) -> Self { InstructionInput::Imm(v) }
 }
 impl From<Variable> for InstructionOutput {
   fn from(v: Variable) -> Self { InstructionOutput::Var(v) }

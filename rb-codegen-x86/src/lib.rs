@@ -77,27 +77,34 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
               let reg = reg.get(o);
               match reg.size {
                 RegisterSize::Bit8 => builder.instr(
-                  Instruction::new(Opcode::MOV_RM_IMM_8)
-                    .with_mod(0b11, reg.index)
+                  Instruction::new(Opcode::MOV_RD_IMM_8.with_rd(reg.index))
                     .with_immediate(Immediate::i8(i.try_into().unwrap())),
                 ),
                 RegisterSize::Bit16 => builder.instr(
-                  Instruction::new(Opcode::MOV_RM_IMM_16)
+                  Instruction::new(Opcode::MOV_RD_IMM_16.with_rd(reg.index))
                     .with_prefix(Prefix::OperandSizeOverride)
-                    .with_mod(0b11, reg.index)
                     .with_immediate(Immediate::i16(i.try_into().unwrap())),
                 ),
                 RegisterSize::Bit32 => builder.instr(
-                  Instruction::new(Opcode::MOV_RM_IMM_16)
-                    .with_mod(0b11, reg.index)
-                    .with_immediate(Immediate::i32(i)),
+                  Instruction::new(Opcode::MOV_RD_IMM_16.with_rd(reg.index))
+                    .with_immediate(Immediate::i32(i.try_into().unwrap())),
                 ),
-                RegisterSize::Bit64 => builder.instr(
-                  Instruction::new(Opcode::MOV_RM_IMM_16)
-                    .with_prefix(Prefix::RexW)
-                    .with_mod(0b11, reg.index)
-                    .with_immediate(Immediate::i32(i)),
-                ),
+                RegisterSize::Bit64 => {
+                  if let Ok(i) = u32::try_from(i) {
+                    // 32-bit registers get zero-extended to 64-bit
+                    builder.instr(
+                      Instruction::new(Opcode::MOV_RD_IMM_16.with_rd(reg.index))
+                        .with_immediate(Immediate::i32(i)),
+                    );
+                  } else {
+                    // TODO: Use the sign-extending `mov` if possible.
+                    builder.instr(
+                      Instruction::new(Opcode::MOV_RD_IMM_16)
+                        .with_prefix(Prefix::RexW)
+                        .with_immediate(Immediate::i64(i.into())),
+                    );
+                  }
+                }
               }
             }
             _ => todo!(),
@@ -205,6 +212,11 @@ mod tests {
             input:  smallvec::smallvec![9.into()],
             output: smallvec::smallvec![Variable::new(3, VariableSize::Bit64).into()],
           },
+          rb_codegen::Instruction {
+            opcode: rb_codegen::Opcode::Move,
+            input:  smallvec::smallvec![(u32::MAX as u64 + 5).into()],
+            output: smallvec::smallvec![Variable::new(4, VariableSize::Bit64).into()],
+          },
         ],
         terminator:   rb_codegen::TerminatorInstruction::Trap,
       }],
@@ -218,11 +230,12 @@ mod tests {
     disass(
       &object_path,
       expect![@r#"
-        0x08000250      c6c003                 mov al, 3
-        0x08000253      66c7c00500             mov ax, 5
-        0x08000258      c7c007000000           mov eax, 7
-        0x0800025e      48c7c009000000         mov rax, 9
-        0x08000265      cc                     int3
+        0x08000250      b003                   mov al, 3
+        0x08000252      66b80500               mov ax, 5
+        0x08000256      b807000000             mov eax, 7
+        0x0800025b      b809000000             mov eax, 9
+        0x08000260      48b80400000001000000   movabs rax, 0x100000004
+        0x0800026a      cc                     int3
       "#],
     );
   }
