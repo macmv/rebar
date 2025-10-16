@@ -16,7 +16,7 @@ struct PinnedVariables {
   pinned: Vec<Option<RegisterIndex>>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Lifetime {
   def: InstructionLocation,
 
@@ -24,7 +24,7 @@ struct Lifetime {
   last_use:  InstructionLocation,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct InstructionLocation {
   pub block:       u32,
   pub instruction: u32,
@@ -71,19 +71,29 @@ impl VariableRegisters {
             };
 
             if let Some(index) = pinned.get(v) {
+              if used[index as usize].is_some_and(|u| lifetimes.is_used_at(u, loc)) {
+                panic!("pinned register {index:?} is already in use");
+              }
               self.set(v, Register { index, size });
+              used[index as usize] = Some(v);
+              continue;
             }
 
-            for (index, used) in used.iter_mut().enumerate() {
+            'outer: for (index, used) in used.iter_mut().enumerate() {
+              let index = unsafe { std::mem::transmute::<u8, RegisterIndex>(index as u8) };
+
               if used.is_none_or(|u| !lifetimes.is_used_at(u, loc)) {
+                // If we overlap with a pinned variable, don't use that variable.
+                for variable in lifetimes.overlaps_with(v) {
+                  if let Some(i) = pinned.get(variable) {
+                    if index == i {
+                      continue 'outer;
+                    }
+                  }
+                }
+
                 *used = Some(v);
-                self.set(
-                  v,
-                  Register {
-                    index: unsafe { std::mem::transmute::<u8, RegisterIndex>(index as u8) },
-                    size,
-                  },
-                );
+                self.set(v, Register { index, size });
                 break;
               }
             }
@@ -126,6 +136,19 @@ impl Lifetimes {
     }
 
     l
+  }
+
+  fn overlaps_with(&self, var: Variable) -> impl Iterator<Item = Variable> + '_ {
+    let lifetime = self.lifetimes[var.id() as usize].unwrap();
+
+    self.lifetimes.iter().enumerate().filter_map(move |(id, l)| {
+      if let Some(l) = l {
+        if !(l.last_use < lifetime.def || lifetime.last_use < l.def) {
+          return Some(Variable::new(id as u32, var.size()));
+        }
+      }
+      None
+    })
   }
 
   fn is_used_at(&self, var: Variable, loc: InstructionLocation) -> bool {
@@ -171,7 +194,10 @@ impl PinnedVariables {
     for block in function.blocks.iter() {
       for inst in block.instructions.iter() {
         match inst.opcode {
-          Opcode::Mul | Opcode::Div => p.pin(inst.output[0].unwrap_var(), RegisterIndex::Eax),
+          Opcode::Mul | Opcode::Div => {
+            p.pin(inst.input[0].unwrap_var(), RegisterIndex::Eax);
+            p.pin(inst.output[0].unwrap_var(), RegisterIndex::Eax);
+          }
           Opcode::Syscall => p.pin_cc(CallingConvention::Syscall, &inst.input),
           _ => {}
         }
