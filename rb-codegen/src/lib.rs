@@ -1,5 +1,9 @@
 use smallvec::SmallVec;
 
+mod instr;
+
+pub use instr::{BlockBuilder, FunctionBuilder, InstrBuilder};
+
 pub struct Function {
   pub args:   u32,
   pub rets:   u32,
