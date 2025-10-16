@@ -1,6 +1,6 @@
 use std::fmt;
 
-use rb_codegen::{Function, InstructionInput, InstructionOutput, Variable, VariableSize};
+use rb_codegen::{Function, InstructionInput, InstructionOutput, Opcode, Variable, VariableSize};
 
 use crate::instruction::RegisterIndex;
 
@@ -10,6 +10,10 @@ pub struct VariableRegisters {
 
 struct Lifetimes {
   lifetimes: Vec<Option<Lifetime>>,
+}
+
+struct PinnedVariables {
+  pinned: Vec<Option<RegisterIndex>>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -49,15 +53,12 @@ impl VariableRegisters {
 
   pub fn pass(&mut self, function: &Function) {
     let lifetimes = Lifetimes::solve(function);
+    let pinned = PinnedVariables::solve(function);
     let mut used = [Option::<Variable>::None; 16];
 
     for (b, block) in function.blocks.iter().enumerate() {
       for (i, inst) in block.instructions.iter().enumerate() {
         let loc = InstructionLocation { block: b as u32, instruction: i as u32 };
-        if let rb_codegen::Opcode::Syscall = inst.opcode {
-          self.pin_registers(CallingConvention::Syscall, &inst.input);
-          continue;
-        }
 
         for output in &inst.output {
           if let InstructionOutput::Var(v) = *output {
@@ -68,6 +69,10 @@ impl VariableRegisters {
               VariableSize::Bit32 => RegisterSize::Bit32,
               VariableSize::Bit64 => RegisterSize::Bit64,
             };
+
+            if let Some(index) = pinned.get(v) {
+              self.set(v, Register { index, size });
+            }
 
             for (index, used) in used.iter_mut().enumerate() {
               if used.is_none_or(|u| !lifetimes.is_used_at(u, loc)) {
@@ -82,41 +87,6 @@ impl VariableRegisters {
                 break;
               }
             }
-          }
-        }
-      }
-    }
-  }
-
-  fn pin_registers(&mut self, cc: CallingConvention, inputs: &[InstructionInput]) {
-    let needed = inputs
-      .iter()
-      .filter_map(|input| match input {
-        InstructionInput::Var(v) => Some(v.id()),
-        _ => None,
-      })
-      .max()
-      .map_or(0, |v| v + 1) as usize;
-
-    if self.registers.len() < needed {
-      self.registers.resize(needed, Register::RAX);
-    }
-
-    match cc {
-      CallingConvention::Syscall => {
-        let mut arg_index = 0;
-        for input in inputs {
-          if let InstructionInput::Var(v) = input {
-            let reg = match arg_index {
-              0 => Register::RAX,
-              1 => Register::RDI,
-              2 => Register::RSI,
-              3 => Register::RDX,
-              4 => Register::RCX,
-              _ => panic!("too many syscall arguments"),
-            };
-            self.set(*v, reg);
-            arg_index += 1;
           }
         }
       }
@@ -191,6 +161,66 @@ impl Lifetimes {
       first_use: prev.map_or(loc, |l| l.first_use),
       last_use:  prev.map_or(loc, |l| l.last_use),
     });
+  }
+}
+
+impl PinnedVariables {
+  fn solve(function: &Function) -> Self {
+    let mut p = PinnedVariables { pinned: vec![] };
+
+    for block in function.blocks.iter() {
+      for inst in block.instructions.iter() {
+        match inst.opcode {
+          Opcode::Mul => p.pin(inst.output[0].unwrap_var(), RegisterIndex::Eax),
+          Opcode::Syscall => {
+            p.pin_cc(CallingConvention::Syscall, &inst.input);
+          }
+          _ => {}
+        }
+      }
+    }
+
+    p
+  }
+
+  fn get(&self, var: Variable) -> Option<RegisterIndex> {
+    self.pinned.get(var.id() as usize).copied().flatten()
+  }
+
+  fn pin_cc(&mut self, cc: CallingConvention, inputs: &[InstructionInput]) {
+    match cc {
+      CallingConvention::Syscall => {
+        let mut arg_index = 0;
+        for input in inputs {
+          if let InstructionInput::Var(v) = input {
+            let reg = match arg_index {
+              0 => Register::RAX,
+              1 => Register::RDI,
+              2 => Register::RSI,
+              3 => Register::RDX,
+              4 => Register::RCX,
+              _ => panic!("too many syscall arguments"),
+            };
+            self.pin(*v, reg.index);
+            arg_index += 1;
+          } else {
+            panic!("expected variable input for syscall");
+          }
+        }
+      }
+    }
+  }
+
+  fn pin(&mut self, var: Variable, index: RegisterIndex) {
+    if self.pinned.len() <= var.id() as usize {
+      self.pinned.resize(var.id() as usize + 1, None);
+    }
+
+    if self.pinned[var.id() as usize].is_some() {
+      panic!("variable {var:?} is already pinned");
+    }
+
+    self.pinned[var.id() as usize] = Some(index);
   }
 }
 

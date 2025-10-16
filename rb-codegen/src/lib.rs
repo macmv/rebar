@@ -137,3 +137,14 @@ impl From<u64> for InstructionInput {
 impl From<Variable> for InstructionOutput {
   fn from(v: Variable) -> Self { InstructionOutput::Var(v) }
 }
+
+impl InstructionOutput {
+  #[track_caller]
+  pub fn unwrap_var(self) -> Variable {
+    if let InstructionOutput::Var(v) = self {
+      v
+    } else {
+      panic!("expected variable output, got {:?}", self);
+    }
+  }
+}
