@@ -9,7 +9,10 @@ pub use instruction::{Immediate, Instruction, ModReg, Opcode, Prefix};
 use object::write::elf::Rel;
 use rb_codegen::{InstructionInput, InstructionOutput};
 
-use crate::regalloc::{Register, RegisterSize, VariableRegisters};
+use crate::{
+  instruction::RegisterIndex,
+  regalloc::{Register, RegisterSize, VariableRegisters},
+};
 
 mod regalloc;
 
@@ -63,6 +66,67 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
               reg.get(b),
               Opcode::ADD_RM8,
               Opcode::ADD_RM32,
+            );
+          }
+          _ => todo!("inst {:?}", inst),
+        },
+        rb_codegen::Opcode::Sub => match (inst.output[0], inst.input[0], inst.input[1]) {
+          (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
+            encode_binary_reg_imm(
+              &mut builder,
+              reg.get(v),
+              reg.get(a),
+              b,
+              Opcode::SUB_IMM8,
+              Opcode::SUB_IMM32,
+            );
+          }
+          (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
+            encode_binary_reg_reg(
+              &mut builder,
+              reg.get(v),
+              reg.get(a),
+              reg.get(b),
+              Opcode::SUB_RM8,
+              Opcode::SUB_RM32,
+            );
+          }
+          _ => todo!("inst {:?}", inst),
+        },
+        rb_codegen::Opcode::Mul => match (inst.output[0], inst.input[0], inst.input[1]) {
+          (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
+            assert_eq!(reg.get(v).index, RegisterIndex::Eax, "mul must output to eax");
+
+            encode_binary_reg_reg(
+              &mut builder,
+              reg.get(v),
+              reg.get(a),
+              reg.get(b),
+              Opcode::MUL_RM8,
+              Opcode::MUL_RM32,
+            );
+          }
+          _ => todo!("inst {:?}", inst),
+        },
+        rb_codegen::Opcode::Xor => match (inst.output[0], inst.input[0], inst.input[1]) {
+          (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
+            encode_binary_reg_imm(
+              &mut builder,
+              reg.get(v),
+              reg.get(a),
+              b,
+              Opcode::XOR_IMM8,
+              Opcode::XOR_IMM32,
+            );
+          }
+          (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
+            encode_binary_reg_reg(
+              &mut builder,
+              reg.get(v),
+              reg.get(a),
+              reg.get(b),
+              Opcode::XOR_RM8,
+              Opcode::XOR_RM32,
             );
           }
           _ => todo!("inst {:?}", inst),

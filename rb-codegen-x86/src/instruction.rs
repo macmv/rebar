@@ -19,7 +19,7 @@ bitflags! {
 
 const _INSTR_SIZE: () = assert!(std::mem::size_of::<Instruction>() == 16);
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum RegisterIndex {
   Eax,
@@ -203,18 +203,28 @@ impl Instruction {
 }
 
 impl Opcode {
-  pub const ADD_IMM8: Opcode = Opcode::new([0x04]);
   pub const ADD_IMM32: Opcode = Opcode::new([0x05]);
-  pub const ADD_RM8: Opcode = Opcode::new([0x02]);
+  pub const ADD_IMM8: Opcode = Opcode::new([0x04]);
   pub const ADD_RM32: Opcode = Opcode::new([0x03]);
+  pub const ADD_RM8: Opcode = Opcode::new([0x02]);
+  pub const SUB_IMM32: Opcode = Opcode::new([0x2d]);
+  pub const SUB_IMM8: Opcode = Opcode::new([0x2c]);
+  pub const SUB_RM32: Opcode = Opcode::new([0x2b]);
+  pub const SUB_RM8: Opcode = Opcode::new([0x2a]);
   pub const INT3: Opcode = Opcode::new([0xcc]);
   pub const LEA: Opcode = Opcode::new([0x8d]);
   pub const MOV_RD_IMM_16: Opcode = Opcode::new([0xb8]);
   pub const MOV_RD_IMM_8: Opcode = Opcode::new([0xb0]);
   pub const MOV_RM_IMM_16: Opcode = Opcode::new([0xc7]);
   pub const MOV_RM_IMM_8: Opcode = Opcode::new([0xc6]);
+  pub const MUL_RM32: Opcode = Opcode::new([0xf6]);
+  pub const MUL_RM8: Opcode = Opcode::new([0xf7]);
   pub const RET: Opcode = Opcode::new([0xc3]);
   pub const SYSCALL: Opcode = Opcode::new([0x0f, 0x05]);
+  pub const XOR_IMM32: Opcode = Opcode::new([0x35]);
+  pub const XOR_IMM8: Opcode = Opcode::new([0x34]);
+  pub const XOR_RM32: Opcode = Opcode::new([0x33]);
+  pub const XOR_RM8: Opcode = Opcode::new([0x32]);
 
   pub fn with_rd(self, rd: RegisterIndex) -> Self {
     let mut code = self.code;
