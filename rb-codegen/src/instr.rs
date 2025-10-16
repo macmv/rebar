@@ -1,7 +1,8 @@
 use smallvec::smallvec;
 
 use crate::{
-  Block, BlockId, Condition, Function, InstructionInput, Signature, Symbol, Variable, VariableSize,
+  Block, BlockId, Comparison, Function, FunctionId, InstructionInput, Signature, Symbol, Variable,
+  VariableSize,
 };
 
 pub struct FunctionBuilder {
@@ -32,6 +33,8 @@ impl FunctionBuilder {
       },
     }
   }
+
+  pub fn build(self) -> Function { self.function }
 
   pub fn arg(&self, index: u32) -> crate::Variable {
     assert!(
@@ -85,51 +88,48 @@ macro_rules! instructions {
   ($(
     $name:ident:
     $variant:ident $(($($param:ident: $param_ty:ty),*))? =>
-    $($output:ident),*
-    $(: $($input:ident),+)?
+    $($input:ident),*
   );* $(;)?) => {
     impl InstrBuilder<'_> {
       $(
         pub fn $name(
           self,
           $($($param: $param_ty,)*)*
-          $($output: VariableSize,)*
-          $($($input: impl Into<InstructionInput>,)+)?
-        ) -> ($(ignore!($output => Variable),)*) {
-          $(
-            let $output = self.function.var($output);
-          )*
+          output: VariableSize,
+          $($input: impl Into<InstructionInput>,)*
+        ) -> Variable {
+          let output = self.function.var(output);
 
           self.function.function.blocks[self.block.0 as usize].instructions.push(crate::Instruction {
             opcode: crate::Opcode::$variant $(($( $param ),*))?,
-            input:  smallvec![$($($input.into(),)+)?],
-            output: smallvec![$($output.into(),)*],
+            input:  smallvec![$($input.into(),)*],
+            output: smallvec![output.into()],
           });
 
-          (
-            $($output,)*
-          )
+          output
         }
       )*
     }
   };
 }
 
-macro_rules! ignore {
-  ($var:ident => $tt:tt) => {
-    $tt
-  };
-}
-
 instructions! {
-  add: Add => output : input1, input2;
-  lea: Lea(symbol: Symbol) => output;
-  mov: Move => output : input;
-  branch: Branch(condition: Condition, block: BlockId) => input;
-  syscall1: Syscall => output : input;
-  syscall2: Syscall => output : input1, input2;
-  syscall3: Syscall => output : input1, input2, input3;
-  syscall4: Syscall => output : input1, input2, input3, input4;
+  add: Add => input1, input2;
+  branch: Branch(block: BlockId) => input;
+  call: Call(function: FunctionId) => input;
+  cmp: Compare(cmp: Comparison) => input1, input2;
+  div: Div => input1, input2;
+  lea: Lea(symbol: Symbol) => ;
+  mov: Move => input;
+  mul: Mul => input1, input2;
+  neg: Neg => input;
+  rem: Rem => input1, input2;
+  sub: Sub => input1, input2;
+  syscall1: Syscall => input;
+  syscall2: Syscall => input1, input2;
+  syscall3: Syscall => input1, input2, input3;
+  syscall4: Syscall => input1, input2, input3, input4;
+  xor: Xor => input1, input2;
 }
 
 #[cfg(test)]

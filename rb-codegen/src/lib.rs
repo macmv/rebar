@@ -15,6 +15,8 @@ pub struct Function {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FunctionId(u32);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BlockId(u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Variable(u32);
@@ -53,14 +55,22 @@ pub enum TerminatorInstruction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Opcode {
   Add,
+  Branch(BlockId),
+  Call(FunctionId),
+  Compare(Comparison),
+  Div,
   Lea(Symbol),
   Move,
-  Branch(Condition, BlockId),
+  Mul,
+  Neg,
+  Rem,
+  Sub,
   Syscall,
+  Xor,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Condition {
+pub enum Comparison {
   Equal,
   NotEqual,
   Greater,
