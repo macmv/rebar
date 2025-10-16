@@ -171,7 +171,7 @@ impl PinnedVariables {
     for block in function.blocks.iter() {
       for inst in block.instructions.iter() {
         match inst.opcode {
-          Opcode::Mul => p.pin(inst.output[0].unwrap_var(), RegisterIndex::Eax),
+          Opcode::Mul | Opcode::Div => p.pin(inst.output[0].unwrap_var(), RegisterIndex::Eax),
           Opcode::Syscall => p.pin_cc(CallingConvention::Syscall, &inst.input),
           _ => {}
         }
