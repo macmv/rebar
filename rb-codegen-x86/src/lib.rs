@@ -93,32 +93,36 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
           }
           _ => todo!("inst {:?}", inst),
         },
-        rb_codegen::Opcode::Mul => match (inst.output[0], inst.input[0], inst.input[1]) {
-          (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
-            debug_assert_eq!(reg.get(v).size, reg.get(a).size, "mul must have the same size");
-            debug_assert_eq!(reg.get(v).size, reg.get(b).size, "mul must have the same size");
-            debug_assert_eq!(reg.get(v).index, RegisterIndex::Eax, "mul must output to eax");
-            let a = reg.get(a);
-            let b = reg.get(b);
+        rb_codegen::Opcode::Mul | rb_codegen::Opcode::Div => {
+          let opcode_digit = if inst.opcode == rb_codegen::Opcode::Mul { 4 } else { 6 };
 
-            if a.index == RegisterIndex::Eax {
-              builder.instr(
-                encode_sized(a.size, Opcode::MUL_RM8, Opcode::MUL_RM32)
-                  .with_digit(4)
-                  .with_mod(0b11, b.index),
-              );
-            } else if b.index == RegisterIndex::Eax {
-              builder.instr(
-                encode_sized(b.size, Opcode::MUL_RM8, Opcode::MUL_RM32)
-                  .with_digit(4)
-                  .with_mod(0b11, a.index),
-              );
-            } else {
-              panic!("mul must multiply from eax");
+          match (inst.output[0], inst.input[0], inst.input[1]) {
+            (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
+              debug_assert_eq!(reg.get(v).size, reg.get(a).size, "mul must have the same size");
+              debug_assert_eq!(reg.get(v).size, reg.get(b).size, "mul must have the same size");
+              debug_assert_eq!(reg.get(v).index, RegisterIndex::Eax, "mul must output to eax");
+              let a = reg.get(a);
+              let b = reg.get(b);
+
+              if a.index == RegisterIndex::Eax {
+                builder.instr(
+                  encode_sized(a.size, Opcode::MUL_RM8, Opcode::MUL_RM32)
+                    .with_digit(opcode_digit)
+                    .with_mod(0b11, b.index),
+                );
+              } else if b.index == RegisterIndex::Eax {
+                builder.instr(
+                  encode_sized(b.size, Opcode::MUL_RM8, Opcode::MUL_RM32)
+                    .with_digit(opcode_digit)
+                    .with_mod(0b11, a.index),
+                );
+              } else {
+                panic!("mul must multiply from eax");
+              }
             }
+            _ => todo!("inst {:?}", inst),
           }
-          _ => todo!("inst {:?}", inst),
-        },
+        }
         rb_codegen::Opcode::Xor => match (inst.output[0], inst.input[0], inst.input[1]) {
           (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
             encode_binary_reg_imm(
