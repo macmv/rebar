@@ -97,13 +97,25 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
             _ => todo!("inst {:?}", inst),
           }
         }
-        rb_codegen::Opcode::Math(math @ (Math::Imul | Math::Idiv | Math::Neg)) => {
+        rb_codegen::Opcode::Math(
+          math @ (Math::Imul
+          | Math::Umul
+          | Math::Idiv
+          | Math::Udiv
+          | Math::Neg
+          | Math::Not
+          | Math::Irem
+          | Math::Urem),
+        ) => {
           // digits: not=2, neg=3, umul=4, imul=5, udiv=6, idiv=7
 
           let opcode_digit = match math {
+            Math::Not => 2,
             Math::Neg => 3,
-            Math::Imul => 4,
-            Math::Idiv => 6,
+            Math::Umul => 4,
+            Math::Imul => 5,
+            Math::Udiv | Math::Urem => 6,
+            Math::Idiv | Math::Irem => 7,
             _ => unreachable!(),
           };
 
@@ -111,7 +123,14 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
             (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
               debug_assert_eq!(reg.get(v).size, reg.get(a).size, "mul must have the same size");
               debug_assert_eq!(reg.get(v).size, reg.get(b).size, "mul must have the same size");
-              debug_assert_eq!(reg.get(v).index, RegisterIndex::Eax, "mul must output to eax");
+              match math {
+                Math::Urem | Math::Irem => {
+                  debug_assert_eq!(reg.get(v).index, RegisterIndex::Edx, "rem must output to edx");
+                }
+                _ => {
+                  debug_assert_eq!(reg.get(v).index, RegisterIndex::Eax, "math must output to eax");
+                }
+              }
               let a = reg.get(a);
               let b = reg.get(b);
 
