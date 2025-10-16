@@ -49,8 +49,8 @@ pub struct Block {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Instruction {
   pub opcode: Opcode,
-  pub input:  SmallVec<[InstructionInput; 2]>,
   pub output: SmallVec<[InstructionOutput; 2]>,
+  pub input:  SmallVec<[InstructionInput; 2]>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
