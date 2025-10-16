@@ -1,13 +1,14 @@
 use std::{
   panic::catch_unwind,
   path::{Path, PathBuf},
-  sync::Arc,
+  process::ExitCode,
+  sync::{atomic::Ordering, Arc},
 };
 
 use rb_diagnostic::{Source, Sources};
 use rb_runtime::{Environment, RuntimeEnvironment};
 
-fn main() {
+fn main() -> ExitCode {
   let filter = std::env::args().nth(1).unwrap_or_default();
 
   let files = gather_files(Path::new("test/integration"));
@@ -17,9 +18,12 @@ fn main() {
   const NUM_CPUS: usize = 32;
   let chunk_size = (files.len() / NUM_CPUS).max(1);
 
+  let failed = std::sync::atomic::AtomicBool::new(false);
+
   std::thread::scope(|scope| {
     for chunk in files.chunks(chunk_size) {
       let f = &filter;
+      let failed = &failed;
       scope.spawn(move || {
         for path in chunk {
           if path.extension().unwrap() == "rbr" {
@@ -47,6 +51,7 @@ fn main() {
               match res {
                 Ok(_) => {}
                 Err(e) => {
+                  failed.fetch_or(true, Ordering::AcqRel);
                   println!("{}... \x1b[31mpanic\x1b[0m", stringified);
 
                   if let Some(s) = e.downcast_ref::<String>() {
@@ -64,6 +69,12 @@ fn main() {
       });
     }
   });
+
+  if failed.into_inner() {
+    ExitCode::FAILURE
+  } else {
+    ExitCode::SUCCESS
+  }
 }
 
 fn gather_files(dir: &Path) -> Vec<PathBuf> {
