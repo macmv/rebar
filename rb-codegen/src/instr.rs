@@ -1,8 +1,7 @@
 use smallvec::smallvec;
 
 use crate::{
-  Block, BlockId, Condition, Function, Instruction, InstructionInput, InstructionOutput, Signature,
-  Symbol, Variable, VariableSize,
+  Block, BlockId, Condition, Function, InstructionInput, Signature, Symbol, Variable, VariableSize,
 };
 
 pub struct FunctionBuilder {
@@ -11,12 +10,13 @@ pub struct FunctionBuilder {
 }
 
 pub struct BlockBuilder<'a> {
-  block: &'a mut Block,
-  id:    BlockId,
+  function: &'a mut FunctionBuilder,
+  block:    BlockId,
 }
 
 pub struct InstrBuilder<'a> {
-  instruction: &'a mut Instruction,
+  function: &'a mut FunctionBuilder,
+  block:    BlockId,
 }
 
 impl FunctionBuilder {
@@ -60,20 +60,24 @@ impl FunctionBuilder {
   }
 
   pub fn block(&mut self, id: BlockId) -> BlockBuilder<'_> {
-    BlockBuilder { block: &mut self.function.blocks[id.0 as usize], id }
+    BlockBuilder { function: self, block: id }
+  }
+
+  pub fn last_block(&mut self) -> BlockBuilder<'_> {
+    let id = BlockId((self.function.blocks.len() - 1) as u32);
+    self.block(id)
+  }
+
+  pub fn instr(&mut self) -> InstrBuilder<'_> {
+    InstrBuilder { block: self.last_block().id(), function: self }
   }
 }
 
 impl BlockBuilder<'_> {
-  pub fn id(&self) -> BlockId { self.id }
+  pub fn id(&self) -> BlockId { self.block }
 
   pub fn instr(&mut self) -> InstrBuilder<'_> {
-    self.block.instructions.push(crate::Instruction {
-      opcode: crate::Opcode::Add,
-      input:  smallvec![],
-      output: smallvec![],
-    });
-    InstrBuilder { instruction: self.block.instructions.last_mut().unwrap() }
+    InstrBuilder { function: self.function, block: self.block }
   }
 }
 
@@ -81,23 +85,39 @@ macro_rules! instructions {
   ($(
     $name:ident:
     $variant:ident $(($($param:ident: $param_ty:ty),*))? =>
-    $($input:ident),*
-    $(: $($output:ident),+)?
+    $($output:ident),*
+    $(: $($input:ident),+)?
   );* $(;)?) => {
-    $(
-      impl InstrBuilder<'_> {
+    impl InstrBuilder<'_> {
+      $(
         pub fn $name(
           self,
           $($($param: $param_ty,)*)*
-          $($($output: impl Into<InstructionOutput>,)+)?
-          $($input: impl Into<InstructionInput>,)*
-        ) {
-          self.instruction.opcode = crate::Opcode::$variant $(($( $param ),*))?;
-          self.instruction.input = smallvec![$($input.into(),)*];
-          self.instruction.output = smallvec![$($($output.into(),)+)?];
+          $($output: VariableSize,)*
+          $($($input: impl Into<InstructionInput>,)+)?
+        ) -> ($(ignore!($output => Variable),)*) {
+          $(
+            let $output = self.function.var($output);
+          )*
+
+          self.function.function.blocks[self.block.0 as usize].instructions.push(crate::Instruction {
+            opcode: crate::Opcode::$variant $(($( $param ),*))?,
+            input:  smallvec![$($($input.into(),)+)?],
+            output: smallvec![$($output.into(),)*],
+          });
+
+          (
+            $($output,)*
+          )
         }
-      }
-    )*
+      )*
+    }
+  };
+}
+
+macro_rules! ignore {
+  ($var:ident => $tt:tt) => {
+    $tt
   };
 }
 
@@ -106,10 +126,10 @@ instructions! {
   lea: Lea(symbol: Symbol) => output;
   mov: Move => output : input;
   branch: Branch(condition: Condition, block: BlockId) => input;
-  syscall1: Syscall => input : output;
-  syscall2: Syscall => input1, input2 : output;
-  syscall3: Syscall => input1, input2, input3 : output;
-  syscall4: Syscall => input1, input2, input3, input4 : output;
+  syscall1: Syscall => output : input;
+  syscall2: Syscall => output : input1, input2;
+  syscall3: Syscall => output : input1, input2, input3;
+  syscall4: Syscall => output : input1, input2, input3, input4;
 }
 
 #[cfg(test)]
@@ -126,10 +146,8 @@ mod tests {
     let arg1 = builder.arg(0);
     let arg2 = builder.arg(1);
 
-    let res = builder.var(VariableSize::Bit64);
-
     let mut block = builder.new_block();
-    block.instr().add(res, arg1, arg2);
-    block.instr().lea(Symbol { index: 2 }, res);
+    let _res = block.instr().add(VariableSize::Bit64, arg1, arg2);
+    let _addr = block.instr().lea(Symbol { index: 2 }, VariableSize::Bit64);
   }
 }
