@@ -127,16 +127,16 @@ pub fn run(
 fn compile_mir(env: RuntimeEnvironment, functions: Vec<rb_mir::ast::Function>) {
   let mut compiler = rb_backend::Compiler::new(env.env.mir_ctx.clone());
 
-  for func in &functions {
-    compiler.declare_function(func);
-  }
+  // for func in &functions {
+  //   compiler.declare_function(func);
+  // }
 
   let compiled =
     run_parallel(&functions, || compiler.new_thread(), |ctx, f| ctx.compile_function(f));
 
   let mut function_ids = vec![];
   for func in compiled.into_iter() {
-    function_ids.push(compiler.define_function(func).unwrap());
+    function_ids.push(compiler.finish_function(func));
   }
 
   compiler.finish();

@@ -1,198 +1,60 @@
-use codegen::{
-  control::ControlPlane,
-  ir::{self, FuncRef},
-  CompiledCode,
-};
-use cranelift::prelude::*;
-use cranelift_module::{DataDescription, FuncId, Linkage, Module};
-use cranelift_object::{ObjectBuilder, ObjectModule};
-use isa::{CallConv, TargetFrontendConfig, TargetIsa};
-use rb_mir::{
-  ast::{self as mir, UserFunctionId},
-  MirContext,
-};
-use rb_typer::{Literal, Type};
-use slot::Slot;
-use std::{collections::HashMap, io::BufWriter};
+use std::collections::HashMap;
+
+use rb_codegen::{Comparison, Function, FunctionBuilder, Signature, Variable, VariableSize::*};
+use rb_mir::{ast as mir, MirContext};
 
 mod r_value;
-mod slot;
+// mod slot;
 
-use r_value::RValue;
+use rb_value::{DynamicValueType, ValueType};
 
-use rb_value::{DynamicValueType, IntrinsicImpls, ValueType};
+use crate::r_value::RValue;
 
 pub struct Compiler {
   mir_ctx: MirContext,
-  module:  ObjectModule,
 
-  // TODO: Use this for string literals at the very least.
-  #[allow(dead_code)]
-  data_description: DataDescription,
-
-  user_funcs: HashMap<mir::UserFunctionId, (FuncId, Signature)>,
+  user_funcs: HashMap<mir::UserFunctionId, Signature>,
+  functions:  Vec<Function>,
 }
 
 pub struct ThreadCtx<'a> {
-  mir_ctx:         &'a MirContext,
-  builder_context: FunctionBuilderContext,
-  ctx:             codegen::Context,
+  mir_ctx: &'a MirContext,
 
-  isa: &'a dyn TargetIsa,
-
-  user_funcs: &'a HashMap<mir::UserFunctionId, (FuncId, Signature)>,
+  user_funcs: &'a HashMap<mir::UserFunctionId, Signature>,
 }
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-struct IntrinsicId(u8);
-
-macro_rules! intrinsics {
-  ($(
-    $id:literal: $name:ident($($arg:ident),*) $(-> $ret:ident)?,
-  )*) => {
-    pub struct Intrinsics<T> {
-      $($name: T),*
-    }
-
-    mod intrinsic {
-      use super::*;
-
-      $(
-        #[allow(non_upper_case_globals)]
-        pub const $name: IntrinsicId = IntrinsicId($id);
-      )*
-    }
-
-    impl<T> Intrinsics<T> where T: Copy {
-      pub fn all(v: T) -> Self {
-        Intrinsics {
-          $($name: v),*
-        }
-      }
-    }
-
-    impl<T> std::ops::Index<IntrinsicId> for Intrinsics<T> {
-      type Output = T;
-
-      fn index(&self, id: IntrinsicId) -> &T {
-        match id {
-          $(
-            intrinsic::$name => &self.$name,
-          )*
-          _ => unreachable!(),
-        }
-      }
-    }
-
-    impl<T> std::ops::IndexMut<IntrinsicId> for Intrinsics<T> {
-      fn index_mut(&mut self, id: IntrinsicId) -> &mut T {
-        match id {
-          $(
-            intrinsic::$name => &mut self.$name,
-          )*
-          _ => unreachable!(),
-        }
-      }
-    }
-
-    impl Intrinsics<FuncId> {
-      pub fn prepare(_builder: &mut ObjectBuilder, _impls: &IntrinsicImpls) {
-        // $(
-        //   builder.symbol(concat!("__", stringify!($name)), impls.$name as *const _);
-        // )*
-      }
-
-      pub fn build(module: &mut ObjectModule) -> Self {
-        Intrinsics {
-          $(
-            $name: module.declare_function(
-              concat!("__", stringify!($name)),
-              Linkage::Import,
-              &{
-                #[allow(unused_mut)]
-                let mut sig = module.make_signature();
-                $(
-                  sig.params.push(AbiParam::new(ir::types::$arg));
-                )*
-                $(
-                  sig.returns.push(AbiParam::new(ir::types::$ret));
-                )?
-                sig
-              }
-            ).unwrap()
-          ),*
-        }
-      }
-    }
-  };
-}
-
-intrinsics!(
-  0: call(I64, I64, I64),
-);
 
 pub struct FuncBuilder<'a> {
   ctx: &'a MirContext,
-  isa: &'a dyn TargetIsa,
 
-  builder: FunctionBuilder<'a>,
+  builder: FunctionBuilder,
   mir:     &'a mir::Function,
 
-  // Note that `VarId` and `Variable` are entirely distinct.
-  //
-  // `VarId` is an opaque identifier for a local variable in the AST, whereas `Variable` is a
-  // cranelift IR variable. There will usually be more cranelift variables than local variables.
-  locals:        HashMap<mir::VarId, Slot<Variable>>,
-  next_variable: usize,
-
-  // A map of user-defined function calls to function refs.
-  user_funcs: HashMap<mir::UserFunctionId, FuncRef>,
+  locals: HashMap<mir::VarId, Variable>,
 }
 
 const DEBUG: bool = false;
 
 impl Compiler {
-  #[allow(clippy::new_without_default)]
   pub fn new(mir_ctx: MirContext) -> Self {
-    let mut flag_builder = settings::builder();
-    flag_builder.set("use_colocated_libcalls", "false").unwrap();
-    flag_builder.set("is_pic", "false").unwrap();
-    flag_builder.set("opt_level", "speed_and_size").unwrap();
-    let isa_builder = cranelift_native::builder().unwrap_or_else(|msg| {
-      panic!("host machine is not supported: {}", msg);
-    });
-    let isa = isa_builder.finish(settings::Flags::new(flag_builder)).unwrap();
-    let builder =
-      ObjectBuilder::new(isa, "foo", cranelift_module::default_libcall_names()).unwrap();
-
-    let module = ObjectModule::new(builder);
-
-    Compiler {
-      mir_ctx,
-      data_description: DataDescription::new(),
-      module,
-      user_funcs: HashMap::new(),
-    }
+    Compiler { mir_ctx, user_funcs: HashMap::new(), functions: vec![] }
   }
 
   pub fn new_thread(&self) -> ThreadCtx<'_> {
-    let ctx = self.module.make_context();
-
-    ThreadCtx {
-      mir_ctx: &self.mir_ctx,
-      builder_context: FunctionBuilderContext::new(),
-      ctx,
-      isa: self.module.isa(),
-
-      user_funcs: &self.user_funcs,
-    }
+    ThreadCtx { mir_ctx: &self.mir_ctx, user_funcs: &self.user_funcs }
   }
 
-  pub fn finish(self) {
-    let object = self.module.finish();
+  pub fn finish_function(&mut self, func: Function) { self.functions.push(func); }
 
-    let out = std::fs::File::create("out.o").unwrap();
-    object.object.write_stream(BufWriter::new(out)).unwrap();
+  pub fn finish(self) {
+    let mut text = vec![];
+    let ro_data = vec![];
+    let mut relocs = vec![];
+    for function in self.functions {
+      let code = rb_codegen_x86::lower(function);
+      text.extend(code.text);
+      relocs.extend(code.relocs);
+    }
+    rb_codegen_x86::generate(std::path::Path::new("out.o"), &text, &ro_data, &relocs);
 
     let status = std::process::Command::new("wild").arg("out.o").status().unwrap();
     if !status.success() {
@@ -202,177 +64,39 @@ impl Compiler {
 }
 
 impl ThreadCtx<'_> {
-  pub fn new_function<'a>(&'a mut self, mir: &'a mir::Function) -> FuncBuilder<'a> {
-    let builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
+  fn new_function<'a>(&'a mut self, mir: &'a mir::Function) -> FuncBuilder<'a> {
+    let mut args = vec![];
 
-    let mut user_funcs = HashMap::new();
-    for &dep in mir.deps.iter() {
-      let (id, signature) = &self.user_funcs[&dep];
-
-      let signature = builder.func.import_signature(signature.clone());
-      let user_name_ref = builder.func.declare_imported_user_function(ir::UserExternalName {
-        namespace: 0,
-        index:     id.as_u32(),
-      });
-      let func_ref = builder.func.import_function(ir::ExtFuncData {
-        name: ir::ExternalName::user(user_name_ref),
-        signature,
-        colocated: false,
-      });
-      user_funcs.insert(dep, func_ref);
+    for arg in mir.params.iter() {
+      let dvt = DynamicValueType::for_type(self.mir_ctx, &arg);
+      for _ in 0..dvt.len(self.mir_ctx) {
+        args.push(Bit64);
+      }
     }
 
     FuncBuilder {
       ctx: self.mir_ctx,
-      isa: self.isa,
-      builder,
+      builder: FunctionBuilder::new(Signature { args, rets: vec![] }),
       mir,
       locals: HashMap::new(),
-      next_variable: 0,
-      user_funcs,
     }
   }
 
-  fn translate_function(&mut self, mir: &mir::Function) { self.new_function(mir).translate(); }
-
-  fn compile(&mut self) -> &CompiledCode {
-    if DEBUG {
-      self.ctx.want_disasm = true;
-    }
-
-    let code = self.ctx.compile(self.isa, &mut ControlPlane::default()).unwrap();
-
-    if DEBUG {
-      println!("debug asm:");
-      println!("{}", code.vcode.as_ref().unwrap());
-    }
-
-    code
+  pub fn compile_function(&mut self, mir: &mir::Function) -> Function {
+    self.new_function(mir).translate()
   }
-
-  fn clear(&mut self) { self.ctx.clear(); }
-
-  pub fn compile_function(&mut self, mir: &mir::Function) -> CompiledFunction {
-    let (id, sig) = &self.user_funcs[&mir.id];
-    self.ctx.func = ir::Function::with_name_signature(
-      ir::UserFuncName::User(ir::UserExternalName { namespace: 0, index: id.as_u32() }),
-      sig.clone(),
-    );
-
-    self.translate_function(mir);
-    let code = self.compile().clone();
-
-    let compiled = CompiledFunction { id: mir.id, code, func: self.ctx.func.clone() };
-
-    self.clear();
-
-    compiled
-  }
-}
-
-pub struct CompiledFunction {
-  id:   UserFunctionId,
-  code: CompiledCode,
-  func: ir::Function,
 }
 
 impl FuncBuilder<'_> {
-  fn target_frontend_config(&self) -> TargetFrontendConfig {
-    TargetFrontendConfig {
-      default_call_conv: self.isa.default_call_conv(),
-      pointer_width:     self.isa.triple().pointer_width().unwrap(),
-    }
-  }
-
-  fn translate(mut self) {
-    let entry_block = self.builder.create_block();
-
-    let mut param_values = vec![];
-
-    for ty in self.mir.params.iter() {
-      let vt = DynamicValueType::for_type(self.ctx, ty);
-
-      let mut values = vec![];
-      for _ in 0..vt.len(self.ctx) {
-        let value = self.builder.append_block_param(entry_block, ir::types::I64);
-        values.push(value);
-      }
-
-      param_values.push(values);
-    }
-
-    if let Some(ref ty) = self.mir.ret {
-      match DynamicValueType::for_type(self.ctx, ty) {
-        DynamicValueType::Union(_) => todo!("Extended variables not supported for parameters yet"),
-        _ => {}
-      }
-
-      assert!(self.builder.func.signature.returns.len() == 1);
-    } else {
-      assert!(self.builder.func.signature.returns.is_empty());
-    }
-
-    self.builder.switch_to_block(entry_block);
-    self.builder.seal_block(entry_block);
-
-    for (id, values) in param_values.into_iter().enumerate() {
-      let len = values.len();
-      let slot = Slot::<Variable>::new(&mut self, len);
-
-      self.locals.insert(mir::VarId(id as u32), slot.clone());
-      slot.copy_from_slice(&mut self.builder, &values);
-    }
+  fn translate(mut self) -> Function {
+    let _entry_block = self.builder.new_block();
 
     for &stmt in &self.mir.items {
       let _res = self.compile_stmt(stmt);
       // self.def_var(return_variable, res.to_ir());
     }
 
-    // Emit the return instruction.
-    self.builder.ins().return_(&[]);
-
-    if DEBUG {
-      println!("done translating {:?}. cranelift ir:", self.mir.id);
-      println!("{}", self.builder.func);
-    }
-
-    // Tell the builder we're done with this function.
-    self.builder.finalize();
-  }
-}
-
-impl Compiler {
-  pub fn declare_function(&mut self, func: &mir::Function) {
-    let mut sig = self.module.make_signature();
-
-    sig.call_conv = CallConv::Fast;
-    for ty in func.params.iter() {
-      let dvt = DynamicValueType::for_type(&self.mir_ctx, ty);
-      for _ in 0..dvt.len(&self.mir_ctx) {
-        sig.params.push(AbiParam::new(ir::types::I64));
-      }
-    }
-
-    let name = if func.id.0 == 0 { "_start".into() } else { format!("foooo_{}", func.id.0) };
-
-    let id = self.module.declare_function(&name, Linkage::Export, &sig).unwrap();
-    self.user_funcs.insert(func.id, (id, sig));
-  }
-
-  pub fn define_function(&mut self, func: CompiledFunction) -> Result<FuncId, String> {
-    let (id, _) = self.user_funcs[&func.id];
-
-    self
-      .module
-      .define_function_bytes(
-        id,
-        &func.func,
-        u64::from(func.code.buffer.alignment),
-        func.code.code_buffer(),
-        func.code.buffer.relocs(),
-      )
-      .map_err(|e| e.to_string())?;
-    Ok(id)
+    self.builder.build()
   }
 }
 
@@ -385,14 +109,16 @@ impl FuncBuilder<'_> {
   fn compile_stmt(&mut self, stmt: mir::StmtId) -> RValue {
     match self.mir.stmts[stmt] {
       mir::Stmt::Expr(expr) => self.compile_expr(expr),
-      mir::Stmt::Let(id, ref ty, expr) => {
-        let value = self.compile_expr(expr);
+      mir::Stmt::Let(_id, ref _ty, expr) => {
+        let _value = self.compile_expr(expr);
+        /*
         let ir = value.to_ir(DynamicValueType::for_type(self.ctx, &ty).param_kind(self.ctx), self);
 
         let slot = Slot::<Variable>::new(self, ir.len());
 
         slot.copy_from(&mut self.builder, &ir);
         self.locals.insert(id, slot);
+        */
 
         RValue::nil()
       }
@@ -403,8 +129,8 @@ impl FuncBuilder<'_> {
     match self.mir.exprs[expr] {
       mir::Expr::Literal(ref lit) => match lit {
         mir::Literal::Nil => RValue::nil(),
-        mir::Literal::Bool(v) => RValue::bool(self.builder.ins().iconst(ir::types::I8, *v as i64)),
-        mir::Literal::Int(i) => RValue::int(self.builder.ins().iconst(ir::types::I64, *i)),
+        mir::Literal::Bool(v) => RValue::bool(self.builder.instr().mov(Bit1, *v as u64)),
+        mir::Literal::Int(i) => RValue::int(self.builder.instr().mov(Bit64, *i as u64)),
         mir::Literal::String(_) => todo!("string literals"),
       },
 
@@ -412,9 +138,11 @@ impl FuncBuilder<'_> {
 
       mir::Expr::Array(_, _) => todo!("array literals"),
 
-      mir::Expr::Local(id, ref ty) => {
-        let var = &self.locals[&id];
+      mir::Expr::Local(id, ref _ty) => {
+        let _var = &self.locals[&id];
 
+        todo!()
+        /*
         let dvt = DynamicValueType::for_type(self.ctx, ty);
         assert_eq!(var.len() as u32, dvt.len(self.ctx), "variable length mismatch for type {ty:?}");
 
@@ -434,15 +162,12 @@ impl FuncBuilder<'_> {
             Slot::Multiple(len, slot) => Slot::Multiple(*len, slot.clone()),
           }),
         }
+        */
       }
 
-      mir::Expr::UserFunction(id, _) => {
-        RValue::TypedConst(ValueType::UserFunction, vec![id.0 as i64])
-      }
+      mir::Expr::UserFunction(id, _) => RValue::TypedConst(ValueType::UserFunction, vec![id.0]),
 
-      mir::Expr::Native(ref id, _) => {
-        RValue::function(self.builder.ins().iconst(ir::types::I64, id.0 as i64))
-      }
+      mir::Expr::Native(ref id, _) => RValue::function(self.builder.instr().mov(Bit64, id.0)),
 
       mir::Expr::Block(ref stmts) => {
         let mut return_value = RValue::nil();
@@ -454,6 +179,7 @@ impl FuncBuilder<'_> {
         return_value
       }
 
+      /*
       mir::Expr::Call(lhs, ref sig_ty, ref args) => {
         let lhs = self.compile_expr(lhs);
 
@@ -506,31 +232,25 @@ impl FuncBuilder<'_> {
                 arg.to_ir(DynamicValueType::for_type(self.ctx, &arg_ty).param_kind(self.ctx), self);
               match slot {
                 Slot::Empty => {}
-                Slot::Single(v) => {
-                  use cranelift::codegen::ir::InstBuilderBase;
-
-                  match self.builder.ins().data_flow_graph_mut().value_type(v) {
-                    ir::types::I64 => arg_values.push(v),
-                    _ => {
-                      let v2 = self.builder.ins().uextend(ir::types::I64, v);
-                      arg_values.push(v2);
-                    }
-                  }
-                }
+                Slot::Single(v) => match v.size() {
+                  Bit64 => arg_values.push(v),
+                  _ => todo!(),
+                },
                 Slot::Multiple(len, slot) => {
-                  for i in 0..len {
-                    arg_values.push(self.builder.ins().stack_load(
-                      ir::types::I64,
-                      slot.clone(),
-                      i as i32 * 8,
-                    ));
-                  }
+                  todo!();
+                  // for i in 0..len {
+                  //   arg_values.push(self.builder.instr().stack_load(
+                  //     VariableSize::Bit64,
+                  //     slot.clone(),
+                  //     i as i32 * 8,
+                  //   ));
+                  // }
                 }
               }
             }
 
             let func_ref = self.user_funcs[&id];
-            let call = self.builder.ins().call(func_ref, &arg_values);
+            let call = self.builder.instr().call(func_ref, Bit64, &arg_values);
 
             match *sig_ty {
               Type::Function(_, ref ret) => match **ret {
@@ -545,14 +265,14 @@ impl FuncBuilder<'_> {
           _ => unreachable!(),
         }
       }
-
+      */
       mir::Expr::Unary(lhs, ref op, _) => {
         let lhs = self.compile_expr(lhs);
         let lhs = lhs.unwrap_single(self);
 
         let res = match op {
-          mir::UnaryOp::Neg => RValue::int(self.builder.ins().ineg(lhs)),
-          mir::UnaryOp::Not => RValue::bool(self.builder.ins().bxor_imm(lhs, 1)),
+          mir::UnaryOp::Neg => RValue::int(self.builder.instr().neg(Bit64, lhs)),
+          mir::UnaryOp::Not => RValue::bool(self.builder.instr().xor(Bit1, lhs, 1)),
         };
 
         res
@@ -572,11 +292,11 @@ impl FuncBuilder<'_> {
             let rhs = rhs.unwrap_single(self);
 
             let res = match op {
-              mir::BinaryOp::Add => self.builder.ins().iadd(lhs, rhs),
-              mir::BinaryOp::Sub => self.builder.ins().isub(lhs, rhs),
-              mir::BinaryOp::Mul => self.builder.ins().imul(lhs, rhs),
-              mir::BinaryOp::Div => self.builder.ins().udiv(lhs, rhs),
-              mir::BinaryOp::Mod => self.builder.ins().urem(lhs, rhs),
+              mir::BinaryOp::Add => self.builder.instr().add(Bit64, lhs, rhs),
+              mir::BinaryOp::Sub => self.builder.instr().sub(Bit64, lhs, rhs),
+              mir::BinaryOp::Mul => self.builder.instr().mul(Bit64, lhs, rhs),
+              mir::BinaryOp::Div => self.builder.instr().div(Bit64, lhs, rhs),
+              mir::BinaryOp::Mod => self.builder.instr().rem(Bit64, lhs, rhs),
               _ => unreachable!(),
             };
 
@@ -585,16 +305,15 @@ impl FuncBuilder<'_> {
 
           mir::BinaryOp::Eq | mir::BinaryOp::Neq => match (lhs.const_ty(), rhs.const_ty()) {
             (Some(ValueType::Nil), Some(ValueType::Nil)) => {
-              let tru = self.builder.ins().iconst(ir::types::I8, 1);
-              RValue::bool(tru)
+              RValue::bool(self.builder.instr().mov(Bit1, 1))
             }
             (Some(ValueType::Bool), Some(ValueType::Bool)) => {
               let l = lhs.unwrap_single(self);
               let r = rhs.unwrap_single(self);
 
               let res = match op {
-                mir::BinaryOp::Eq => self.builder.ins().icmp(IntCC::Equal, l, r),
-                mir::BinaryOp::Neq => self.builder.ins().icmp(IntCC::NotEqual, l, r),
+                mir::BinaryOp::Eq => self.builder.instr().cmp(Comparison::Equal, Bit1, l, r),
+                mir::BinaryOp::Neq => self.builder.instr().cmp(Comparison::NotEqual, Bit1, l, r),
                 _ => unreachable!(),
               };
 
@@ -605,8 +324,8 @@ impl FuncBuilder<'_> {
               let r = rhs.unwrap_single(self);
 
               let res = match op {
-                mir::BinaryOp::Eq => self.builder.ins().icmp(IntCC::Equal, l, r),
-                mir::BinaryOp::Neq => self.builder.ins().icmp(IntCC::NotEqual, l, r),
+                mir::BinaryOp::Eq => self.builder.instr().cmp(Comparison::Equal, Bit1, l, r),
+                mir::BinaryOp::Neq => self.builder.instr().cmp(Comparison::NotEqual, Bit1, l, r),
                 _ => unreachable!(),
               };
 
@@ -624,11 +343,11 @@ impl FuncBuilder<'_> {
 
             // All numbers are signed.
             let res = match op {
-              mir::BinaryOp::Lt => self.builder.ins().icmp(IntCC::SignedLessThan, lhs, rhs),
-              mir::BinaryOp::Lte => self.builder.ins().icmp(IntCC::SignedLessThanOrEqual, lhs, rhs),
-              mir::BinaryOp::Gt => self.builder.ins().icmp(IntCC::SignedGreaterThan, lhs, rhs),
+              mir::BinaryOp::Lt => self.builder.instr().cmp(Comparison::Less, Bit1, lhs, rhs),
+              mir::BinaryOp::Lte => self.builder.instr().cmp(Comparison::LessEqual, Bit1, lhs, rhs),
+              mir::BinaryOp::Gt => self.builder.instr().cmp(Comparison::Greater, Bit1, lhs, rhs),
               mir::BinaryOp::Gte => {
-                self.builder.ins().icmp(IntCC::SignedGreaterThanOrEqual, lhs, rhs)
+                self.builder.instr().cmp(Comparison::GreaterEqual, Bit1, lhs, rhs)
               }
 
               _ => unreachable!(),
@@ -641,6 +360,7 @@ impl FuncBuilder<'_> {
         res
       }
 
+      /*
       mir::Expr::Index(lhs, rhs, ref ret_ty) => {
         let lhs = self.compile_expr(lhs);
         let rhs = self.compile_expr(rhs);
@@ -655,22 +375,21 @@ impl FuncBuilder<'_> {
 
         let array_ptr = lhs.unwrap_single(self);
 
-        let first_ptr = self.builder.ins().load(ir::types::I64, MemFlags::new(), array_ptr, 0);
+        let first_ptr = self.builder.instr().load(Bit64, MemFlags::new(), array_ptr, 0);
 
         let slot_size = ret_dvt.len(self.ctx);
-        let slot_size = self.builder.ins().iconst(ir::types::I64, slot_size as i64 * 8);
+        let slot_size = self.builder.instr().iconst(Bit64, slot_size as i64 * 8);
 
         let index = rhs.unwrap_single(self);
 
-        let offset = self.builder.ins().imul(index, slot_size);
-        let element_ptr = self.builder.ins().iadd(first_ptr, offset);
+        let offset = self.builder.instr().imul(index, slot_size);
+        let element_ptr = self.builder.instr().iadd(first_ptr, offset);
 
         match ret_dvt {
           DynamicValueType::Const(vt) => RValue::TypedPtr(vt, element_ptr),
           DynamicValueType::Union(len) => RValue::UntypedPtr(len, element_ptr),
         }
       }
-
       mir::Expr::If { cond, then, els: None, ty: _ } => {
         let cond = self.compile_expr(cond);
         let cond = cond.unwrap_single(self);
@@ -679,13 +398,13 @@ impl FuncBuilder<'_> {
         let merge_block = self.builder.create_block();
 
         // Test the if condition and conditionally branch.
-        self.builder.ins().brif(cond, then_block, &[], merge_block, &[]);
+        self.builder.instr().brif(cond, then_block, &[], merge_block, &[]);
 
         self.builder.switch_to_block(then_block);
         self.builder.seal_block(then_block);
         self.compile_expr(then);
 
-        self.builder.ins().jump(merge_block, &[]);
+        self.builder.instr().jump(merge_block, &[]);
 
         // Use `merge_block` for the rest of the function.
         self.builder.switch_to_block(merge_block);
@@ -707,19 +426,19 @@ impl FuncBuilder<'_> {
 
         if dvt.len(self.ctx) == 0 {
           // Test the if condition and conditionally branch.
-          self.builder.ins().brif(cond, then_block, &[], else_block, &[]);
+          self.builder.instr().brif(cond, then_block, &[], else_block, &[]);
 
           self.builder.switch_to_block(then_block);
           self.builder.seal_block(then_block);
           self.compile_expr(then).to_ir(param_kind, self);
 
-          self.builder.ins().jump(merge_block, &[]);
+          self.builder.instr().jump(merge_block, &[]);
 
           self.builder.switch_to_block(else_block);
           self.builder.seal_block(else_block);
           self.compile_expr(els).to_ir(param_kind, self);
 
-          self.builder.ins().jump(merge_block, &[]);
+          self.builder.instr().jump(merge_block, &[]);
 
           self.builder.switch_to_block(merge_block);
           self.builder.seal_block(merge_block);
@@ -728,16 +447,16 @@ impl FuncBuilder<'_> {
         } else if dvt.len(self.ctx) == 1 {
           // Special case: if `dvt.len() == 1`, we can avoid creating a stack slot, and
           // just use a block parameter.
-          self.builder.append_block_param(merge_block, cranelift::codegen::ir::types::I64);
+          self.builder.append_block_param(merge_block, cranelift::codegen::Bit64);
 
           // Test the if condition and conditionally branch.
-          self.builder.ins().brif(cond, then_block, &[], else_block, &[]);
+          self.builder.instr().brif(cond, then_block, &[], else_block, &[]);
 
           self.builder.switch_to_block(then_block);
           self.builder.seal_block(then_block);
           let then_return = self.compile_expr(then).to_ir(param_kind, self);
 
-          self.builder.ins().jump(
+          self.builder.instr().jump(
             merge_block,
             &[match then_return {
               Slot::Single(v) => v,
@@ -749,7 +468,7 @@ impl FuncBuilder<'_> {
           self.builder.seal_block(else_block);
           let else_return = self.compile_expr(els).to_ir(param_kind, self);
 
-          self.builder.ins().jump(
+          self.builder.instr().jump(
             merge_block,
             &[match else_return {
               Slot::Single(v) => v,
@@ -773,24 +492,24 @@ impl FuncBuilder<'_> {
             kind: StackSlotKind::ExplicitSlot,
             size: dvt.len(self.ctx) as u32 * 8,
           });
-          let addr = self.builder.ins().stack_addr(ir::types::I64, slot.clone(), 0);
+          let addr = self.builder.instr().stack_addr(Bit64, slot.clone(), 0);
 
           // Test the if condition and conditionally branch.
-          self.builder.ins().brif(cond, then_block, &[], else_block, &[]);
+          self.builder.instr().brif(cond, then_block, &[], else_block, &[]);
 
           self.builder.switch_to_block(then_block);
           self.builder.seal_block(then_block);
           let then_return = self.compile_expr(then).to_ir(param_kind, self);
           then_return.copy_to(self, addr);
 
-          self.builder.ins().jump(merge_block, &[]);
+          self.builder.instr().jump(merge_block, &[]);
 
           self.builder.switch_to_block(else_block);
           self.builder.seal_block(else_block);
           let else_return = self.compile_expr(els).to_ir(param_kind, self);
           else_return.copy_to(self, addr);
 
-          self.builder.ins().jump(merge_block, &[]);
+          self.builder.instr().jump(merge_block, &[]);
 
           self.builder.switch_to_block(merge_block);
           self.builder.seal_block(merge_block);
@@ -842,17 +561,18 @@ impl FuncBuilder<'_> {
             })
             .unwrap_err() as usize;
 
-          let addr = self.builder.ins().stack_addr(ir::types::I64, slot.clone(), offset as i32 * 8);
+          let addr = self.builder.instr().stack_addr(Bit64, slot.clone(), offset as i32 * 8);
           ir.copy_to(self, addr);
         }
 
         RValue::TypedDyn(ValueType::Struct(id), Slot::Multiple(len as usize, slot))
       }
-
+      */
       ref v => unimplemented!("expr: {v:?}"),
     }
   }
 
+  /*
   fn call_native(
     &mut self,
     _native: ir::Value,
@@ -879,13 +599,13 @@ impl FuncBuilder<'_> {
 
     let mut slot_index = 0;
     for ir in args {
-      let addr = self.builder.ins().stack_addr(ir::types::I64, arg_slot, slot_index as i32 * 8);
+      let addr = self.builder.instr().stack_addr(Bit64, arg_slot, slot_index as i32 * 8);
       ir.copy_to(self, addr);
       slot_index += ir.len();
     }
 
-    let _arg_ptr = self.builder.ins().stack_addr(ir::types::I64, arg_slot, 0);
-    let _ret_ptr = self.builder.ins().stack_addr(ir::types::I64, ret_slot, 0);
+    let _arg_ptr = self.builder.instr().stack_addr(Bit64, arg_slot, 0);
+    let _ret_ptr = self.builder.instr().stack_addr(Bit64, ret_slot, 0);
 
     // self.call_intrinsic(intrinsic::call, &[native, arg_ptr, ret_ptr]);
 
@@ -898,4 +618,5 @@ impl FuncBuilder<'_> {
       }
     }
   }
+  */
 }

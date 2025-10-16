@@ -301,21 +301,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cranelift-object"
-version = "0.108.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e7f77f96cf6fd7f091e1aca73604fa861e4a56cf96a8f90d44ee2f161369465"
-dependencies = [
- "anyhow",
- "cranelift-codegen",
- "cranelift-control",
- "cranelift-module",
- "log",
- "object 0.33.0",
- "target-lexicon",
-]
-
-[[package]]
 name = "crc32fast"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -437,9 +422,6 @@ name = "hashbrown"
 version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
-dependencies = [
- "ahash",
-]
 
 [[package]]
 name = "hashbrown"
@@ -752,18 +734,6 @@ checksum = "2bf50223579dc7cdcfb3bfcacf7069ff68243f8c363f62ffa99cf000a6b9c451"
 
 [[package]]
 name = "object"
-version = "0.33.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8dd6c0cdf9429bce006e1362bfce61fa1bfd8c898a643ed8d2b471934701d3d"
-dependencies = [
- "crc32fast",
- "hashbrown 0.14.5",
- "indexmap 2.11.4",
- "memchr",
-]
-
-[[package]]
-name = "object"
 version = "0.37.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe"
@@ -917,10 +887,8 @@ dependencies = [
 name = "rb-backend"
 version = "0.1.0"
 dependencies = [
- "cranelift",
- "cranelift-module",
- "cranelift-native",
- "cranelift-object",
+ "rb-codegen",
+ "rb-codegen-x86",
  "rb-mir",
  "rb-typer",
  "rb-value",
@@ -950,7 +918,7 @@ version = "0.1.0"
 dependencies = [
  "bitflags 2.9.4",
  "indexmap 2.11.4",
- "object 0.37.3",
+ "object",
  "rb-codegen",
  "rb-test",
  "smallvec",

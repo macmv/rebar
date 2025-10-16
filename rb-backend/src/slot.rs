@@ -1,6 +1,3 @@
-use codegen::ir::{self, StackSlot};
-use cranelift::prelude::*;
-
 use crate::FuncBuilder;
 
 #[derive(Debug, Copy, Clone)]

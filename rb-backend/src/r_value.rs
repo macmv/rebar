@@ -1,45 +1,37 @@
-use std::num::NonZero;
+use crate::FuncBuilder;
 
-use crate::{slot::Slot, FuncBuilder};
-
-use cranelift::{
-  codegen::ir,
-  prelude::{InstBuilder, MemFlags},
-};
-use rb_value::{ParamKind, ValueType};
+use rb_codegen::{Variable, VariableSize::*};
+use rb_value::ValueType;
 
 #[derive(Debug, Clone)]
 pub enum RValue {
-  TypedConst(ValueType, Vec<i64>),
-  TypedDyn(ValueType, Slot),
-  Untyped(Slot),
-
-  TypedPtr(ValueType, ir::Value),
-  UntypedPtr(u32, ir::Value),
+  TypedConst(ValueType, Vec<u64>),
+  TypedDyn(ValueType, Variable),
+  // Untyped(Slot),
+  //
+  // TypedPtr(ValueType, ir::Value),
+  // UntypedPtr(u32, ir::Value),
 }
 
 impl RValue {
   pub fn nil() -> Self { RValue::TypedConst(ValueType::Nil, vec![]) }
 
-  pub fn const_bool(ir: bool) -> Self { RValue::TypedConst(ValueType::Bool, vec![ir as i64]) }
+  pub fn const_bool(ir: bool) -> Self { RValue::TypedConst(ValueType::Bool, vec![ir as u64]) }
 
-  pub fn bool(ir: ir::Value) -> Self { RValue::TypedDyn(ValueType::Bool, Slot::Single(ir)) }
-  pub fn int(ir: ir::Value) -> Self { RValue::TypedDyn(ValueType::Int, Slot::Single(ir)) }
-  pub fn function(ir: ir::Value) -> Self { RValue::TypedDyn(ValueType::Function, Slot::Single(ir)) }
+  pub fn bool(ir: Variable) -> Self { RValue::TypedDyn(ValueType::Bool, ir) }
+  pub fn int(ir: Variable) -> Self { RValue::TypedDyn(ValueType::Int, ir) }
+  pub fn function(ir: Variable) -> Self { RValue::TypedDyn(ValueType::Function, ir) }
 }
 
 impl RValue {
-  pub fn unwrap_single(&self, func: &mut FuncBuilder) -> ir::Value {
+  pub fn unwrap_single(&self, func: &mut FuncBuilder) -> Variable {
     match self {
       Self::TypedConst(_, items) => {
         assert_eq!(items.len(), 1, "expected single value, got {items:?}");
-        func.builder.ins().iconst(ir::types::I64, items[0])
+        func.builder.instr().mov(Bit64, items[0])
       }
-      Self::TypedDyn(_, slot) => match slot {
-        Slot::Empty => panic!(),
-        Slot::Single(v) => *v,
-        Slot::Multiple(_, _) => slot.get(&mut func.builder, 0),
-      },
+      Self::TypedDyn(_, v) => *v,
+      /*
       Self::Untyped(slot) => match slot {
         Slot::Empty => panic!(),
         Slot::Single(_) => panic!(),
@@ -48,6 +40,7 @@ impl RValue {
 
       Self::TypedPtr(_, ptr) => func.builder.ins().load(ir::types::I64, MemFlags::new(), *ptr, 0),
       Self::UntypedPtr(_, ptr) => func.builder.ins().load(ir::types::I64, MemFlags::new(), *ptr, 8),
+      */
     }
   }
 
@@ -55,16 +48,17 @@ impl RValue {
     match self {
       Self::TypedConst(ty, _) => Some(*ty),
       Self::TypedDyn(ty, _) => Some(*ty),
-      Self::TypedPtr(ty, _) => Some(*ty),
-      _ => None,
+      // Self::TypedPtr(ty, _) => Some(*ty),
+      // _ => None,
     }
   }
 
+  /*
   /// Returns the extended form of this value. This is used when passing a value
   /// into a union slot, or back to native code. The number of values may change
   /// depending on the type (so this works for function calls, but not for
   /// block arguments).
-  fn to_extended_ir(&self, func: &mut FuncBuilder, len: Option<NonZero<u32>>) -> Slot {
+  fn to_extended_ir(&self, func: &mut FuncBuilder, len: Option<NonZero<u32>>) -> Variable {
     match self {
       Self::TypedConst(ty, items) => {
         let ty = ty.as_i64();
@@ -209,4 +203,5 @@ impl RValue {
       ParamKind::Unsized => self.to_extended_ir(func, None),
     }
   }
+  */
 }

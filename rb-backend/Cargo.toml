@@ -7,8 +7,5 @@ edition = "2021"
 rb-typer.workspace = true
 rb-mir.workspace = true
 rb-value.workspace = true
-
-cranelift = "0.108.1"
-cranelift-object = "0.108.1"
-cranelift-module = "0.108.1"
-cranelift-native = "0.108.1"
+rb-codegen.workspace = true
+rb-codegen-x86.workspace = true
