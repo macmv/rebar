@@ -289,7 +289,11 @@ impl FuncBuilder<'_> {
           | mir::BinaryOp::Sub
           | mir::BinaryOp::Mul
           | mir::BinaryOp::Div
-          | mir::BinaryOp::Mod => {
+          | mir::BinaryOp::Mod
+          | mir::BinaryOp::BitOr
+          | mir::BinaryOp::BitAnd
+          | mir::BinaryOp::ShiftLeft
+          | mir::BinaryOp::ShiftRight => {
             let lhs = lhs.unwrap_single(self);
             let rhs = rhs.unwrap_single(self);
 
@@ -299,6 +303,10 @@ impl FuncBuilder<'_> {
               mir::BinaryOp::Mul => rb_codegen::Math::Imul,
               mir::BinaryOp::Div => rb_codegen::Math::Idiv,
               mir::BinaryOp::Mod => rb_codegen::Math::Urem,
+              mir::BinaryOp::BitOr => rb_codegen::Math::Or,
+              mir::BinaryOp::BitAnd => rb_codegen::Math::And,
+              mir::BinaryOp::ShiftLeft => rb_codegen::Math::Shl,
+              mir::BinaryOp::ShiftRight => rb_codegen::Math::Ishr,
               _ => unreachable!(),
             };
 
