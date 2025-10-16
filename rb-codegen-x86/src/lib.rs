@@ -95,10 +95,9 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
         },
         rb_codegen::Opcode::Mul => match (inst.output[0], inst.input[0], inst.input[1]) {
           (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
-            assert_eq!(reg.get(v).size, reg.get(a).size, "mul must have the same size");
-            assert_eq!(reg.get(v).size, reg.get(b).size, "mul must have the same size");
-
-            assert_eq!(reg.get(v).index, RegisterIndex::Eax, "mul must output to eax");
+            debug_assert_eq!(reg.get(v).size, reg.get(a).size, "mul must have the same size");
+            debug_assert_eq!(reg.get(v).size, reg.get(b).size, "mul must have the same size");
+            debug_assert_eq!(reg.get(v).index, RegisterIndex::Eax, "mul must output to eax");
             let a = reg.get(a);
             let b = reg.get(b);
 
@@ -148,7 +147,7 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
           InstructionOutput::Var(v) => {
             builder.reloc(symbol.index, 3, -4);
             let reg = reg.get(v);
-            assert_eq!(reg.size, RegisterSize::Bit64, "lea only supports 64-bit registers");
+            debug_assert_eq!(reg.size, RegisterSize::Bit64, "lea only supports 64-bit registers");
             builder.instr(
               Instruction::new(Opcode::LEA).with_prefix(Prefix::RexW).with_disp(reg.index, -4),
             );
@@ -219,7 +218,7 @@ fn encode_binary_reg_imm(
   opcode_8: Opcode,
   opcode_32: Opcode,
 ) {
-  assert_eq!(output.size, input1.size, "binary must have the same size");
+  debug_assert_eq!(output.size, input1.size, "binary must have the same size");
 
   builder.instr(
     encode_sized(output.size, opcode_8, opcode_32)
@@ -237,8 +236,8 @@ fn encode_binary_reg_reg(
   opcode_8: Opcode,
   opcode_32: Opcode,
 ) {
-  assert_eq!(output.size, input1.size, "binary must have the same size");
-  assert_eq!(output.size, input2.size, "binary must have the same size");
+  debug_assert_eq!(output.size, input1.size, "binary must have the same size");
+  debug_assert_eq!(output.size, input2.size, "binary must have the same size");
 
   if input1 == output {
     builder.instr(
