@@ -160,7 +160,7 @@ impl Lifetimes {
 
   fn is_used_at(&self, var: Variable, loc: InstructionLocation) -> bool {
     if let Some(l) = self.lifetimes[var.id() as usize] {
-      l.first_use <= loc && loc <= l.last_use
+      l.first_use <= loc && loc < l.last_use
     } else {
       false
     }
