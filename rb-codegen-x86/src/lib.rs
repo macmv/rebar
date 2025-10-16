@@ -9,7 +9,7 @@ pub use instruction::{Immediate, Instruction, ModReg, Opcode, Prefix};
 use object::write::elf::Rel;
 use rb_codegen::{InstructionInput, InstructionOutput};
 
-use crate::regalloc::{CallingConvention, RegisterSize, VariableRegisters};
+use crate::regalloc::{RegisterSize, VariableRegisters};
 
 mod regalloc;
 
@@ -39,21 +39,7 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
   let mut builder = Builder::default();
 
   let mut reg = VariableRegisters::new();
-
-  for block in &function.blocks {
-    for inst in &block.instructions {
-      match inst.opcode {
-        rb_codegen::Opcode::Syscall => {
-          reg.pin_registers(CallingConvention::Syscall, &inst.input);
-        }
-
-        _ => {
-          reg.pick_inputs(&inst.input);
-          reg.pick_outputs(&inst.output);
-        }
-      }
-    }
-  }
+  reg.pass(&function);
 
   for block in &function.blocks {
     for inst in &block.instructions {
