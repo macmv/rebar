@@ -8,7 +8,7 @@ pub struct VariableRegisters {
   registers: Vec<Register>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Register {
   pub size:  RegisterSize,
   pub index: RegisterIndex,

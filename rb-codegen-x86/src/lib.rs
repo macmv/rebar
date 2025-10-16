@@ -58,17 +58,45 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
   for block in &function.blocks {
     for inst in &block.instructions {
       match inst.opcode {
+        rb_codegen::Opcode::Add => match (inst.output[0], inst.input[0], inst.input[1]) {
+          // add reg, reg, imm
+          (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
+            let output = reg.get(v);
+            let input = reg.get(a);
+            builder.instr(
+              Instruction::new(Opcode::ADD_IMM32)
+                .with_prefix(Prefix::RexW)
+                .with_mod(0b11, output.index)
+                .with_reg(input.index)
+                .with_immediate(Immediate::i32(b as u32)),
+            );
+          }
+          // add reg, reg, reg
+          (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
+            let output = reg.get(v);
+            let input1 = reg.get(a);
+            let input2 = reg.get(b);
+            assert_eq!(input1, output, "add must be in-place");
+            builder.instr(
+              Instruction::new(Opcode::ADD_RM32)
+                .with_prefix(Prefix::RexW)
+                .with_mod(0b11, output.index)
+                .with_reg(input2.index),
+            );
+          }
+          _ => todo!("inst {:?}", inst),
+        },
         rb_codegen::Opcode::Lea(symbol) => match inst.output[0] {
           // lea reg, [rel symbol]
           InstructionOutput::Var(v) => {
             builder.reloc(symbol.index, 3, -4);
             let reg = reg.get(v);
-            assert_eq!(reg.size, RegisterSize::Bit64, "lead only supports 64-bit registers");
+            assert_eq!(reg.size, RegisterSize::Bit64, "lea only supports 64-bit registers");
             builder.instr(
               Instruction::new(Opcode::LEA).with_prefix(Prefix::RexW).with_disp(reg.index, -4),
             );
           }
-          _ => todo!(),
+          _ => todo!("inst {:?}", inst),
         },
         rb_codegen::Opcode::Move => {
           match (inst.output[0], inst.input[0]) {

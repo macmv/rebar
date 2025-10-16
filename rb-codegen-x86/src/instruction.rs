@@ -17,7 +17,7 @@ bitflags! {
 
 const _INSTR_SIZE: () = assert!(std::mem::size_of::<Instruction>() == 16);
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum RegisterIndex {
   Eax,
@@ -193,6 +193,9 @@ impl Instruction {
 }
 
 impl Opcode {
+  pub const ADD_IMM8: Opcode = Opcode::new([0x04]);
+  pub const ADD_IMM32: Opcode = Opcode::new([0x05]);
+  pub const ADD_RM32: Opcode = Opcode::new([0x03]);
   pub const INT3: Opcode = Opcode::new([0xcc]);
   pub const LEA: Opcode = Opcode::new([0x8d]);
   pub const MOV_RD_IMM_16: Opcode = Opcode::new([0xb8]);
