@@ -170,6 +170,14 @@ impl Instruction {
     self
   }
 
+  pub const fn with_digit(mut self, digit: u8) -> Self {
+    if self.mod_reg.is_none() {
+      self.mod_reg = Some(ModReg::ZERO);
+    }
+    self.mod_reg.as_mut().unwrap().set_reg_bits(digit);
+    self
+  }
+
   /// Sets the `mod` and `r/m` fields of the ModR/M byte.
   pub const fn with_mod(mut self, modifier: u8, rm: RegisterIndex) -> Self {
     if self.mod_reg.is_none() {
@@ -217,8 +225,8 @@ impl Opcode {
   pub const MOV_RD_IMM_8: Opcode = Opcode::new([0xb0]);
   pub const MOV_RM_IMM_16: Opcode = Opcode::new([0xc7]);
   pub const MOV_RM_IMM_8: Opcode = Opcode::new([0xc6]);
-  pub const MUL_RM32: Opcode = Opcode::new([0xf6]);
-  pub const MUL_RM8: Opcode = Opcode::new([0xf7]);
+  pub const MUL_RM32: Opcode = Opcode::new([0xf7]);
+  pub const MUL_RM8: Opcode = Opcode::new([0xf6]);
   pub const RET: Opcode = Opcode::new([0xc3]);
   pub const SYSCALL: Opcode = Opcode::new([0x0f, 0x05]);
   pub const XOR_IMM32: Opcode = Opcode::new([0x35]);

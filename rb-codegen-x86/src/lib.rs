@@ -95,16 +95,28 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
         },
         rb_codegen::Opcode::Mul => match (inst.output[0], inst.input[0], inst.input[1]) {
           (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
-            assert_eq!(reg.get(v).index, RegisterIndex::Eax, "mul must output to eax");
+            assert_eq!(reg.get(v).size, reg.get(a).size, "mul must have the same size");
+            assert_eq!(reg.get(v).size, reg.get(b).size, "mul must have the same size");
 
-            encode_binary_reg_reg(
-              &mut builder,
-              reg.get(v),
-              reg.get(a),
-              reg.get(b),
-              Opcode::MUL_RM8,
-              Opcode::MUL_RM32,
-            );
+            assert_eq!(reg.get(v).index, RegisterIndex::Eax, "mul must output to eax");
+            let a = reg.get(a);
+            let b = reg.get(b);
+
+            if a.index == RegisterIndex::Eax {
+              builder.instr(
+                encode_sized(a.size, Opcode::MUL_RM8, Opcode::MUL_RM32)
+                  .with_digit(4)
+                  .with_mod(0b11, b.index),
+              );
+            } else if b.index == RegisterIndex::Eax {
+              builder.instr(
+                encode_sized(b.size, Opcode::MUL_RM8, Opcode::MUL_RM32)
+                  .with_digit(4)
+                  .with_mod(0b11, a.index),
+              );
+            } else {
+              panic!("mul must multiply from eax");
+            }
           }
           _ => todo!("inst {:?}", inst),
         },
