@@ -206,6 +206,9 @@ impl PinnedVariables {
             p.pin(inst.input[0].unwrap_var(), RegisterIndex::Eax);
             p.pin(inst.output[0].unwrap_var(), RegisterIndex::Edx);
           }
+          Opcode::Math(Math::Ishr | Math::Ushr | Math::Shl) => {
+            p.pin(inst.input[1].unwrap_var(), RegisterIndex::Ecx);
+          }
           Opcode::Syscall => p.pin_cc(CallingConvention::Syscall, &inst.input),
           _ => {}
         }

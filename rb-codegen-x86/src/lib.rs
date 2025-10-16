@@ -148,6 +148,32 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
             _ => todo!("inst {:?}", inst),
           }
         }
+        rb_codegen::Opcode::Math(math @ (Math::Shl | Math::Ushr | Math::Ishr)) => {
+          let opcode_digit = match math {
+            Math::Shl => 4,
+            Math::Ushr => 5,
+            Math::Ishr => 7,
+            _ => unreachable!(),
+          };
+
+          match (inst.output[0], inst.input[0], inst.input[1]) {
+            (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
+              debug_assert_eq!(reg.get(v).size, reg.get(a).size, "shifts must be in place");
+              debug_assert_eq!(
+                reg.get(b).index,
+                RegisterIndex::Ecx,
+                "shifts can only use ecx as their operand"
+              );
+
+              builder.instr(
+                encode_sized(reg.get(v).size, Opcode::SHIFT_C_8, Opcode::SHIFT_C_32)
+                  .with_digit(opcode_digit)
+                  .with_mod(0b11, reg.get(v).index),
+              );
+            }
+            _ => todo!("inst {:?}", inst),
+          }
+        }
         rb_codegen::Opcode::Lea(symbol) => match inst.output[0] {
           // lea reg, [rel symbol]
           InstructionOutput::Var(v) => {

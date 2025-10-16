@@ -227,6 +227,12 @@ impl Opcode {
   pub const MOV_RM_IMM_8: Opcode = Opcode::new([0xc6]);
   pub const MATH_EAX_RM32: Opcode = Opcode::new([0xf7]);
   pub const MATH_EAX_RM8: Opcode = Opcode::new([0xf6]);
+  pub const SHIFT_IMM_8: Opcode = Opcode::new([0xc0]);
+  pub const SHIFT_IMM_32: Opcode = Opcode::new([0xc1]);
+  pub const SHIFT_C_8: Opcode = Opcode::new([0xd2]);
+  pub const SHIFT_C_32: Opcode = Opcode::new([0xd3]);
+  pub const SHIFT_1_8: Opcode = Opcode::new([0xd0]);
+  pub const SHIFT_1_32: Opcode = Opcode::new([0xd1]);
   pub const RET: Opcode = Opcode::new([0xc3]);
   pub const SYSCALL: Opcode = Opcode::new([0x0f, 0x05]);
   pub const XOR_IMM32: Opcode = Opcode::new([0x35]);
