@@ -396,7 +396,7 @@ fn binary_op_from_cst(cst: &cst::BinaryOp) -> hir::BinaryOp {
       and_token(_) => And,
       or_token(_) => Or,
       bit_and_token(_) => BitAnd,
-      bit_or_token(_) => BitAnd,
+      bit_or_token(_) => BitOr,
       bit_xor_token(_) => Xor,
       shift_left_token(_) => ShiftLeft,
       shift_right_token(_) => ShiftRight,
