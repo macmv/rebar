@@ -93,8 +93,15 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
           }
           _ => todo!("inst {:?}", inst),
         },
-        rb_codegen::Opcode::Mul | rb_codegen::Opcode::Div => {
-          let opcode_digit = if inst.opcode == rb_codegen::Opcode::Mul { 4 } else { 6 };
+        rb_codegen::Opcode::Mul | rb_codegen::Opcode::Div | rb_codegen::Opcode::Neg => {
+          // digits: not=2, neg=3, umul=4, imul=5, udiv=6, idiv=7
+
+          let opcode_digit = match inst.opcode {
+            rb_codegen::Opcode::Neg => 3,
+            rb_codegen::Opcode::Mul => 4,
+            rb_codegen::Opcode::Div => 6,
+            _ => unreachable!(),
+          };
 
           match (inst.output[0], inst.input[0], inst.input[1]) {
             (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
@@ -106,13 +113,13 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
 
               if a.index == RegisterIndex::Eax {
                 builder.instr(
-                  encode_sized(a.size, Opcode::MUL_RM8, Opcode::MUL_RM32)
+                  encode_sized(a.size, Opcode::MATH_EAX_RM8, Opcode::MATH_EAX_RM32)
                     .with_digit(opcode_digit)
                     .with_mod(0b11, b.index),
                 );
               } else if b.index == RegisterIndex::Eax {
                 builder.instr(
-                  encode_sized(b.size, Opcode::MUL_RM8, Opcode::MUL_RM32)
+                  encode_sized(b.size, Opcode::MATH_EAX_RM8, Opcode::MATH_EAX_RM32)
                     .with_digit(opcode_digit)
                     .with_mod(0b11, a.index),
                 );
