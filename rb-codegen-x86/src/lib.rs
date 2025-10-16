@@ -9,7 +9,7 @@ pub use instruction::{Immediate, Instruction, ModReg, Opcode, Prefix};
 use object::write::elf::Rel;
 use rb_codegen::{InstructionInput, InstructionOutput};
 
-use crate::regalloc::{RegisterSize, VariableRegisters};
+use crate::regalloc::{Register, RegisterSize, VariableRegisters};
 
 mod regalloc;
 
@@ -45,40 +45,25 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
     for inst in &block.instructions {
       match inst.opcode {
         rb_codegen::Opcode::Add => match (inst.output[0], inst.input[0], inst.input[1]) {
-          // add reg, reg, imm
           (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
-            let output = reg.get(v);
-            let input = reg.get(a);
-            builder.instr(
-              Instruction::new(Opcode::ADD_IMM32)
-                .with_prefix(Prefix::RexW)
-                .with_mod(0b11, output.index)
-                .with_reg(input.index)
-                .with_immediate(Immediate::i32(b as u32)),
+            encode_binary_reg_imm(
+              &mut builder,
+              reg.get(v),
+              reg.get(a),
+              b,
+              Opcode::ADD_IMM8,
+              Opcode::ADD_IMM32,
             );
           }
-          // add reg, reg, reg
           (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
-            let output = reg.get(v);
-            let input1 = reg.get(a);
-            let input2 = reg.get(b);
-            if input1 == output {
-              builder.instr(
-                Instruction::new(Opcode::ADD_RM32)
-                  .with_prefix(Prefix::RexW)
-                  .with_mod(0b11, input2.index)
-                  .with_reg(output.index),
-              );
-            } else if input2 == output {
-              builder.instr(
-                Instruction::new(Opcode::ADD_RM32)
-                  .with_prefix(Prefix::RexW)
-                  .with_mod(0b11, input1.index)
-                  .with_reg(output.index),
-              );
-            } else {
-              panic!("add must be in-place: {inst:?}");
-            }
+            encode_binary_reg_reg(
+              &mut builder,
+              reg.get(v),
+              reg.get(a),
+              reg.get(b),
+              Opcode::ADD_RM8,
+              Opcode::ADD_RM32,
+            );
           }
           _ => todo!("inst {:?}", inst),
         },
@@ -148,6 +133,61 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
   }
 
   builder
+}
+
+fn encode_binary_reg_imm(
+  builder: &mut Builder,
+  output: Register,
+  input1: Register,
+  input2: u64,
+  opcode_8: Opcode,
+  opcode_32: Opcode,
+) {
+  assert_eq!(output.size, input1.size, "binary must have the same size");
+
+  builder.instr(
+    encode_sized(output.size, opcode_8, opcode_32)
+      .with_mod(0b11, input1.index)
+      .with_reg(output.index)
+      .with_immediate(Immediate::for_size(input2, output.size)),
+  );
+}
+
+fn encode_binary_reg_reg(
+  builder: &mut Builder,
+  output: Register,
+  input1: Register,
+  input2: Register,
+  opcode_8: Opcode,
+  opcode_32: Opcode,
+) {
+  assert_eq!(output.size, input1.size, "binary must have the same size");
+  assert_eq!(output.size, input2.size, "binary must have the same size");
+
+  if input1 == output {
+    builder.instr(
+      encode_sized(output.size, opcode_8, opcode_32)
+        .with_mod(0b11, input2.index)
+        .with_reg(output.index),
+    );
+  } else if input2 == output {
+    builder.instr(
+      encode_sized(output.size, opcode_8, opcode_32)
+        .with_mod(0b11, input1.index)
+        .with_reg(output.index),
+    );
+  } else {
+    panic!("binary must be in-place");
+  }
+}
+
+fn encode_sized(size: RegisterSize, opcode_8: Opcode, opcode_32: Opcode) -> Instruction {
+  match size {
+    RegisterSize::Bit8 => Instruction::new(opcode_8),
+    RegisterSize::Bit16 => Instruction::new(opcode_32).with_prefix(Prefix::OperandSizeOverride),
+    RegisterSize::Bit32 => Instruction::new(opcode_32),
+    RegisterSize::Bit64 => Instruction::new(opcode_32).with_prefix(Prefix::RexW),
+  }
 }
 
 pub fn link(objects: &[std::path::PathBuf], output: &Path) {
