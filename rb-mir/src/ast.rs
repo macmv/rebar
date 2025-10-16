@@ -104,6 +104,7 @@ pub enum BinaryOp {
   Mod,
   BitAnd,
   BitOr,
+  Xor,
   ShiftLeft,
   ShiftRight,
   And,

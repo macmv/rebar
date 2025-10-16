@@ -279,6 +279,7 @@ impl<'a> Typer<'a> {
           | hir::BinaryOp::Mod
           | hir::BinaryOp::BitOr
           | hir::BinaryOp::BitAnd
+          | hir::BinaryOp::Xor
           | hir::BinaryOp::ShiftLeft
           | hir::BinaryOp::ShiftRight => {
             self.constrain(
