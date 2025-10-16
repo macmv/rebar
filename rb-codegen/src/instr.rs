@@ -1,8 +1,8 @@
 use smallvec::smallvec;
 
 use crate::{
-  Block, BlockId, Comparison, Function, FunctionId, InstructionInput, Signature, Symbol, Variable,
-  VariableSize,
+  Block, BlockId, Comparison, Function, FunctionId, InstructionInput, Math, Signature, Symbol,
+  Variable, VariableSize,
 };
 
 pub struct FunctionBuilder {
@@ -114,22 +114,17 @@ macro_rules! instructions {
 }
 
 instructions! {
-  add: Add => input1, input2;
+  math1: Math(math: Math) => input;
+  math2: Math(math: Math) => input1, input2;
   branch: Branch(block: BlockId) => input;
   call: Call(function: FunctionId) => input;
   cmp: Compare(cmp: Comparison) => input1, input2;
-  div: Div => input1, input2;
   lea: Lea(symbol: Symbol) => ;
   mov: Move => input;
-  mul: Mul => input1, input2;
-  neg: Neg => input;
-  rem: Rem => input1, input2;
-  sub: Sub => input1, input2;
   syscall1: Syscall => input;
   syscall2: Syscall => input1, input2;
   syscall3: Syscall => input1, input2, input3;
   syscall4: Syscall => input1, input2, input3, input4;
-  xor: Xor => input1, input2;
 }
 
 #[cfg(test)]
@@ -147,7 +142,7 @@ mod tests {
     let arg2 = builder.arg(1);
 
     let mut block = builder.new_block();
-    let _res = block.instr().add(VariableSize::Bit64, arg1, arg2);
+    let _res = block.instr().math2(Math::Add, VariableSize::Bit64, arg1, arg2);
     let _addr = block.instr().lea(Symbol { index: 2 }, VariableSize::Bit64);
   }
 }

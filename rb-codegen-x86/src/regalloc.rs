@@ -1,6 +1,8 @@
 use std::fmt;
 
-use rb_codegen::{Function, InstructionInput, InstructionOutput, Opcode, Variable, VariableSize};
+use rb_codegen::{
+  Function, InstructionInput, InstructionOutput, Math, Opcode, Variable, VariableSize,
+};
 
 use crate::instruction::RegisterIndex;
 
@@ -194,7 +196,7 @@ impl PinnedVariables {
     for block in function.blocks.iter() {
       for inst in block.instructions.iter() {
         match inst.opcode {
-          Opcode::Mul | Opcode::Div => {
+          Opcode::Math(Math::Imul | Math::Idiv | Math::Neg | Math::Not) => {
             p.pin(inst.input[0].unwrap_var(), RegisterIndex::Eax);
             p.pin(inst.output[0].unwrap_var(), RegisterIndex::Eax);
           }

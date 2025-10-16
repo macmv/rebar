@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use rb_codegen::{Comparison, Function, FunctionBuilder, Signature, Variable, VariableSize::*};
+use rb_codegen::{
+  Comparison, Function, FunctionBuilder, Math, Signature, Variable, VariableSize::*,
+};
 use rb_mir::{ast as mir, MirContext};
 
 mod r_value;
@@ -271,8 +273,8 @@ impl FuncBuilder<'_> {
         let lhs = lhs.unwrap_single(self);
 
         let res = match op {
-          mir::UnaryOp::Neg => RValue::int(self.builder.instr().neg(Bit64, lhs)),
-          mir::UnaryOp::Not => RValue::bool(self.builder.instr().xor(Bit1, lhs, 1)),
+          mir::UnaryOp::Neg => RValue::int(self.builder.instr().math1(Math::Neg, Bit64, lhs)),
+          mir::UnaryOp::Not => RValue::bool(self.builder.instr().math2(Math::Xor, Bit1, lhs, 1)),
         };
 
         res
@@ -291,16 +293,16 @@ impl FuncBuilder<'_> {
             let lhs = lhs.unwrap_single(self);
             let rhs = rhs.unwrap_single(self);
 
-            let res = match op {
-              mir::BinaryOp::Add => self.builder.instr().add(Bit64, lhs, rhs),
-              mir::BinaryOp::Sub => self.builder.instr().sub(Bit64, lhs, rhs),
-              mir::BinaryOp::Mul => self.builder.instr().mul(Bit64, lhs, rhs),
-              mir::BinaryOp::Div => self.builder.instr().div(Bit64, lhs, rhs),
-              mir::BinaryOp::Mod => self.builder.instr().rem(Bit64, lhs, rhs),
+            let math = match op {
+              mir::BinaryOp::Add => rb_codegen::Math::Add,
+              mir::BinaryOp::Sub => rb_codegen::Math::Sub,
+              mir::BinaryOp::Mul => rb_codegen::Math::Imul,
+              mir::BinaryOp::Div => rb_codegen::Math::Idiv,
+              mir::BinaryOp::Mod => rb_codegen::Math::Urem,
               _ => unreachable!(),
             };
 
-            RValue::int(res)
+            RValue::int(self.builder.instr().math2(math, Bit64, lhs, rhs))
           }
 
           mir::BinaryOp::Eq | mir::BinaryOp::Neq => match (lhs.const_ty(), rhs.const_ty()) {

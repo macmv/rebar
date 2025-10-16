@@ -62,19 +62,33 @@ pub enum TerminatorInstruction {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Opcode {
-  Add,
+  Math(Math),
   Branch(BlockId),
   Call(FunctionId),
   Compare(Comparison),
-  Div,
   Lea(Symbol),
   Move,
-  Mul,
-  Neg,
-  Rem,
-  Sub,
   Syscall,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Math {
+  Add,
+  Sub,
+  Imul,
+  Umul,
+  Idiv,
+  Udiv,
+  Irem,
+  Urem,
+  And,
+  Or,
   Xor,
+  Shl,
+  Ushr,
+  Ishr,
+  Not,
+  Neg,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

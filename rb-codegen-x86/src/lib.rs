@@ -7,7 +7,7 @@ pub use elf::generate;
 
 pub use instruction::{Immediate, Instruction, ModReg, Opcode, Prefix};
 use object::write::elf::Rel;
-use rb_codegen::{InstructionInput, InstructionOutput};
+use rb_codegen::{InstructionInput, InstructionOutput, Math};
 
 use crate::{
   instruction::RegisterIndex,
@@ -47,59 +47,63 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
   for block in &function.blocks {
     for inst in &block.instructions {
       match inst.opcode {
-        rb_codegen::Opcode::Add => match (inst.output[0], inst.input[0], inst.input[1]) {
-          (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
-            encode_binary_reg_imm(
-              &mut builder,
-              reg.get(v),
-              reg.get(a),
-              b,
-              Opcode::ADD_IMM8,
-              Opcode::ADD_IMM32,
-            );
+        rb_codegen::Opcode::Math(Math::Add) => {
+          match (inst.output[0], inst.input[0], inst.input[1]) {
+            (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
+              encode_binary_reg_imm(
+                &mut builder,
+                reg.get(v),
+                reg.get(a),
+                b,
+                Opcode::ADD_IMM8,
+                Opcode::ADD_IMM32,
+              );
+            }
+            (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
+              encode_binary_reg_reg(
+                &mut builder,
+                reg.get(v),
+                reg.get(a),
+                reg.get(b),
+                Opcode::ADD_RM8,
+                Opcode::ADD_RM32,
+              );
+            }
+            _ => todo!("inst {:?}", inst),
           }
-          (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
-            encode_binary_reg_reg(
-              &mut builder,
-              reg.get(v),
-              reg.get(a),
-              reg.get(b),
-              Opcode::ADD_RM8,
-              Opcode::ADD_RM32,
-            );
+        }
+        rb_codegen::Opcode::Math(Math::Sub) => {
+          match (inst.output[0], inst.input[0], inst.input[1]) {
+            (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
+              encode_binary_reg_imm(
+                &mut builder,
+                reg.get(v),
+                reg.get(a),
+                b,
+                Opcode::SUB_IMM8,
+                Opcode::SUB_IMM32,
+              );
+            }
+            (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
+              encode_binary_reg_reg(
+                &mut builder,
+                reg.get(v),
+                reg.get(a),
+                reg.get(b),
+                Opcode::SUB_RM8,
+                Opcode::SUB_RM32,
+              );
+            }
+            _ => todo!("inst {:?}", inst),
           }
-          _ => todo!("inst {:?}", inst),
-        },
-        rb_codegen::Opcode::Sub => match (inst.output[0], inst.input[0], inst.input[1]) {
-          (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
-            encode_binary_reg_imm(
-              &mut builder,
-              reg.get(v),
-              reg.get(a),
-              b,
-              Opcode::SUB_IMM8,
-              Opcode::SUB_IMM32,
-            );
-          }
-          (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
-            encode_binary_reg_reg(
-              &mut builder,
-              reg.get(v),
-              reg.get(a),
-              reg.get(b),
-              Opcode::SUB_RM8,
-              Opcode::SUB_RM32,
-            );
-          }
-          _ => todo!("inst {:?}", inst),
-        },
-        rb_codegen::Opcode::Mul | rb_codegen::Opcode::Div | rb_codegen::Opcode::Neg => {
+        }
+        rb_codegen::Opcode::Math(math @ (Math::Imul | Math::Idiv | Math::Neg)) => {
           // digits: not=2, neg=3, umul=4, imul=5, udiv=6, idiv=7
 
-          let opcode_digit = match inst.opcode {
-            rb_codegen::Opcode::Neg => 3,
-            rb_codegen::Opcode::Mul => 4,
-            rb_codegen::Opcode::Div => 6,
+          let opcode_digit = match math {
+            Math::Neg => 3,
+            Math::Imul => 4,
+            Math::Idiv => 6,
             _ => unreachable!(),
           };
 
@@ -130,7 +134,8 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
             _ => todo!("inst {:?}", inst),
           }
         }
-        rb_codegen::Opcode::Xor => match (inst.output[0], inst.input[0], inst.input[1]) {
+        rb_codegen::Opcode::Math(Math::Xor) => match (inst.output[0], inst.input[0], inst.input[1])
+        {
           (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
             encode_binary_reg_imm(
               &mut builder,
