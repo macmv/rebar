@@ -170,6 +170,8 @@ impl Lower<'_> {
           hir::BinaryOp::Mod => mir::BinaryOp::Mod,
           hir::BinaryOp::BitAnd => mir::BinaryOp::BitAnd,
           hir::BinaryOp::BitOr => mir::BinaryOp::BitOr,
+          hir::BinaryOp::ShiftLeft => mir::BinaryOp::ShiftLeft,
+          hir::BinaryOp::ShiftRight => mir::BinaryOp::ShiftRight,
           hir::BinaryOp::And => mir::BinaryOp::And,
           hir::BinaryOp::Or => mir::BinaryOp::Or,
           hir::BinaryOp::Eq => mir::BinaryOp::Eq,

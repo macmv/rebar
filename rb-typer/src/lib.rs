@@ -276,7 +276,11 @@ impl<'a> Typer<'a> {
           | hir::BinaryOp::Sub
           | hir::BinaryOp::Mul
           | hir::BinaryOp::Div
-          | hir::BinaryOp::Mod => {
+          | hir::BinaryOp::Mod
+          | hir::BinaryOp::BitOr
+          | hir::BinaryOp::BitAnd
+          | hir::BinaryOp::ShiftLeft
+          | hir::BinaryOp::ShiftRight => {
             self.constrain(
               &VType::Function(
                 vec![ty::Literal::Int.into(), ty::Literal::Int.into()],

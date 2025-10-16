@@ -577,6 +577,8 @@ fn token_name(name: &str) -> &str {
     "<=" => "less_eq",
     "<" => "less",
     ">" => "greater",
+    "<<" => "shift_left",
+    ">>" => "shift_right",
     "!" => "bang",
 
     "'" => "single_quote",
