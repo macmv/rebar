@@ -1,8 +1,8 @@
 use smallvec::smallvec;
 
 use crate::{
-  Block, BlockId, Condition, Function, Instruction, InstructionInput, InstructionOutput, Symbol,
-  Variable, VariableSize,
+  Block, BlockId, Condition, Function, Instruction, InstructionInput, InstructionOutput, Signature,
+  Symbol, Variable, VariableSize,
 };
 
 pub struct FunctionBuilder {
@@ -20,12 +20,11 @@ pub struct InstrBuilder<'a> {
 }
 
 impl FunctionBuilder {
-  pub fn new(args: u32, rets: u32) -> Self {
+  pub fn new(sig: Signature) -> Self {
     FunctionBuilder {
       next_variable: 0,
       function:      Function {
-        args,
-        rets,
+        sig,
         blocks: vec![Block {
           instructions: vec![],
           terminator:   crate::TerminatorInstruction::Trap,
@@ -34,10 +33,14 @@ impl FunctionBuilder {
     }
   }
 
-  pub fn arg(&self, index: u32, size: VariableSize) -> crate::Variable {
-    assert!(index < self.function.args, "arg index {index} >= args {}", self.function.args);
+  pub fn arg(&self, index: u32) -> crate::Variable {
+    assert!(
+      index < self.function.sig.args.len() as u32,
+      "arg index {index} >= args {}",
+      self.function.sig.args.len(),
+    );
 
-    Variable::new(index, size)
+    Variable::new(index, self.function.sig.args[index as usize])
   }
 
   pub fn var(&mut self, size: VariableSize) -> crate::Variable {
@@ -115,10 +118,13 @@ mod tests {
 
   #[test]
   fn codegen_asm() {
-    let mut builder = FunctionBuilder::new(2, 0);
+    let mut builder = FunctionBuilder::new(Signature {
+      args: vec![VariableSize::Bit64, VariableSize::Bit64],
+      rets: vec![],
+    });
 
-    let arg1 = builder.arg(0, VariableSize::Bit64);
-    let arg2 = builder.arg(1, VariableSize::Bit64);
+    let arg1 = builder.arg(0);
+    let arg2 = builder.arg(1);
 
     let res = builder.var(VariableSize::Bit64);
 

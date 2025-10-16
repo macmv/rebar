@@ -4,9 +4,13 @@ mod instr;
 
 pub use instr::{BlockBuilder, FunctionBuilder, InstrBuilder};
 
+pub struct Signature {
+  pub args: Vec<VariableSize>,
+  pub rets: Vec<VariableSize>,
+}
+
 pub struct Function {
-  pub args:   u32,
-  pub rets:   u32,
+  pub sig:    Signature,
   pub blocks: Vec<Block>,
 }
 

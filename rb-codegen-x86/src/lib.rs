@@ -140,7 +140,7 @@ pub fn link(objects: &[std::path::PathBuf], output: &Path) {
 #[cfg(test)]
 mod tests {
 
-  use rb_codegen::{Symbol, Variable, VariableSize};
+  use rb_codegen::{Signature, Symbol, Variable, VariableSize};
   use rb_test::{Expect, expect, temp_dir};
 
   use crate::instruction::RegisterIndex;
@@ -188,8 +188,7 @@ mod tests {
   #[test]
   fn mov_small_variables() {
     let function = rb_codegen::Function {
-      args:   0,
-      rets:   0,
+      sig:    Signature { args: vec![], rets: vec![] },
       blocks: vec![rb_codegen::Block {
         instructions: vec![
           rb_codegen::Instruction {
@@ -250,8 +249,7 @@ mod tests {
     let v5 = Variable::new(5, VariableSize::Bit64);
 
     let function = rb_codegen::Function {
-      args:   0,
-      rets:   0,
+      sig:    Signature { args: vec![], rets: vec![] },
       blocks: vec![rb_codegen::Block {
         instructions: vec![
           // write 1 reloc.foo 14
