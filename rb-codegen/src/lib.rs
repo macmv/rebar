@@ -1,3 +1,5 @@
+use std::fmt;
+
 use smallvec::SmallVec;
 
 mod instr;
@@ -18,8 +20,14 @@ pub struct Function {
 pub struct FunctionId(u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BlockId(u32);
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Variable(u32);
+
+impl fmt::Debug for Variable {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "v{}:{:?}", self.id(), self.size())
+  }
+}
 
 // This gets encoded into the high bits of `Variable`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
