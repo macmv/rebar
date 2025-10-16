@@ -196,9 +196,15 @@ impl PinnedVariables {
     for block in function.blocks.iter() {
       for inst in block.instructions.iter() {
         match inst.opcode {
-          Opcode::Math(Math::Imul | Math::Idiv | Math::Neg | Math::Not) => {
+          Opcode::Math(
+            Math::Imul | Math::Umul | Math::Idiv | Math::Udiv | Math::Neg | Math::Not,
+          ) => {
             p.pin(inst.input[0].unwrap_var(), RegisterIndex::Eax);
             p.pin(inst.output[0].unwrap_var(), RegisterIndex::Eax);
+          }
+          Opcode::Math(Math::Irem | Math::Urem) => {
+            p.pin(inst.input[0].unwrap_var(), RegisterIndex::Eax);
+            p.pin(inst.output[0].unwrap_var(), RegisterIndex::Edx);
           }
           Opcode::Syscall => p.pin_cc(CallingConvention::Syscall, &inst.input),
           _ => {}
