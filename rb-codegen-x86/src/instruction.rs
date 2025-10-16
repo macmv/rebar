@@ -219,6 +219,14 @@ impl Opcode {
   pub const SUB_IMM8: Opcode = Opcode::new([0x2c]);
   pub const SUB_RM32: Opcode = Opcode::new([0x2b]);
   pub const SUB_RM8: Opcode = Opcode::new([0x2a]);
+  pub const AND_IMM32: Opcode = Opcode::new([0x25]);
+  pub const AND_IMM8: Opcode = Opcode::new([0x24]);
+  pub const AND_RM32: Opcode = Opcode::new([0x23]);
+  pub const AND_RM8: Opcode = Opcode::new([0x22]);
+  pub const OR_IMM32: Opcode = Opcode::new([0x0d]);
+  pub const OR_IMM8: Opcode = Opcode::new([0x0c]);
+  pub const OR_RM32: Opcode = Opcode::new([0x0b]);
+  pub const OR_RM8: Opcode = Opcode::new([0x0a]);
   pub const INT3: Opcode = Opcode::new([0xcc]);
   pub const LEA: Opcode = Opcode::new([0x8d]);
   pub const MOV_RD_IMM_16: Opcode = Opcode::new([0xb8]);

@@ -47,51 +47,59 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
   for block in &function.blocks {
     for inst in &block.instructions {
       match inst.opcode {
-        rb_codegen::Opcode::Math(math @ (Math::Add | Math::Sub | Math::Xor)) => {
-          match (inst.output[0], inst.input[0], inst.input[1]) {
-            (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
-              encode_binary_reg_imm(
-                &mut builder,
-                reg.get(v),
-                reg.get(a),
-                b,
-                match math {
-                  Math::Add => Opcode::ADD_IMM8,
-                  Math::Sub => Opcode::SUB_IMM8,
-                  Math::Xor => Opcode::XOR_IMM8,
-                  _ => unreachable!(),
-                },
-                match math {
-                  Math::Add => Opcode::ADD_IMM32,
-                  Math::Sub => Opcode::SUB_IMM32,
-                  Math::Xor => Opcode::XOR_IMM32,
-                  _ => unreachable!(),
-                },
-              );
-            }
-            (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
-              encode_binary_reg_reg(
-                &mut builder,
-                reg.get(v),
-                reg.get(a),
-                reg.get(b),
-                match math {
-                  Math::Add => Opcode::ADD_RM8,
-                  Math::Sub => Opcode::SUB_RM8,
-                  Math::Xor => Opcode::XOR_RM8,
-                  _ => unreachable!(),
-                },
-                match math {
-                  Math::Add => Opcode::ADD_RM32,
-                  Math::Sub => Opcode::SUB_RM32,
-                  Math::Xor => Opcode::XOR_RM32,
-                  _ => unreachable!(),
-                },
-              );
-            }
-            _ => todo!("inst {:?}", inst),
+        rb_codegen::Opcode::Math(
+          math @ (Math::Add | Math::Sub | Math::And | Math::Or | Math::Xor),
+        ) => match (inst.output[0], inst.input[0], inst.input[1]) {
+          (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
+            encode_binary_reg_imm(
+              &mut builder,
+              reg.get(v),
+              reg.get(a),
+              b,
+              match math {
+                Math::Add => Opcode::ADD_IMM8,
+                Math::Sub => Opcode::SUB_IMM8,
+                Math::And => Opcode::AND_IMM8,
+                Math::Or => Opcode::OR_IMM8,
+                Math::Xor => Opcode::XOR_IMM8,
+                _ => unreachable!(),
+              },
+              match math {
+                Math::Add => Opcode::ADD_IMM32,
+                Math::Sub => Opcode::SUB_IMM32,
+                Math::And => Opcode::AND_IMM32,
+                Math::Or => Opcode::OR_IMM32,
+                Math::Xor => Opcode::XOR_IMM32,
+                _ => unreachable!(),
+              },
+            );
           }
-        }
+          (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
+            encode_binary_reg_reg(
+              &mut builder,
+              reg.get(v),
+              reg.get(a),
+              reg.get(b),
+              match math {
+                Math::Add => Opcode::ADD_RM8,
+                Math::Sub => Opcode::SUB_RM8,
+                Math::And => Opcode::AND_RM8,
+                Math::Or => Opcode::OR_RM8,
+                Math::Xor => Opcode::XOR_RM8,
+                _ => unreachable!(),
+              },
+              match math {
+                Math::Add => Opcode::ADD_RM32,
+                Math::Sub => Opcode::SUB_RM32,
+                Math::And => Opcode::AND_RM32,
+                Math::Or => Opcode::OR_RM32,
+                Math::Xor => Opcode::XOR_RM32,
+                _ => unreachable!(),
+              },
+            );
+          }
+          _ => todo!("inst {:?}", inst),
+        },
         rb_codegen::Opcode::Math(
           math @ (Math::Imul
           | Math::Umul
