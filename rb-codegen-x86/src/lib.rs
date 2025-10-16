@@ -62,13 +62,23 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
             let output = reg.get(v);
             let input1 = reg.get(a);
             let input2 = reg.get(b);
-            assert_eq!(input1, output, "add must be in-place");
-            builder.instr(
-              Instruction::new(Opcode::ADD_RM32)
-                .with_prefix(Prefix::RexW)
-                .with_mod(0b11, output.index)
-                .with_reg(input2.index),
-            );
+            if input1 == output {
+              builder.instr(
+                Instruction::new(Opcode::ADD_RM32)
+                  .with_prefix(Prefix::RexW)
+                  .with_mod(0b11, output.index)
+                  .with_reg(input2.index),
+              );
+            } else if input2 == output {
+              builder.instr(
+                Instruction::new(Opcode::ADD_RM32)
+                  .with_prefix(Prefix::RexW)
+                  .with_mod(0b11, output.index)
+                  .with_reg(input1.index),
+              );
+            } else {
+              panic!("add must be in-place: {inst:?}");
+            }
           }
           _ => todo!("inst {:?}", inst),
         },
