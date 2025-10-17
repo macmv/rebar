@@ -53,8 +53,5 @@ impl TestFunction {
 }
 
 impl fmt::Display for TestFunction {
-  fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    todo!();
-    // self.function.fmt(f)
-  }
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { self.function.fmt(f) }
 }

@@ -267,6 +267,8 @@ mod tests {
       "#,
     );
 
+    println!("{}", ast);
+
     let vu = ast.pass::<ValueUses>();
 
     // There is a loop of variables.
