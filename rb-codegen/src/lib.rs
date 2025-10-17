@@ -256,12 +256,19 @@ impl fmt::Display for Function {
 
 impl fmt::Display for Instruction {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    for output in &self.output {
-      write!(f, "{} ", output)?;
+    write!(f, "{}", self.opcode)?;
+    for (i, output) in self.output.iter().enumerate() {
+      if i != 0 {
+        write!(f, ",")?;
+      }
+      write!(f, " {}", output)?;
     }
-    write!(f, "= {} ", self.opcode)?;
-    for input in &self.input {
-      write!(f, "{} ", input)?;
+    write!(f, " =")?;
+    for (i, input) in self.input.iter().enumerate() {
+      if i != 0 {
+        write!(f, ",")?;
+      }
+      write!(f, " {}", input)?;
     }
     Ok(())
   }
@@ -298,13 +305,57 @@ impl fmt::Display for InstructionInput {
 impl fmt::Display for Opcode {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      Opcode::Math(m) => write!(f, "{:?}", m),
-      Opcode::Branch(c, target) => write!(f, "branch {:?} to block {}", c, target.as_u32()),
-      Opcode::Compare(c) => write!(f, "compare {:?}", c),
+      Opcode::Math(m) => write!(f, "math({m})"),
+      Opcode::Branch(c, target) => write!(f, "branch {c:?} to {target}"),
+      Opcode::Compare(c) => write!(f, "compare {c:?}"),
       Opcode::Call(func) => write!(f, "call function {}", func.0),
       Opcode::Lea(symbol) => write!(f, "lea symbol {}", symbol.index),
       Opcode::Move => write!(f, "mov"),
       Opcode::Syscall => write!(f, "syscall"),
     }
   }
+}
+
+impl fmt::Display for Math {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Math::Add => write!(f, "add"),
+      Math::Sub => write!(f, "sub"),
+      Math::Imul => write!(f, "imul"),
+      Math::Umul => write!(f, "umul"),
+      Math::Idiv => write!(f, "idiv"),
+      Math::Udiv => write!(f, "udiv"),
+      Math::Irem => write!(f, "irem"),
+      Math::Urem => write!(f, "urem"),
+      Math::And => write!(f, "and"),
+      Math::Or => write!(f, "or"),
+      Math::Xor => write!(f, "xor"),
+      Math::Shl => write!(f, "shl"),
+      Math::Ushr => write!(f, "ushr"),
+      Math::Ishr => write!(f, "ishr"),
+      Math::Not => write!(f, "not"),
+      Math::Neg => write!(f, "neg"),
+    }
+  }
+}
+
+impl fmt::Display for Variable {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(
+      f,
+      "{}{}",
+      match self.size() {
+        VariableSize::Bit1 => "b",
+        VariableSize::Bit8 => "l",
+        VariableSize::Bit16 => "x",
+        VariableSize::Bit32 => "e",
+        VariableSize::Bit64 => "r",
+      },
+      self.id(),
+    )
+  }
+}
+
+impl fmt::Display for BlockId {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "block {}", self.as_u32()) }
 }

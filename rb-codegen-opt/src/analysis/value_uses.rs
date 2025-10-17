@@ -254,15 +254,15 @@ mod tests {
     let mut ast = parse(
       r#"
       block 0:
-        mov A(v0) 0x00
-        mov [0x80](v1) A(v0)
+        mov r0 = 0x00
+        mov r1 = r0
         jump to block 1
       block 1:
-        [0x80](v2) = phi(block 0 -> v1, block 1 -> v6)
-        A(v3) = phi(block 0 -> v0, block 1 -> v5)
-        mov A(v4) [0x80](v2)
-        math A(v5) = A(v4) Add 0x02
-        mov [0x80](v6) A(v5)
+        r2 = phi(block 0 -> r1, block 1 -> r6)
+        r3 = phi(block 0 -> r0, block 1 -> r5)
+        mov r4 = r2
+        math(add) r5 = r4, 0x02
+        mov r6 r5
         jump to block 1
       "#,
     );
