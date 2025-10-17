@@ -391,14 +391,13 @@ impl FuncBuilder<'_> {
       }
       */
       mir::Expr::If { cond, then, els: Some(els), ty: _ } => {
-        let cond = self.compile_expr(cond);
-        let cond = cond.unwrap_single(self);
+        let (cond, a, b) = self.compile_conditional(cond);
 
         let else_block = self.builder.new_block().id();
         let merge_block = self.builder.new_block().id();
 
         // Test the if condition and conditionally branch.
-        self.builder.instr().branch(Condition::NotEqual, else_block, Bit64, cond, 0);
+        self.builder.instr().branch(cond, else_block, Bit64, a, b);
         self.compile_expr(then);
         self.builder.current_block().terminate(TerminatorInstruction::Jump(merge_block));
 
@@ -538,6 +537,62 @@ impl FuncBuilder<'_> {
       }
       */
       ref v => unimplemented!("expr: {v:?}"),
+    }
+  }
+
+  fn compile_conditional(&mut self, expr: mir::ExprId) -> (Condition, Variable, Variable) {
+    match self.mir.exprs[expr] {
+      mir::Expr::Binary(
+        lhs,
+        ref op @ (mir::BinaryOp::Eq
+        | mir::BinaryOp::Neq
+        | mir::BinaryOp::Lt
+        | mir::BinaryOp::Lte
+        | mir::BinaryOp::Gt
+        | mir::BinaryOp::Gte),
+        rhs,
+        _,
+      ) => {
+        let lhs = self.compile_expr(lhs);
+        let rhs = self.compile_expr(rhs);
+
+        match op {
+          mir::BinaryOp::Eq | mir::BinaryOp::Neq => match (lhs.const_ty(), rhs.const_ty()) {
+            (Some(ValueType::Int), Some(ValueType::Int)) => {
+              let l = lhs.unwrap_single(self);
+              let r = rhs.unwrap_single(self);
+
+              match op {
+                mir::BinaryOp::Eq => (Condition::Equal, l, r),
+                mir::BinaryOp::Neq => (Condition::NotEqual, l, r),
+                _ => unreachable!(),
+              }
+            }
+
+            (_, _) => todo!("equality for {lhs:?} and {rhs:?}"),
+          },
+
+          _ => {
+            let lhs = lhs.unwrap_single(self);
+            let rhs = rhs.unwrap_single(self);
+
+            match op {
+              mir::BinaryOp::Lt => (Condition::Less, lhs, rhs),
+              mir::BinaryOp::Lte => (Condition::LessEqual, lhs, rhs),
+              mir::BinaryOp::Gt => (Condition::Greater, lhs, rhs),
+              mir::BinaryOp::Gte => (Condition::GreaterEqual, lhs, rhs),
+
+              _ => unreachable!(),
+            }
+          }
+        }
+      }
+
+      _ => {
+        let cond = self.compile_expr(expr);
+
+        (Condition::NotEqual, cond.unwrap_single(self), self.builder.instr().mov(Bit64, 0))
+      }
     }
   }
 
