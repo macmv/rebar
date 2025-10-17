@@ -5,7 +5,7 @@ use rb_test::Expect;
 
 use crate::analysis::{Analysis, AnalysisPass};
 
-// mod diff;
+mod diff;
 // mod parse_ir;
 
 pub struct TestFunction {
@@ -17,10 +17,10 @@ pub fn parse(_asm: &str) -> TestFunction {
   TestFunction { analysis: Analysis::default(), function: todo!() /* parse_ir::parse(asm) */ }
 }
 
-pub fn check_transform(_pass: &str, _diff: Expect) {
-  // let (before, _) = diff::parse(&diff.trimmed());
-  // let mut function = parse(&before);
-  // diff.assert_eq(&function.transform_diff(pass));
+pub fn check_transform(pass: &str, diff: Expect) {
+  let (before, _) = diff::parse(&diff.trimmed());
+  let mut function = parse(&before);
+  diff.assert_eq(&function.transform_diff(pass));
 }
 
 impl TestFunction {
