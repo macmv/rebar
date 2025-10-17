@@ -219,8 +219,8 @@ impl Opcode {
   pub const SUB_IMM8: Opcode = Opcode::new([0x2c]);
   pub const SUB_RM32: Opcode = Opcode::new([0x2b]);
   pub const SUB_RM8: Opcode = Opcode::new([0x2a]);
-  pub const CMP_IMM32: Opcode = Opcode::new([0x3d]);
-  pub const CMP_IMM8: Opcode = Opcode::new([0x3c]);
+  pub const CMP_A_IMM32: Opcode = Opcode::new([0x3d]);
+  pub const CMP_A_IMM8: Opcode = Opcode::new([0x3c]);
   pub const CMP_RM32: Opcode = Opcode::new([0x3b]);
   pub const CMP_RM8: Opcode = Opcode::new([0x3a]);
   pub const TEST_MR32: Opcode = Opcode::new([0x85]);

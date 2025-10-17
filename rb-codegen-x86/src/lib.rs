@@ -168,13 +168,14 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
         },
         rb_codegen::Opcode::Compare(_) => match (inst.output[0], inst.input[0], inst.input[1]) {
           (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
+            // FIXME: This is wrong. `CMP_A` doesn't take a mod/rm byte.
             encode_binary_reg_imm(
               &mut builder,
               reg.get(v),
               reg.get(a),
               b,
-              Opcode::CMP_IMM8,
-              Opcode::CMP_IMM32,
+              Opcode::CMP_A_IMM8,
+              Opcode::CMP_A_IMM32,
             );
           }
           (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
@@ -199,17 +200,19 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
                   .with_mod(0b11, a.index)
                   .with_reg(a.index),
               );
-            } else {
+            } else if a.index == RegisterIndex::Eax {
               builder.instr(
-                encode_sized(a.size, Opcode::CMP_IMM8, Opcode::CMP_IMM32)
-                  .with_mod(0b11, a.index)
-                  .with_immediate(match a.size {
+                encode_sized(a.size, Opcode::CMP_A_IMM8, Opcode::CMP_A_IMM32).with_immediate(
+                  match a.size {
                     RegisterSize::Bit8 => Immediate::i8(b.try_into().unwrap()),
                     RegisterSize::Bit16 => Immediate::i16(b.try_into().unwrap()),
                     RegisterSize::Bit32 => Immediate::i32(b.try_into().unwrap()),
                     RegisterSize::Bit64 => Immediate::i32(b.try_into().unwrap()),
-                  }),
+                  },
+                ),
               );
+            } else {
+              todo!("encode comparisons with other registers");
             }
 
             let opcode = match condition {
