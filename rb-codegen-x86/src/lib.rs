@@ -324,6 +324,23 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
                   .with_mod(0b11, reg.get(v).index),
               );
             }
+            (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
+              debug_assert_eq!(reg.get(v).size, reg.get(a).size, "shifts must be in place");
+              if b == 1 {
+                builder.instr(
+                  encode_sized(reg.get(v).size, Opcode::SHIFT_1_8, Opcode::SHIFT_1_32)
+                    .with_digit(opcode_digit)
+                    .with_mod(0b11, reg.get(v).index),
+                );
+              } else {
+                builder.instr(
+                  encode_sized(reg.get(v).size, Opcode::SHIFT_IMM_8, Opcode::SHIFT_IMM_32)
+                    .with_digit(opcode_digit)
+                    .with_mod(0b11, reg.get(v).index)
+                    .with_immediate(Immediate::i8(b.try_into().unwrap())),
+                );
+              }
+            }
             _ => todo!("inst {:?}", inst),
           }
         }

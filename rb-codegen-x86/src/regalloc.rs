@@ -299,8 +299,8 @@ impl PinnedVariables {
             p.pin(o0, RegisterIndex::Edx);
           }
           Opcode::Math(Math::Ishr | Math::Ushr | Math::Shl) => {
-            let i1 = p.to_var(&mut inst.input[1]);
-            p.pin(i1, RegisterIndex::Ecx);
+            let i0 = p.to_var(&mut inst.input[0]);
+            p.pin(i0, RegisterIndex::Eax);
           }
           Opcode::Syscall => p.pin_cc(CallingConvention::Syscall, &inst.input),
           _ => {}
