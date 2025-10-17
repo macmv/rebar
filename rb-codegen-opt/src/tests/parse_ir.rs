@@ -35,7 +35,7 @@ pub fn parse(asm: &str) -> Function {
       continue;
     }
 
-    let (first_word, args) = line.split_once(' ').unwrap();
+    let (first_word, args) = line.split_once(' ').unwrap_or((line, ""));
     let opcode = match first_word {
       "mov" => Opcode::Move,
       "math(abs)" => Opcode::Move,
@@ -62,6 +62,11 @@ pub fn parse(asm: &str) -> Function {
 
         function.blocks.last_mut().unwrap().terminator =
           rb_codegen::TerminatorInstruction::Jump(BlockId::new(target));
+        continue;
+      }
+
+      "trap" => {
+        function.blocks.last_mut().unwrap().terminator = rb_codegen::TerminatorInstruction::Trap;
         continue;
       }
 
