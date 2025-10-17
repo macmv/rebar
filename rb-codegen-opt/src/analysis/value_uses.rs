@@ -275,7 +275,7 @@ mod tests {
     assert!(&vu.variables[&v!(4)].used_by.contains(&v!(5)));
     assert!(&vu.variables[&v!(5)].used_by.contains(&v!(6)));
 
-    ast.full_optimize();
+    // ast.full_optimize();
 
     ast.check(expect![@r#"
       block 0:

@@ -82,7 +82,7 @@ passes![
   // eliminate_nop_assign::EliminateNopAssign,
   // eliminate_nop_math::EliminateNopMath,
   eliminate_unreachable_blocks::EliminateUnreachableBlocks,
-  // eliminate_unused_vars::EliminateUnusedVars,
+  eliminate_unused_vars::EliminateUnusedVars,
   // legalize::Legalize,
   // merge_blocks::MergeBlocks,
   // update_phis::UpdatePhis,
