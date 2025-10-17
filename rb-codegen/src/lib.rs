@@ -151,6 +151,47 @@ impl Variable {
 
 impl Function {
   pub fn entry(&self) -> BlockId { BlockId::new(0) }
+
+  pub fn retain_blocks(&mut self, f: impl Fn(BlockId) -> bool) {
+    let mut i = 0;
+    let mut new_id = 0;
+    let mut mapping = TVec::new();
+    let old_len = self.blocks.len();
+    self.blocks.retain(|_| {
+      let id = BlockId::new(i);
+      let ret = f(id);
+      if ret {
+        mapping.push(Some(BlockId::new(new_id)));
+        new_id += 1;
+      } else {
+        mapping.push(None);
+      }
+      i += 1;
+      ret
+    });
+
+    if self.blocks.len() != old_len {
+      for block in &mut self.blocks {
+        for instr in &mut block.instructions {
+          match &mut instr.opcode {
+            Opcode::Branch(_, target) => {
+              let new_id = mapping[*target];
+              *target = new_id.expect("retained block has branch to removed block");
+            }
+            _ => {}
+          }
+        }
+
+        match &mut block.terminator {
+          TerminatorInstruction::Jump(target) => {
+            let new_id = mapping[*target];
+            *target = new_id.expect("retained block has branch to removed block");
+          }
+          _ => {}
+        }
+      }
+    }
+  }
 }
 
 impl From<Variable> for InstructionInput {

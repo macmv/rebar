@@ -2,7 +2,7 @@ use rb_codegen::Function;
 
 use crate::analysis::{Analysis, AnalysisPassId};
 
-// mod helper;
+mod helper;
 
 trait FromAnalysis<'a> {
   fn requires() -> &'static [AnalysisPassId];
@@ -81,7 +81,7 @@ passes![
   // eliminate_empty_blocks::EliminateEmptyBlocks,
   // eliminate_nop_assign::EliminateNopAssign,
   // eliminate_nop_math::EliminateNopMath,
-  // eliminate_unreachable_blocks::EliminateUnreachableBlocks,
+  eliminate_unreachable_blocks::EliminateUnreachableBlocks,
   // eliminate_unused_vars::EliminateUnusedVars,
   // legalize::Legalize,
   // merge_blocks::MergeBlocks,
