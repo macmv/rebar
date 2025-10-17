@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use rb_codegen::{
-  Comparison, Function, FunctionBuilder, Math, Signature, TerminatorInstruction, Variable,
+  Condition, Function, FunctionBuilder, Math, Signature, TerminatorInstruction, Variable,
   VariableSize::*,
 };
 use rb_mir::{ast as mir, MirContext};
@@ -297,8 +297,8 @@ impl FuncBuilder<'_> {
               let r = rhs.unwrap_single(self);
 
               let res = match op {
-                mir::BinaryOp::Eq => self.builder.instr().cmp(Comparison::Equal, Bit1, l, r),
-                mir::BinaryOp::Neq => self.builder.instr().cmp(Comparison::NotEqual, Bit1, l, r),
+                mir::BinaryOp::Eq => self.builder.instr().cmp(Condition::Equal, Bit1, l, r),
+                mir::BinaryOp::Neq => self.builder.instr().cmp(Condition::NotEqual, Bit1, l, r),
                 _ => unreachable!(),
               };
 
@@ -309,8 +309,8 @@ impl FuncBuilder<'_> {
               let r = rhs.unwrap_single(self);
 
               let res = match op {
-                mir::BinaryOp::Eq => self.builder.instr().cmp(Comparison::Equal, Bit1, l, r),
-                mir::BinaryOp::Neq => self.builder.instr().cmp(Comparison::NotEqual, Bit1, l, r),
+                mir::BinaryOp::Eq => self.builder.instr().cmp(Condition::Equal, Bit1, l, r),
+                mir::BinaryOp::Neq => self.builder.instr().cmp(Condition::NotEqual, Bit1, l, r),
                 _ => unreachable!(),
               };
 
@@ -328,11 +328,11 @@ impl FuncBuilder<'_> {
 
             // All numbers are signed.
             let res = match op {
-              mir::BinaryOp::Lt => self.builder.instr().cmp(Comparison::Less, Bit1, lhs, rhs),
-              mir::BinaryOp::Lte => self.builder.instr().cmp(Comparison::LessEqual, Bit1, lhs, rhs),
-              mir::BinaryOp::Gt => self.builder.instr().cmp(Comparison::Greater, Bit1, lhs, rhs),
+              mir::BinaryOp::Lt => self.builder.instr().cmp(Condition::Less, Bit1, lhs, rhs),
+              mir::BinaryOp::Lte => self.builder.instr().cmp(Condition::LessEqual, Bit1, lhs, rhs),
+              mir::BinaryOp::Gt => self.builder.instr().cmp(Condition::Greater, Bit1, lhs, rhs),
               mir::BinaryOp::Gte => {
-                self.builder.instr().cmp(Comparison::GreaterEqual, Bit1, lhs, rhs)
+                self.builder.instr().cmp(Condition::GreaterEqual, Bit1, lhs, rhs)
               }
 
               _ => unreachable!(),
@@ -406,7 +406,7 @@ impl FuncBuilder<'_> {
         let merge_block = self.builder.new_block().id();
 
         // Test the if condition and conditionally branch.
-        self.builder.instr().branch(else_block, Bit64, cond);
+        self.builder.instr().branch(Condition::NotEqual, else_block, Bit64, cond, 0);
         self.compile_expr(then);
         self.builder.current_block().terminate(TerminatorInstruction::Jump(merge_block));
 

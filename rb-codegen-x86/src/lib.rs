@@ -189,12 +189,25 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           }
           _ => todo!("inst {:?}", inst),
         },
-        rb_codegen::Opcode::Branch(target) => match inst.input[0] {
-          InstructionInput::Var(_) => {
-            builder.jmp(target, RegisterSize::Bit8);
+        rb_codegen::Opcode::Branch(condition, target) => match (inst.input[0], inst.input[1]) {
+          (InstructionInput::Var(a), InstructionInput::Var(b)) => {
             builder.instr(
-              Instruction::new(Opcode::JB).with_immediate(Immediate::i8(target.as_u32() as u8 + 3)),
-            )
+              encode_sized(reg.get(a).size, Opcode::CMP_RM8, Opcode::CMP_RM32)
+                .with_mod(0b11, reg.get(a).index)
+                .with_reg(reg.get(b).index),
+            );
+
+            let opcode = match condition {
+              rb_codegen::Condition::Equal => Opcode::JE,
+              rb_codegen::Condition::NotEqual => Opcode::JNE,
+              rb_codegen::Condition::Greater => Opcode::JG,
+              rb_codegen::Condition::Less => Opcode::JB,
+              rb_codegen::Condition::GreaterEqual => Opcode::JGE,
+              rb_codegen::Condition::LessEqual => Opcode::JLE,
+            };
+
+            builder.jmp(target, RegisterSize::Bit8);
+            builder.instr(Instruction::new(opcode).with_immediate(Immediate::i8(0)))
           }
           _ => todo!("inst {:?}", inst),
         },

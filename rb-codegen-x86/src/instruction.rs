@@ -235,6 +235,12 @@ impl Opcode {
   pub const OR_RM8: Opcode = Opcode::new([0x0a]);
   pub const INT3: Opcode = Opcode::new([0xcc]);
   pub const LEA: Opcode = Opcode::new([0x8d]);
+  pub const JE: Opcode = Opcode::new([0x74]);
+  pub const JNE: Opcode = Opcode::new([0x75]);
+  pub const JG: Opcode = Opcode::new([0x7f]);
+  pub const JGE: Opcode = Opcode::new([0x7d]);
+  pub const JL: Opcode = Opcode::new([0x7c]);
+  pub const JLE: Opcode = Opcode::new([0x7e]);
   pub const JA: Opcode = Opcode::new([0x77]);
   pub const JAE: Opcode = Opcode::new([0x73]);
   pub const JMP: Opcode = Opcode::new([0xeb]);

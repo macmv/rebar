@@ -1,7 +1,7 @@
 use crate::FuncBuilder;
 
 use rb_codegen::{Variable, VariableSize::*};
-use rb_value::{ParamKind, ValueType};
+use rb_value::ValueType;
 
 #[derive(Debug, Clone)]
 pub enum RValue {

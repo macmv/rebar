@@ -63,9 +63,9 @@ pub enum TerminatorInstruction {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Opcode {
   Math(Math),
-  Branch(BlockId),
+  Branch(Condition, BlockId),
+  Compare(Condition),
   Call(FunctionId),
-  Compare(Comparison),
   Lea(Symbol),
   Move,
   Syscall,
@@ -92,7 +92,7 @@ pub enum Math {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Comparison {
+pub enum Condition {
   Equal,
   NotEqual,
   Greater,

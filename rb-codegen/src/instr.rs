@@ -1,7 +1,7 @@
 use smallvec::smallvec;
 
 use crate::{
-  Block, BlockId, Comparison, Function, FunctionId, InstructionInput, Math, Signature, Symbol,
+  Block, BlockId, Condition, Function, FunctionId, InstructionInput, Math, Signature, Symbol,
   Variable, VariableSize,
 };
 
@@ -120,9 +120,9 @@ macro_rules! instructions {
 instructions! {
   math1: Math(math: Math) => input;
   math2: Math(math: Math) => input1, input2;
-  branch: Branch(block: BlockId) => input;
+  branch: Branch(condition: Condition, block: BlockId) => input1, input2;
+  cmp: Compare(condition: Condition) => input1, input2;
   call: Call(function: FunctionId) => input;
-  cmp: Compare(cmp: Comparison) => input1, input2;
   lea: Lea(symbol: Symbol) => ;
   mov: Move => input;
   syscall1: Syscall => input;
