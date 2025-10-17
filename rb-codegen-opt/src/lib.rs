@@ -69,13 +69,13 @@ pub fn optimize(function: &mut Function) {
   transformer.full_optimize();
 
   // TODO: Add a flag for this? Also make it test-only.
+  /*
   analysis.load(analysis::control_flow_graph::ControlFlowGraph::ID, &function);
   analysis.get::<analysis::control_flow_graph::ControlFlowGraph>().show_graph();
 
   analysis.load(analysis::dominator_tree::DominatorTree::ID, &function);
   analysis.get::<analysis::dominator_tree::DominatorTree>().show_graph();
 
-  /*
   analysis.load(analysis::control_flow_hints::ControlFlowHints::ID, &function);
   let hints = analysis.get::<analysis::control_flow_hints::ControlFlowHints>();
   for block in function.blocks() {
