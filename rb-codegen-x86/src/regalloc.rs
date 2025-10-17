@@ -19,12 +19,15 @@ struct Lifetimes {
 struct PinnedVariables {
   pinned: Vec<Option<RegisterIndex>>,
 
+  next_var: u32,
+
   current: InstructionLocation,
   changes: Vec<Change>,
 }
 
 enum Change {
   AddCopy { loc: InstructionLocation, from: Variable },
+  AddVariable { loc: InstructionLocation, value: u64, new: Variable },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -235,60 +238,68 @@ impl PinnedVariables {
               },
             );
 
-            for instr in function.blocks[loc.block as usize].instructions
-              [(loc.instruction + 1) as usize..]
-              .iter_mut()
-            {
-              for input in instr.input.iter_mut() {
-                if let InstructionInput::Var(v) = input
-                  && *v == from
-                {
-                  *input = InstructionInput::Var(to);
-                }
-              }
-            }
+            replace_after(function, loc, from, to);
+          }
 
-            for block in &mut function.blocks[loc.block as usize + 1..] {
-              for instr in block.instructions.iter_mut() {
-                for input in instr.input.iter_mut() {
-                  if let InstructionInput::Var(v) = input
-                    && *v == from
-                  {
-                    *input = InstructionInput::Var(to);
-                  }
-                }
-              }
-            }
+          Change::AddVariable { loc, value, new } => {
+            function.blocks[loc.block as usize].instructions.insert(
+              loc.instruction as usize,
+              rb_codegen::Instruction {
+                opcode: Opcode::Move,
+                input:  smallvec![InstructionInput::Imm(value)],
+                output: smallvec![InstructionOutput::Var(new)],
+              },
+            );
           }
         }
       }
     }
   }
 
-  fn solve_inner(function: &Function) -> Self {
+  fn solve_inner(function: &mut Function) -> Self {
     let mut p = PinnedVariables::default();
 
-    for (b, block) in function.blocks.iter().enumerate() {
-      for (i, inst) in block.instructions.iter().enumerate() {
+    p.next_var = function
+      .blocks
+      .iter()
+      .flat_map(|b| {
+        b.instructions.iter().flat_map(|i| {
+          i.input
+            .iter()
+            .filter_map(|v| match v {
+              InstructionInput::Var(v) => Some(v.id()),
+              _ => None,
+            })
+            .chain(i.output.iter().filter_map(|v| match v {
+              InstructionOutput::Var(v) => Some(v.id()),
+              _ => None,
+            }))
+        })
+      })
+      .max()
+      .map_or(0, |id| id + 1);
+
+    for (b, block) in function.blocks.iter_mut().enumerate() {
+      for (i, inst) in block.instructions.iter_mut().enumerate() {
         p.current = InstructionLocation { block: b as u32, instruction: i as u32 };
 
         match inst.opcode {
           Opcode::Math(
             Math::Imul | Math::Umul | Math::Idiv | Math::Udiv | Math::Neg | Math::Not,
           ) => {
-            let i0 = p.to_var(inst.input[0]);
-            let o0 = p.to_var(inst.output[0]);
+            let i0 = p.to_var(&mut inst.input[0]);
+            let o0 = p.to_var(&mut inst.output[0]);
             p.pin(i0, RegisterIndex::Eax);
             p.pin(o0, RegisterIndex::Eax);
           }
           Opcode::Math(Math::Irem | Math::Urem) => {
-            let i0 = p.to_var(inst.input[0]);
-            let o0 = p.to_var(inst.output[0]);
+            let i0 = p.to_var(&mut inst.input[0]);
+            let o0 = p.to_var(&mut inst.output[0]);
             p.pin(i0, RegisterIndex::Eax);
             p.pin(o0, RegisterIndex::Edx);
           }
           Opcode::Math(Math::Ishr | Math::Ushr | Math::Shl) => {
-            let i1 = p.to_var(inst.input[1]);
+            let i1 = p.to_var(&mut inst.input[1]);
             p.pin(i1, RegisterIndex::Ecx);
           }
           Opcode::Syscall => p.pin_cc(CallingConvention::Syscall, &inst.input),
@@ -342,24 +353,62 @@ impl PinnedVariables {
     }
   }
 
-  fn to_var(&mut self, v: impl ToVar) -> Variable { v.to_var(self) }
+  fn to_var(&mut self, v: &mut impl ToVar) -> Variable { v.to_var(self) }
+}
+
+fn replace_after(function: &mut Function, loc: InstructionLocation, from: Variable, to: Variable) {
+  for instr in
+    function.blocks[loc.block as usize].instructions[(loc.instruction + 1) as usize..].iter_mut()
+  {
+    for input in instr.input.iter_mut() {
+      if let InstructionInput::Var(v) = input
+        && *v == from
+      {
+        *input = InstructionInput::Var(to);
+      }
+    }
+  }
+
+  for block in &mut function.blocks[loc.block as usize + 1..] {
+    for instr in block.instructions.iter_mut() {
+      for input in instr.input.iter_mut() {
+        if let InstructionInput::Var(v) = input
+          && *v == from
+        {
+          *input = InstructionInput::Var(to);
+        }
+      }
+    }
+  }
 }
 
 trait ToVar {
-  fn to_var(&self, p: &mut PinnedVariables) -> Variable;
+  fn to_var(&mut self, p: &mut PinnedVariables) -> Variable;
 }
 
 impl ToVar for InstructionInput {
-  fn to_var(&self, p: &mut PinnedVariables) -> Variable {
-    match self {
-      InstructionInput::Var(v) => *v,
-      InstructionInput::Imm(_) => panic!("expected variable input, got immediate"),
+  fn to_var(&mut self, p: &mut PinnedVariables) -> Variable {
+    match *self {
+      InstructionInput::Var(v) => v,
+      InstructionInput::Imm(imm) => {
+        let new = Variable::new(
+          {
+            let id = p.next_var;
+            p.next_var += 1;
+            id
+          },
+          VariableSize::Bit64,
+        );
+        *self = InstructionInput::Var(new);
+        p.changes.push(Change::AddVariable { loc: p.current, value: imm, new });
+        new
+      }
     }
   }
 }
 
 impl ToVar for InstructionOutput {
-  fn to_var(&self, p: &mut PinnedVariables) -> Variable {
+  fn to_var(&mut self, _: &mut PinnedVariables) -> Variable {
     match self {
       InstructionOutput::Var(v) => *v,
       InstructionOutput::Syscall => panic!("cannot turn syscall into var"),
