@@ -34,8 +34,6 @@ pub struct FuncBuilder<'a> {
   locals: HashMap<mir::VarId, Variable>,
 }
 
-const DEBUG: bool = false;
-
 impl Compiler {
   pub fn new(mir_ctx: MirContext) -> Self {
     Compiler { mir_ctx, user_funcs: HashMap::new(), functions: vec![] }
