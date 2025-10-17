@@ -160,6 +160,13 @@ impl Variable {
 impl Function {
   pub fn entry(&self) -> BlockId { BlockId::new(0) }
 
+  pub fn blocks(&self) -> impl Iterator<Item = BlockId> {
+    (0..self.blocks.len() as u32).map(BlockId::new)
+  }
+
+  pub fn block(&self, id: BlockId) -> &Block { &self.blocks[id.as_u32() as usize] }
+  pub fn block_mut(&mut self, id: BlockId) -> &mut Block { &mut self.blocks[id.as_u32() as usize] }
+
   pub fn retain_blocks(&mut self, f: impl Fn(BlockId) -> bool) {
     let mut i = 0;
     let mut new_id = 0;

@@ -49,9 +49,7 @@ impl TestFunction {
     diff::diff(before, after)
   }
 
-  /*
   pub fn check(&self, expected: Expect) { expected.assert_eq(&self.function.to_string()); }
-  */
 }
 
 impl fmt::Display for TestFunction {

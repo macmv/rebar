@@ -63,5 +63,5 @@ passes![
   control_flow_graph::ControlFlowGraph,
   // control_flow_hints::ControlFlowHints,
   dominator_tree::DominatorTree,
-  // value_uses::ValueUses
+  value_uses::ValueUses
 ];

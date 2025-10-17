@@ -7,13 +7,10 @@ use rb_codegen::{
 #[macro_export]
 macro_rules! v {
   ($x:expr) => {
-    v!($x, A)
+    v!($x, Bit64)
   };
-  ($x:expr, A) => {
-    Variable { kind: VariableKind::Register(Register::A), id: VariableId::new($x) }
-  };
-  ($x:expr, Memory($addr:expr)) => {
-    Variable { kind: VariableKind::Memory { addr: $addr }, id: VariableId::new($x) }
+  ($x:expr, $size:ident) => {
+    Variable::new($x, rb_codegen::VariableSize::$size)
   };
 }
 
@@ -34,10 +31,7 @@ pub fn parse(asm: &str) -> Function {
         panic!("out of order blocks");
       }
 
-      function.blocks.push(Block {
-        instructions: vec![],
-        terminator:   rb_codegen::TerminatorInstruction::Trap,
-      });
+      function.blocks.push(Block::default());
       continue;
     }
 
