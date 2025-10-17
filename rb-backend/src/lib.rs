@@ -396,24 +396,38 @@ impl FuncBuilder<'_> {
         RValue::nil()
       }
       */
-      mir::Expr::If { cond, then, els: Some(els), ty: _ } => {
+      mir::Expr::If { cond, then, els: Some(els), ref ty } => {
+        let vt = ValueType::for_type(self.ctx, ty);
+
         let (cond, a, b) = self.compile_conditional(cond);
 
+        let then_block = self.builder.current_block().id();
         let else_block = self.builder.new_block().id();
         let merge_block = self.builder.new_block().id();
 
         // Test the if condition and conditionally branch.
         self.builder.instr().branch(cond, else_block, Bit64, a, b);
-        self.compile_expr(then);
+        let then_res = self.compile_expr(then);
         self.builder.current_block().terminate(TerminatorInstruction::Jump(merge_block));
 
         self.builder.switch_to(else_block);
-        self.compile_expr(els);
+        let else_res = self.compile_expr(els);
         self.builder.current_block().terminate(TerminatorInstruction::Jump(merge_block));
 
         self.builder.switch_to(merge_block);
 
-        RValue::nil()
+        if vt == ValueType::Nil {
+          RValue::nil()
+        } else {
+          let then_res = then_res.to_ir(self);
+          let else_res = else_res.to_ir(self);
+          let res = self
+            .builder
+            .current_block()
+            .phi([(then_block, then_res), (else_block, else_res)].into_iter().collect());
+
+          RValue::int(res)
+        }
 
         /*
         } else if dvt.len(self.ctx) == 1 {
