@@ -12,7 +12,6 @@ members = [
   "rb-mir",
   "rb-mir-lower",
   "rb-value",
-  "rb-jit",
   "rb-gc",
   "rb-codegen",
   "rb-codegen-x86",
@@ -39,7 +38,6 @@ rb-typer = { path = "rb-typer" }
 rb-mir = { path = "rb-mir" }
 rb-mir-lower = { path = "rb-mir-lower" }
 rb-value = { path = "rb-value" }
-rb-jit = { path = "rb-jit" }
 rb-gc = { path = "rb-gc" }
 rb-codegen = { path = "rb-codegen" }
 rb-codegen-x86 = { path = "rb-codegen-x86" }

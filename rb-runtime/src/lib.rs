@@ -1,13 +1,5 @@
 use std::sync::Arc;
 
-mod gc;
-mod gc_value;
-mod intrinsics;
-mod owned_arg_parser;
-
-pub use gc_value::{GcArray, GcValue};
-
-use gc::GcArena;
 use rb_diagnostic::{emit, Diagnostic, Source, SourceId, Sources, Span};
 use rb_syntax::cst;
 
@@ -17,8 +9,6 @@ const NUM_CPUS: usize = 32;
 
 pub struct RuntimeEnvironment {
   pub env: Environment,
-
-  gc: GcArena,
 }
 
 pub fn eval(src: &str) {
@@ -68,7 +58,7 @@ pub fn eval(src: &str) {
   // cranelift IR. Collect all the functions, split them into chunks, and compile
   // them on a thread pool.
 
-  eval_mir(env, functions);
+  compile_mir(env, functions);
 }
 
 pub fn run(
@@ -142,28 +132,9 @@ fn compile_mir(env: RuntimeEnvironment, functions: Vec<rb_mir::ast::Function>) {
   compiler.finish();
 }
 
-fn eval_mir(env: RuntimeEnvironment, functions: Vec<rb_mir::ast::Function>) {
-  // NB: We clone the `MirContext`. One copy is stored in a thread local, and the
-  // other is used by the JIT. If we made `jit.eval()` consume the `jit` before
-  // calling the native code, then we could avoid this clone.
-  let mut jit = rb_jit::JIT::new(env.env.mir_ctx.clone(), env.intrinsics());
-
-  for func in &functions {
-    jit.declare_function(func);
-  }
-
-  let compiled = run_parallel(&functions, || jit.new_thread(), |ctx, f| ctx.compile_function(f));
-
-  let mut function_ids = vec![];
-  for func in compiled.into_iter() {
-    function_ids.push(jit.define_function(func).unwrap());
-  }
-
-  jit.finalize();
-  jit.eval(*function_ids.last().unwrap());
-}
-
 impl RuntimeEnvironment {
+  pub fn new(env: Environment) -> Self { RuntimeEnvironment { env } }
+
   fn build(
     &mut self,
     hir: &rb_hir::ast::SourceFile,
