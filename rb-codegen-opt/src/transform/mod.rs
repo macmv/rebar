@@ -76,8 +76,7 @@ macro_rules! passes {
 }
 
 passes![
-  // add_to_inc::AddToInc,
-  // constant_fold::ConstantFold,
+  constant_fold::ConstantFold,
   // eliminate_empty_blocks::EliminateEmptyBlocks,
   // eliminate_nop_assign::EliminateNopAssign,
   // eliminate_nop_math::EliminateNopMath,

@@ -165,6 +165,11 @@ impl ValueUses {
     self.variables.get_mut(&var).unwrap().required = true;
   }
 
+  pub fn actual_value(&self, input: InstructionInput) -> VariableValue {
+    let v = self.input_to_value(input);
+    self.simplify_value(&mut HashSet::new(), &mut HashSet::new(), v)
+  }
+
   fn simplify_value(
     &self,
     phis: &mut HashSet<BlockId>,
@@ -226,7 +231,7 @@ impl ValueUses {
   }
 
   #[track_caller]
-  fn input_to_value(&mut self, input: InstructionInput) -> VariableValue {
+  fn input_to_value(&self, input: InstructionInput) -> VariableValue {
     match input {
       InstructionInput::Var(var) => VariableValue::Variable(var),
       InstructionInput::Imm(imm) => VariableValue::Direct(imm),
