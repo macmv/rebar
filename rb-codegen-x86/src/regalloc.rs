@@ -15,9 +15,11 @@ struct Lifetimes {
   lifetimes: Vec<Option<Lifetime>>,
 }
 
+#[derive(Default)]
 struct PinnedVariables {
   pinned: Vec<Option<RegisterIndex>>,
 
+  current: InstructionLocation,
   changes: Vec<Change>,
 }
 
@@ -33,7 +35,7 @@ struct Lifetime {
   last_use:  InstructionLocation,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct InstructionLocation {
   pub block:       u32,
   pub instruction: u32,
@@ -264,11 +266,11 @@ impl PinnedVariables {
   }
 
   fn solve_inner(function: &Function) -> Self {
-    let mut p = PinnedVariables { pinned: vec![], changes: vec![] };
+    let mut p = PinnedVariables::default();
 
     for (b, block) in function.blocks.iter().enumerate() {
       for (i, inst) in block.instructions.iter().enumerate() {
-        let loc = InstructionLocation { block: b as u32, instruction: i as u32 };
+        p.current = InstructionLocation { block: b as u32, instruction: i as u32 };
 
         match inst.opcode {
           Opcode::Math(
@@ -276,20 +278,20 @@ impl PinnedVariables {
           ) => {
             let i0 = p.to_var(inst.input[0]);
             let o0 = p.to_var(inst.output[0]);
-            p.pin(loc, i0, RegisterIndex::Eax);
-            p.pin(loc, o0, RegisterIndex::Eax);
+            p.pin(i0, RegisterIndex::Eax);
+            p.pin(o0, RegisterIndex::Eax);
           }
           Opcode::Math(Math::Irem | Math::Urem) => {
             let i0 = p.to_var(inst.input[0]);
             let o0 = p.to_var(inst.output[0]);
-            p.pin(loc, i0, RegisterIndex::Eax);
-            p.pin(loc, o0, RegisterIndex::Edx);
+            p.pin(i0, RegisterIndex::Eax);
+            p.pin(o0, RegisterIndex::Edx);
           }
           Opcode::Math(Math::Ishr | Math::Ushr | Math::Shl) => {
             let i1 = p.to_var(inst.input[1]);
-            p.pin(loc, i1, RegisterIndex::Ecx);
+            p.pin(i1, RegisterIndex::Ecx);
           }
-          Opcode::Syscall => p.pin_cc(loc, CallingConvention::Syscall, &inst.input),
+          Opcode::Syscall => p.pin_cc(CallingConvention::Syscall, &inst.input),
           _ => {}
         }
       }
@@ -302,12 +304,7 @@ impl PinnedVariables {
     self.pinned.get(var.id() as usize).copied().flatten()
   }
 
-  fn pin_cc(
-    &mut self,
-    loc: InstructionLocation,
-    cc: CallingConvention,
-    inputs: &[InstructionInput],
-  ) {
+  fn pin_cc(&mut self, cc: CallingConvention, inputs: &[InstructionInput]) {
     match cc {
       CallingConvention::Syscall => {
         let mut arg_index = 0;
@@ -321,7 +318,7 @@ impl PinnedVariables {
               4 => Register::RCX,
               _ => panic!("too many syscall arguments"),
             };
-            self.pin(loc, *v, reg.index);
+            self.pin(*v, reg.index);
             arg_index += 1;
           } else {
             panic!("expected variable input for syscall");
@@ -331,7 +328,7 @@ impl PinnedVariables {
     }
   }
 
-  fn pin(&mut self, loc: InstructionLocation, var: Variable, index: RegisterIndex) {
+  fn pin(&mut self, var: Variable, index: RegisterIndex) {
     if self.pinned.len() <= var.id() as usize {
       self.pinned.resize(var.id() as usize + 1, None);
     }
@@ -339,7 +336,7 @@ impl PinnedVariables {
     if let Some(pin) = self.pinned[var.id() as usize]
       && pin != index
     {
-      self.changes.push(Change::AddCopy { loc, from: var });
+      self.changes.push(Change::AddCopy { loc: self.current, from: var });
     } else {
       self.pinned[var.id() as usize] = Some(index);
     }
