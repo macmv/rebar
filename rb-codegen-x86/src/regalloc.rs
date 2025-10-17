@@ -251,8 +251,10 @@ impl PinnedVariables {
       self.pinned.resize(var.id() as usize + 1, None);
     }
 
-    if self.pinned[var.id() as usize].is_some() {
-      panic!("variable {var:?} is already pinned");
+    if let Some(pin) = self.pinned[var.id() as usize]
+      && pin != index
+    {
+      panic!("variable {var:?} is already pinned to {pin:?}, cannot pin to {index:?}");
     }
 
     self.pinned[var.id() as usize] = Some(index);
