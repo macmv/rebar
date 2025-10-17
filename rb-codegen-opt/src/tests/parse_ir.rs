@@ -1,8 +1,8 @@
-use std::collections::BTreeMap;
-
 use rb_codegen::{
-  Block, BlockId, Function, Instruction, Math, Opcode, Phi, Signature, Variable, VariableSize,
+  Block, BlockId, Function, Instruction, InstructionInput, InstructionOutput, Math, Opcode, Phi,
+  Signature, Variable, VariableSize,
 };
+use smallvec::SmallVec;
 
 #[macro_export]
 macro_rules! v {
@@ -73,11 +73,38 @@ pub fn parse(asm: &str) -> Function {
       _ => panic!("unknown instruction: {line}"),
     };
 
-    function.blocks.last_mut().unwrap().instructions.push(Instruction {
-      opcode,
-      input: smallvec![],
-      output: smallvec![],
-    });
+    let mut input: SmallVec<[InstructionInput; 2]> = smallvec![];
+    let mut output: SmallVec<[InstructionOutput; 2]> = smallvec![];
+
+    let mut in_input = false;
+    for mut item in args.split(' ') {
+      match item.trim() {
+        "" => continue,
+        "=" => {
+          in_input = true;
+          continue;
+        }
+        _ => {}
+      }
+
+      if let Some(v) = item.strip_suffix(',') {
+        item = v;
+      }
+
+      if let Some(v) = parse_variable_id(item) {
+        if in_input {
+          input.push(v.into());
+        } else {
+          output.push(v.into());
+        }
+      } else if in_input && let Some(imm) = parse_hex(item) {
+        input.push(imm.into());
+      } else {
+        panic!("unknown argument: {item}");
+      }
+    }
+
+    function.blocks.last_mut().unwrap().instructions.push(Instruction { opcode, input, output });
   }
 
   function
@@ -99,28 +126,28 @@ fn parse_phi(s: &str) -> Phi {
         BlockId::new(block.parse::<u32>().unwrap())
       };
 
-      (block, parse_variable_id(rhs))
+      (block, parse_variable_id(rhs).unwrap())
     })
     .collect();
 
-  Phi { to: parse_variable_id(to.trim()), from: ids }
+  Phi { to: parse_variable_id(to.trim()).unwrap(), from: ids }
 }
 
-fn parse_hex(s: &str) -> Option<u16> {
+fn parse_hex(s: &str) -> Option<u64> {
   let s = s.strip_prefix("0x")?;
-  Some(u16::from_str_radix(s, 16).ok()?)
+  Some(u64::from_str_radix(s, 16).ok()?)
 }
 
-fn parse_variable_id(s: &str) -> Variable {
+fn parse_variable_id(s: &str) -> Option<Variable> {
   let size = match s.chars().next() {
     Some('r') => VariableSize::Bit64,
     Some('e') => VariableSize::Bit32,
     Some('x') => VariableSize::Bit16,
     Some('l') => VariableSize::Bit8,
     Some('b') => VariableSize::Bit1,
-    _ => panic!("unknown variable: {s}"),
+    _ => return None,
   };
 
-  let id = s[1..].parse::<u32>().unwrap();
-  Variable::new(id, size)
+  let id = s[1..].parse::<u32>().ok()?;
+  Some(Variable::new(id, size))
 }
