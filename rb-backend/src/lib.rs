@@ -76,7 +76,9 @@ impl ThreadCtx<'_> {
   }
 
   pub fn compile_function(&mut self, mir: &mir::Function) -> Function {
-    self.new_function(mir).translate()
+    let mut function = self.new_function(mir).translate();
+    rb_codegen_opt::optimize(&mut function);
+    function
   }
 }
 

@@ -686,6 +686,7 @@ name = "rb-backend"
 version = "0.1.0"
 dependencies = [
  "rb-codegen",
+ "rb-codegen-opt",
  "rb-codegen-x86",
  "rb-mir",
  "rb-typer",
@@ -707,6 +708,14 @@ dependencies = [
 name = "rb-codegen"
 version = "0.1.0"
 dependencies = [
+ "smallvec",
+]
+
+[[package]]
+name = "rb-codegen-opt"
+version = "0.1.0"
+dependencies = [
+ "rb-codegen",
  "smallvec",
 ]
 

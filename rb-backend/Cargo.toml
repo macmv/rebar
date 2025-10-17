@@ -8,4 +8,5 @@ rb-typer.workspace = true
 rb-mir.workspace = true
 rb-value.workspace = true
 rb-codegen.workspace = true
+rb-codegen-opt.workspace = true
 rb-codegen-x86.workspace = true
