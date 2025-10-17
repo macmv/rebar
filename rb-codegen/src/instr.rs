@@ -8,6 +8,7 @@ use crate::{
 pub struct FunctionBuilder {
   next_variable: u32,
   function:      Function,
+  block:         BlockId,
 }
 
 pub struct BlockBuilder<'a> {
@@ -31,6 +32,7 @@ impl FunctionBuilder {
           terminator:   crate::TerminatorInstruction::Trap,
         }],
       },
+      block:         BlockId(0),
     }
   }
 
@@ -59,25 +61,28 @@ impl FunctionBuilder {
       .blocks
       .push(Block { instructions: vec![], terminator: crate::TerminatorInstruction::Trap });
 
-    self.block(id)
+    self.block = id;
+    self.current_block()
   }
 
   pub fn block(&mut self, id: BlockId) -> BlockBuilder<'_> {
     BlockBuilder { function: self, block: id }
   }
 
-  pub fn last_block(&mut self) -> BlockBuilder<'_> {
-    let id = BlockId((self.function.blocks.len() - 1) as u32);
-    self.block(id)
-  }
+  pub fn switch_to(&mut self, id: BlockId) { self.block = id; }
+  pub fn current_block(&mut self) -> BlockBuilder<'_> { self.block(self.block) }
 
   pub fn instr(&mut self) -> InstrBuilder<'_> {
-    InstrBuilder { block: self.last_block().id(), function: self }
+    InstrBuilder { block: self.current_block().id(), function: self }
   }
 }
 
 impl BlockBuilder<'_> {
   pub fn id(&self) -> BlockId { self.block }
+
+  pub fn terminate(self, term: crate::TerminatorInstruction) {
+    self.function.function.blocks[self.block.0 as usize].terminator = term;
+  }
 
   pub fn instr(&mut self) -> InstrBuilder<'_> {
     InstrBuilder { function: self.function, block: self.block }
