@@ -56,6 +56,26 @@ pub fn parse(asm: &str) -> Function {
       "math(not)" => Opcode::Math(Math::Not),
       "math(neg)" => Opcode::Math(Math::Neg),
 
+      "syscall" => {
+        let mut input = smallvec![];
+        for ret in args.split(',') {
+          let ret = ret.trim();
+          if ret.is_empty() {
+            continue;
+          }
+
+          let var = parse_variable_id(ret).unwrap();
+          input.push(InstructionInput::Var(var));
+        }
+
+        function.blocks.last_mut().unwrap().instructions.push(Instruction {
+          opcode: Opcode::Syscall,
+          input,
+          output: smallvec![InstructionOutput::Syscall],
+        });
+        continue;
+      }
+
       "jump" => {
         let args = args.strip_prefix("to block ").unwrap();
         let target = args.parse::<u32>().unwrap();

@@ -67,4 +67,17 @@ mod tests {
       "],
     );
   }
+
+  #[test]
+  fn keep_syscall() {
+    check_transform(
+      "eliminate_unused_vars",
+      expect![@"
+          block 0:
+            mov r0 = 0x00
+            syscall r0
+            trap
+      "],
+    );
+  }
 }
