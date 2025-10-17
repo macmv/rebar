@@ -1,7 +1,7 @@
 use crate::FuncBuilder;
 
 use rb_codegen::{Variable, VariableSize::*};
-use rb_value::ValueType;
+use rb_value::{ParamKind, ValueType};
 
 #[derive(Debug, Clone)]
 pub enum RValue {
@@ -149,46 +149,24 @@ impl RValue {
       }
     }
   }
+  */
 
   /// Returns the compact for of this value. This is used wherever the static
   /// type of the value is simple (ie, not a union), and when the number of
   /// values can change depending on the type (so this works for function
   /// arguments, but not for block arguments).
-  fn to_compact_ir(&self, func: &mut FuncBuilder) -> Slot {
+  fn to_compact_ir(&self, func: &mut FuncBuilder) -> Variable {
     match self {
       Self::TypedConst(_, items) => {
         if items.is_empty() {
-          Slot::Empty
+          panic!();
         } else if items.len() == 1 {
-          let ir = func.builder.ins().iconst(ir::types::I64, items[0]);
-          Slot::Single(ir)
+          func.builder.instr().mov(Bit64, items[0])
         } else {
-          let slot = Slot::new_multiple(&mut func.builder, items.len());
-
-          for (i, v) in items.iter().enumerate() {
-            let ir = func.builder.ins().iconst(ir::types::I64, *v);
-            slot.set(&mut func.builder, i, ir);
-          }
-
-          slot
+          panic!();
         }
       }
       Self::TypedDyn(_, slot) => *slot,
-      Self::Untyped(_) => panic!("cannot convert an untyped value to compact form"),
-
-      // FIXME: Add a `Slot` variant for this.
-      Self::TypedPtr(ty, ptr) => {
-        let len = ty.len(&func.ctx);
-        let slot = Slot::new_multiple(&mut func.builder, len as usize);
-
-        for i in 0..len {
-          let v = func.builder.ins().load(ir::types::I64, MemFlags::new(), *ptr, i as i32 * 8);
-          slot.set(&mut func.builder, i as usize, v);
-        }
-
-        slot
-      }
-      Self::UntypedPtr(_, _) => panic!("cannot convert an untyped value to compact form"),
     }
   }
 
@@ -196,12 +174,14 @@ impl RValue {
   /// whenever the length of arguments can change (for example in a function
   /// call). For block arguments, which must have a consistent size, use
   /// `to_sized_ir`.
-  pub fn to_ir(&self, kind: ParamKind, func: &mut FuncBuilder) -> Slot {
+  pub fn to_ir(&self, kind: ParamKind, func: &mut FuncBuilder) -> Variable {
     match kind {
       ParamKind::Compact => self.to_compact_ir(func),
+      _ => todo!(),
+      /*
       ParamKind::Extended(len) => self.to_extended_ir(func, Some(len)),
       ParamKind::Unsized => self.to_extended_ir(func, None),
+      */
     }
   }
-  */
 }

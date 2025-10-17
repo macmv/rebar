@@ -111,16 +111,10 @@ impl FuncBuilder<'_> {
   fn compile_stmt(&mut self, stmt: mir::StmtId) -> RValue {
     match self.mir.stmts[stmt] {
       mir::Stmt::Expr(expr) => self.compile_expr(expr),
-      mir::Stmt::Let(_id, ref _ty, expr) => {
-        let _value = self.compile_expr(expr);
-        /*
+      mir::Stmt::Let(id, ref ty, expr) => {
+        let value = self.compile_expr(expr);
         let ir = value.to_ir(DynamicValueType::for_type(self.ctx, &ty).param_kind(self.ctx), self);
-
-        let slot = Slot::<Variable>::new(self, ir.len());
-
-        slot.copy_from(&mut self.builder, &ir);
-        self.locals.insert(id, slot);
-        */
+        self.locals.insert(id, ir);
 
         RValue::nil()
       }
@@ -140,31 +134,15 @@ impl FuncBuilder<'_> {
 
       mir::Expr::Array(_, _) => todo!("array literals"),
 
-      mir::Expr::Local(id, ref _ty) => {
-        let _var = &self.locals[&id];
+      mir::Expr::Local(id, ref ty) => {
+        let var = self.locals[&id];
 
-        todo!()
-        /*
         let dvt = DynamicValueType::for_type(self.ctx, ty);
-        assert_eq!(var.len() as u32, dvt.len(self.ctx), "variable length mismatch for type {ty:?}");
 
         match dvt {
-          DynamicValueType::Const(ty) => RValue::TypedDyn(
-            ty,
-            match var {
-              Slot::Empty => Slot::Empty,
-              Slot::Single(v) => Slot::Single(self.builder.use_var(*v)),
-              Slot::Multiple(len, slot) => Slot::Multiple(*len, slot.clone()),
-            },
-          ),
-
-          DynamicValueType::Union(_) => RValue::Untyped(match var {
-            Slot::Empty => Slot::Empty,
-            Slot::Single(v) => Slot::Single(self.builder.use_var(*v)),
-            Slot::Multiple(len, slot) => Slot::Multiple(*len, slot.clone()),
-          }),
+          DynamicValueType::Const(ty) => RValue::TypedDyn(ty, var),
+          _ => todo!(),
         }
-        */
       }
 
       mir::Expr::UserFunction(id, _) => RValue::TypedConst(ValueType::UserFunction, vec![id.0]),
