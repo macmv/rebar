@@ -14,6 +14,7 @@ members = [
   "rb-value",
   "rb-gc",
   "rb-codegen",
+  "rb-codegen-opt-macros",
   "rb-codegen-opt",
   "rb-codegen-x86",
   "rb-backend",
@@ -41,6 +42,7 @@ rb-mir-lower = { path = "rb-mir-lower" }
 rb-value = { path = "rb-value" }
 rb-gc = { path = "rb-gc" }
 rb-codegen = { path = "rb-codegen" }
+rb-codegen-opt-macros = { path = "rb-codegen-opt-macros" }
 rb-codegen-opt = { path = "rb-codegen-opt" }
 rb-codegen-x86 = { path = "rb-codegen-x86" }
 rb-backend = { path = "rb-backend" }
