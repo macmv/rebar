@@ -427,7 +427,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           Instruction::new(Opcode::JMP).with_immediate(Immediate::i8(target.as_u32() as u8 + 3)),
         )
       }
-      rb_codegen::TerminatorInstruction::Return => builder.instr(Instruction::new(Opcode::RET)),
+      rb_codegen::TerminatorInstruction::Return(_) => builder.instr(Instruction::new(Opcode::RET)),
       rb_codegen::TerminatorInstruction::Trap => builder.instr(Instruction::new(Opcode::INT3)),
     }
   }
@@ -554,6 +554,7 @@ mod tests {
     let function = rb_codegen::Function {
       sig:    Signature { args: vec![], rets: vec![] },
       blocks: vec![rb_codegen::Block {
+        phis:         vec![],
         instructions: vec![
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Move,
@@ -615,6 +616,7 @@ mod tests {
     let function = rb_codegen::Function {
       sig:    Signature { args: vec![], rets: vec![] },
       blocks: vec![rb_codegen::Block {
+        phis:         vec![],
         instructions: vec![
           // write 1 reloc.foo 14
           rb_codegen::Instruction {
