@@ -84,8 +84,6 @@ impl ThreadCtx<'_> {
 
 impl FuncBuilder<'_> {
   fn translate(mut self) -> Function {
-    let _entry_block = self.builder.new_block();
-
     for &stmt in &self.mir.items {
       let _res = self.compile_stmt(stmt);
       // self.def_var(return_variable, res.to_ir());
