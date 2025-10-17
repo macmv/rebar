@@ -262,12 +262,10 @@ mod tests {
         r3 = phi(block 0 -> r0, block 1 -> r5)
         mov r4 = r2
         math(add) r5 = r4, 0x02
-        mov r6 r5
+        mov r6 = r5
         jump to block 1
       "#,
     );
-
-    println!("{}", ast);
 
     let vu = ast.pass::<ValueUses>();
 
@@ -281,13 +279,15 @@ mod tests {
 
     ast.check(expect![@r#"
       block 0:
-        mov A(v0) 0x00
+        mov r0 = 0x00
+        mov r1 = r0
         jump to block 1
       block 1:
-        [0x80](v1) = phi(block 0 -> v?, block 1 -> v4)
-        A(v2) = phi(block 0 -> v0, block 1 -> v3)
-        math A(v3) = A(v2) Add 0x02
-        mov [0x80](v4) A(v3)
+        r2 = phi(block 0 -> r1, block 1 -> r6)
+        r3 = phi(block 0 -> r0, block 1 -> r5)
+        mov r4 = r2
+        math(add) r5 = r4, 0x02
+        mov r6 = r5
         jump to block 1
     "#]);
   }

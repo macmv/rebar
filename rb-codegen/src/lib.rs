@@ -245,12 +245,28 @@ impl fmt::Display for Function {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     for (i, block) in self.blocks.iter().enumerate() {
       writeln!(f, "block {}:", i)?;
+      for phi in &block.phis {
+        writeln!(f, "  {}", phi)?;
+      }
       for instr in &block.instructions {
         writeln!(f, "  {}", instr)?;
       }
       writeln!(f, "  {}", block.terminator)?;
     }
     Ok(())
+  }
+}
+
+impl fmt::Display for Phi {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{} = phi(", self.to)?;
+    for (i, from) in self.from.iter().enumerate() {
+      if i != 0 {
+        write!(f, ", ")?;
+      }
+      write!(f, "{} -> {}", from.0, from.1)?;
+    }
+    write!(f, ")")
   }
 }
 
@@ -287,7 +303,7 @@ impl fmt::Display for TerminatorInstruction {
 impl fmt::Display for InstructionOutput {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      InstructionOutput::Var(v) => write!(f, "{:?}", v),
+      InstructionOutput::Var(v) => write!(f, "{v}"),
       InstructionOutput::Syscall => write!(f, "syscall"),
     }
   }
@@ -296,8 +312,8 @@ impl fmt::Display for InstructionOutput {
 impl fmt::Display for InstructionInput {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      InstructionInput::Var(v) => write!(f, "{:?}", v),
-      InstructionInput::Imm(i) => write!(f, "#{}", i),
+      InstructionInput::Var(v) => write!(f, "{v}"),
+      InstructionInput::Imm(i) => write!(f, "{i:#04x}"),
     }
   }
 }
