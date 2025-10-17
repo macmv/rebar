@@ -149,6 +149,14 @@ impl ValueUses {
 
       Opcode::Branch(_, _) => {}
     }
+
+    for output in &instr.output {
+      if let InstructionOutput::Var(var) = output {
+        if !self.variables.contains_key(var) {
+          self.set(*var, VariableValue::Unknown);
+        }
+      }
+    }
   }
 
   pub fn variable(&self, var: Variable) -> &VariableInfo {
