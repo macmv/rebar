@@ -38,11 +38,11 @@ impl Builder {
   }
 }
 
-pub fn lower(function: rb_codegen::Function) -> Builder {
+pub fn lower(mut function: rb_codegen::Function) -> Builder {
   let mut builder = Builder::default();
 
   let mut reg = VariableRegisters::new();
-  reg.pass(&function);
+  reg.pass(&mut function);
 
   for block in &function.blocks {
     for inst in &block.instructions {
@@ -231,7 +231,42 @@ pub fn lower(function: rb_codegen::Function) -> Builder {
                 }
               }
             }
-            _ => todo!(),
+
+            // mov reg, reg
+            (InstructionOutput::Var(o), InstructionInput::Var(i)) => {
+              debug_assert_eq!(
+                reg.get(o).size,
+                reg.get(i).size,
+                "move must have the same size for input and output"
+              );
+
+              let o = reg.get(o);
+              let i = reg.get(i);
+              match o.size {
+                RegisterSize::Bit8 => builder.instr(
+                  Instruction::new(Opcode::MOV_MR_8).with_mod(0b11, o.index).with_reg(i.index),
+                ),
+                RegisterSize::Bit16 => builder.instr(
+                  Instruction::new(Opcode::MOV_MR_8)
+                    .with_prefix(Prefix::OperandSizeOverride)
+                    .with_mod(0b11, o.index)
+                    .with_reg(i.index),
+                ),
+                RegisterSize::Bit32 => builder.instr(
+                  Instruction::new(Opcode::MOV_MR_32.with_rd(o.index))
+                    .with_mod(0b11, o.index)
+                    .with_reg(i.index),
+                ),
+                RegisterSize::Bit64 => builder.instr(
+                  Instruction::new(Opcode::MOV_MR_32.with_rd(o.index))
+                    .with_prefix(Prefix::RexW)
+                    .with_mod(0b11, o.index)
+                    .with_reg(i.index),
+                ),
+              }
+            }
+
+            _ => todo!("mov {inst:?}"),
           }
         }
         // syscall

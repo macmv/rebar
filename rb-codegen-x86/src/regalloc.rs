@@ -3,6 +3,7 @@ use std::fmt;
 use rb_codegen::{
   Function, InstructionInput, InstructionOutput, Math, Opcode, Variable, VariableSize,
 };
+use smallvec::smallvec;
 
 use crate::instruction::RegisterIndex;
 
@@ -16,6 +17,12 @@ struct Lifetimes {
 
 struct PinnedVariables {
   pinned: Vec<Option<RegisterIndex>>,
+
+  changes: Vec<Change>,
+}
+
+enum Change {
+  AddCopy { loc: InstructionLocation, from: Variable },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,9 +60,9 @@ pub enum CallingConvention {
 impl VariableRegisters {
   pub fn new() -> Self { VariableRegisters { registers: vec![] } }
 
-  pub fn pass(&mut self, function: &Function) {
-    let lifetimes = Lifetimes::solve(function);
+  pub fn pass(&mut self, function: &mut Function) {
     let pinned = PinnedVariables::solve(function);
+    let lifetimes = Lifetimes::solve(function);
     let mut used = [Option::<Variable>::None; 16];
 
     for (b, block) in function.blocks.iter().enumerate() {
@@ -190,26 +197,94 @@ impl Lifetimes {
 }
 
 impl PinnedVariables {
-  fn solve(function: &Function) -> Self {
-    let mut p = PinnedVariables { pinned: vec![] };
+  fn solve(function: &mut Function) -> Self {
+    loop {
+      let pinned = Self::solve_inner(function);
 
-    for block in function.blocks.iter() {
-      for inst in block.instructions.iter() {
+      if pinned.changes.is_empty() {
+        return pinned;
+      }
+
+      for change in pinned.changes.iter().rev() {
+        match *change {
+          Change::AddCopy { loc, from } => {
+            let to = Variable::new(
+              function
+                .blocks
+                .iter()
+                .flat_map(|b| {
+                  b.instructions.iter().flat_map(|i| {
+                    i.output.iter().filter_map(|o| {
+                      if let InstructionOutput::Var(v) = o { Some(v.id()) } else { None }
+                    })
+                  })
+                })
+                .max()
+                .unwrap(),
+              from.size(),
+            );
+
+            function.blocks[loc.block as usize].instructions.insert(
+              loc.instruction as usize,
+              rb_codegen::Instruction {
+                opcode: Opcode::Move,
+                input:  smallvec![InstructionInput::Var(from)],
+                output: smallvec![InstructionOutput::Var(to)],
+              },
+            );
+
+            for instr in function.blocks[loc.block as usize].instructions
+              [(loc.instruction + 1) as usize..]
+              .iter_mut()
+            {
+              for input in instr.input.iter_mut() {
+                if let InstructionInput::Var(v) = input
+                  && *v == from
+                {
+                  *input = InstructionInput::Var(to);
+                }
+              }
+            }
+
+            for block in &mut function.blocks[loc.block as usize + 1..] {
+              for instr in block.instructions.iter_mut() {
+                for input in instr.input.iter_mut() {
+                  if let InstructionInput::Var(v) = input
+                    && *v == from
+                  {
+                    *input = InstructionInput::Var(to);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  fn solve_inner(function: &Function) -> Self {
+    let mut p = PinnedVariables { pinned: vec![], changes: vec![] };
+
+    for (b, block) in function.blocks.iter().enumerate() {
+      for (i, inst) in block.instructions.iter().enumerate() {
+        let loc = InstructionLocation { block: b as u32, instruction: i as u32 };
+
         match inst.opcode {
           Opcode::Math(
             Math::Imul | Math::Umul | Math::Idiv | Math::Udiv | Math::Neg | Math::Not,
           ) => {
-            p.pin(inst.input[0].unwrap_var(), RegisterIndex::Eax);
-            p.pin(inst.output[0].unwrap_var(), RegisterIndex::Eax);
+            p.pin(loc, inst.input[0].unwrap_var(), RegisterIndex::Eax);
+            p.pin(loc, inst.output[0].unwrap_var(), RegisterIndex::Eax);
           }
           Opcode::Math(Math::Irem | Math::Urem) => {
-            p.pin(inst.input[0].unwrap_var(), RegisterIndex::Eax);
-            p.pin(inst.output[0].unwrap_var(), RegisterIndex::Edx);
+            p.pin(loc, inst.input[0].unwrap_var(), RegisterIndex::Eax);
+            p.pin(loc, inst.output[0].unwrap_var(), RegisterIndex::Edx);
           }
           Opcode::Math(Math::Ishr | Math::Ushr | Math::Shl) => {
-            p.pin(inst.input[1].unwrap_var(), RegisterIndex::Ecx);
+            p.pin(loc, inst.input[1].unwrap_var(), RegisterIndex::Ecx);
           }
-          Opcode::Syscall => p.pin_cc(CallingConvention::Syscall, &inst.input),
+          Opcode::Syscall => p.pin_cc(loc, CallingConvention::Syscall, &inst.input),
           _ => {}
         }
       }
@@ -222,7 +297,12 @@ impl PinnedVariables {
     self.pinned.get(var.id() as usize).copied().flatten()
   }
 
-  fn pin_cc(&mut self, cc: CallingConvention, inputs: &[InstructionInput]) {
+  fn pin_cc(
+    &mut self,
+    loc: InstructionLocation,
+    cc: CallingConvention,
+    inputs: &[InstructionInput],
+  ) {
     match cc {
       CallingConvention::Syscall => {
         let mut arg_index = 0;
@@ -236,7 +316,7 @@ impl PinnedVariables {
               4 => Register::RCX,
               _ => panic!("too many syscall arguments"),
             };
-            self.pin(*v, reg.index);
+            self.pin(loc, *v, reg.index);
             arg_index += 1;
           } else {
             panic!("expected variable input for syscall");
@@ -246,7 +326,7 @@ impl PinnedVariables {
     }
   }
 
-  fn pin(&mut self, var: Variable, index: RegisterIndex) {
+  fn pin(&mut self, loc: InstructionLocation, var: Variable, index: RegisterIndex) {
     if self.pinned.len() <= var.id() as usize {
       self.pinned.resize(var.id() as usize + 1, None);
     }
@@ -254,10 +334,10 @@ impl PinnedVariables {
     if let Some(pin) = self.pinned[var.id() as usize]
       && pin != index
     {
-      panic!("variable {var:?} is already pinned to {pin:?}, cannot pin to {index:?}");
+      self.changes.push(Change::AddCopy { loc, from: var });
+    } else {
+      self.pinned[var.id() as usize] = Some(index);
     }
-
-    self.pinned[var.id() as usize] = Some(index);
   }
 }
 
