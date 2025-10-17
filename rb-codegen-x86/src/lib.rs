@@ -18,9 +18,10 @@ mod regalloc;
 
 #[derive(Default)]
 pub struct Builder {
-  pub relocs: Vec<Rel>,
-  pub jumps:  Vec<Jump>,
-  pub text:   Vec<u8>,
+  pub relocs:        Vec<Rel>,
+  pub jumps:         Vec<Jump>,
+  pub block_offsets: Vec<u64>,
+  pub text:          Vec<u8>,
 }
 
 pub struct Jump {
@@ -30,6 +31,56 @@ pub struct Jump {
 }
 
 impl Builder {
+  fn finish(mut self) -> Self {
+    self.fill_jumps();
+
+    self
+  }
+
+  fn fill_jumps(&mut self) {
+    for jump in self.jumps.iter().rev() {
+      let target_offset = self.block_offsets[jump.target.as_u32() as usize];
+      let jump_offset = jump.offset;
+
+      let relative_offset =
+        i32::try_from((target_offset as i64) - (jump_offset as i64 + 1)).unwrap();
+      match (jump.size, i8::try_from(relative_offset)) {
+        (RegisterSize::Bit8, Ok(rel)) => {
+          self.text[jump_offset as usize..jump_offset as usize + 1]
+            .copy_from_slice(&rel.to_le_bytes());
+        }
+        // An 8-bit offset wasn't possible, so we re-encode it to a 32-bit offset.
+        (RegisterSize::Bit8, Err(_)) => {
+          let new_opcode: &[u8] = match self.text[jump_offset as usize - 1] {
+            0xeb => &[0xe9], // jmp
+            0xe3 => panic!("cannot re-encode JECXZ to a 32-bit offset"),
+            0x77 => &[0x0f, 0x87], // ja
+            0x73 => &[0x0f, 0x83], // jae
+            0x72 => &[0x0f, 0x82], // jb
+            0x76 => &[0x0f, 0x86], // jbe
+            opcode => panic!("unsupported 8-bit jump opcode {opcode:#x}"),
+          };
+
+          self
+            .text
+            .splice(jump_offset as usize - 1..jump_offset as usize, new_opcode.iter().copied());
+          self.text.splice(
+            jump_offset as usize + new_opcode.len() - 1..jump_offset as usize + new_opcode.len(),
+            relative_offset.to_le_bytes(),
+          );
+          // TODO: Any jumps in the list before where we are right now need to
+          // be adjusted.
+        }
+        (RegisterSize::Bit32, _) => {
+          self.text[jump_offset as usize..jump_offset as usize + 4]
+            .copy_from_slice(&relative_offset.to_le_bytes());
+        }
+
+        _ => panic!("unsupported jump size {:?}", jump.size),
+      }
+    }
+  }
+
   fn reloc(&mut self, symbol: u32, offset: u64, addend: i64) {
     self.relocs.push(Rel {
       r_offset: self.text.len() as u64 + offset,
@@ -38,6 +89,8 @@ impl Builder {
       r_addend: addend,
     });
   }
+
+  fn start_block(&mut self) { self.block_offsets.push(self.text.len() as u64); }
 
   fn jmp(&mut self, target: BlockId, size: RegisterSize) {
     self.jumps.push(Jump { size, offset: self.text.len() as u64 + 1, target });
@@ -56,6 +109,8 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
   reg.pass(&mut function);
 
   for block in &function.blocks {
+    builder.start_block();
+
     for inst in &block.instructions {
       match inst.opcode {
         rb_codegen::Opcode::Math(
@@ -330,7 +385,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
     }
   }
 
-  builder
+  builder.finish()
 }
 
 fn encode_binary_reg_imm(
