@@ -65,6 +65,23 @@ pub fn parse(asm: &str) -> Function {
         continue;
       }
 
+      "return" => {
+        let mut rets = smallvec![];
+        for ret in args.split(',') {
+          let ret = ret.trim();
+          if ret.is_empty() {
+            continue;
+          }
+
+          let var = parse_variable_id(ret).unwrap();
+          rets.push(InstructionInput::Var(var));
+        }
+
+        function.blocks.last_mut().unwrap().terminator =
+          rb_codegen::TerminatorInstruction::Return(rets);
+        continue;
+      }
+
       "trap" => {
         function.blocks.last_mut().unwrap().terminator = rb_codegen::TerminatorInstruction::Trap;
         continue;

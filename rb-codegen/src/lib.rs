@@ -67,10 +67,10 @@ pub struct Instruction {
   pub input:  SmallVec<[InstructionInput; 2]>,
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub enum TerminatorInstruction {
   Jump(BlockId),
-  Return,
+  Return(SmallVec<[InstructionInput; 2]>),
   #[default]
   Trap,
 }
@@ -294,7 +294,16 @@ impl fmt::Display for TerminatorInstruction {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       TerminatorInstruction::Jump(target) => write!(f, "jump to block {}", target.as_u32()),
-      TerminatorInstruction::Return => write!(f, "return"),
+      TerminatorInstruction::Return(rets) => {
+        write!(f, "return")?;
+        for (i, ret) in rets.iter().enumerate() {
+          if i != 0 {
+            write!(f, ",")?;
+          }
+          write!(f, " {}", ret)?;
+        }
+        Ok(())
+      }
       TerminatorInstruction::Trap => write!(f, "trap"),
     }
   }

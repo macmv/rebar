@@ -81,6 +81,17 @@ impl AnalysisPass for ValueUses {
       for instr in &function.block(block).instructions {
         self.pass_instr(instr);
       }
+
+      match function.block(block).terminator {
+        rb_codegen::TerminatorInstruction::Return(ref rets) => {
+          for ret in rets {
+            if let InstructionInput::Var(var) = ret {
+              self.mark_required(*var);
+            }
+          }
+        }
+        _ => {}
+      }
     }
 
     // TODO: Debug output?

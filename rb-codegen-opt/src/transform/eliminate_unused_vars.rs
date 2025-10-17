@@ -54,4 +54,17 @@ mod tests {
       "],
     );
   }
+
+  #[test]
+  fn keep_ret() {
+    check_transform(
+      "eliminate_unused_vars",
+      expect![@"
+          block 0:
+            mov r0 = 0x00
+        -   mov r1 = r0
+            return r0
+      "],
+    );
+  }
 }
