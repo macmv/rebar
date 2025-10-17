@@ -235,6 +235,7 @@ impl Opcode {
   pub const LEA: Opcode = Opcode::new([0x8d]);
   pub const JA: Opcode = Opcode::new([0x77]);
   pub const JAE: Opcode = Opcode::new([0x73]);
+  pub const JMP: Opcode = Opcode::new([0xeb]);
   pub const JB: Opcode = Opcode::new([0x72]);
   pub const JBE: Opcode = Opcode::new([0x76]);
   pub const JECZ: Opcode = Opcode::new([0xe3]);

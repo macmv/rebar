@@ -305,7 +305,9 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
     }
 
     match block.terminator {
-      rb_codegen::TerminatorInstruction::Jump(_) => {}
+      rb_codegen::TerminatorInstruction::Jump(target) => builder.instr(
+        Instruction::new(Opcode::JMP).with_immediate(Immediate::i8(target.as_u32() as u8 + 3)),
+      ),
       rb_codegen::TerminatorInstruction::Return => builder.instr(Instruction::new(Opcode::RET)),
       rb_codegen::TerminatorInstruction::Trap => builder.instr(Instruction::new(Opcode::INT3)),
     }
