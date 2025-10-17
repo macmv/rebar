@@ -190,6 +190,40 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           _ => todo!("inst {:?}", inst),
         },
         rb_codegen::Opcode::Branch(condition, target) => match (inst.input[0], inst.input[1]) {
+          (InstructionInput::Var(a), InstructionInput::Imm(b)) => {
+            let a = reg.get(a);
+
+            if b == 0 {
+              builder.instr(
+                encode_sized(a.size, Opcode::TEST_MR8, Opcode::TEST_MR32)
+                  .with_mod(0b11, a.index)
+                  .with_reg(a.index),
+              );
+            } else {
+              builder.instr(
+                encode_sized(a.size, Opcode::CMP_IMM8, Opcode::CMP_IMM32)
+                  .with_mod(0b11, a.index)
+                  .with_immediate(match a.size {
+                    RegisterSize::Bit8 => Immediate::i8(b.try_into().unwrap()),
+                    RegisterSize::Bit16 => Immediate::i16(b.try_into().unwrap()),
+                    RegisterSize::Bit32 => Immediate::i32(b.try_into().unwrap()),
+                    RegisterSize::Bit64 => Immediate::i32(b.try_into().unwrap()),
+                  }),
+              );
+            }
+
+            let opcode = match condition {
+              rb_codegen::Condition::Equal => Opcode::JE,
+              rb_codegen::Condition::NotEqual => Opcode::JNE,
+              rb_codegen::Condition::Greater => Opcode::JG,
+              rb_codegen::Condition::Less => Opcode::JB,
+              rb_codegen::Condition::GreaterEqual => Opcode::JGE,
+              rb_codegen::Condition::LessEqual => Opcode::JLE,
+            };
+
+            builder.jmp(target, RegisterSize::Bit8);
+            builder.instr(Instruction::new(opcode).with_immediate(Immediate::i8(0)))
+          }
           (InstructionInput::Var(a), InstructionInput::Var(b)) => {
             builder.instr(
               encode_sized(reg.get(a).size, Opcode::CMP_RM8, Opcode::CMP_RM32)
