@@ -61,8 +61,7 @@ impl FunctionBuilder {
       .blocks
       .push(Block { instructions: vec![], terminator: crate::TerminatorInstruction::Trap });
 
-    self.block = id;
-    self.current_block()
+    self.block(id)
   }
 
   pub fn block(&mut self, id: BlockId) -> BlockBuilder<'_> {
