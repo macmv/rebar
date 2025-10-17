@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{collections::BTreeMap, fmt};
 
 use smallvec::SmallVec;
 
@@ -47,10 +47,17 @@ pub enum VariableSize {
   Bit64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Block {
+  pub phis:         Vec<Phi>,
   pub instructions: Vec<Instruction>,
   pub terminator:   TerminatorInstruction,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Phi {
+  pub to:   Variable,
+  pub from: BTreeMap<BlockId, Variable>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -60,10 +67,11 @@ pub struct Instruction {
   pub input:  SmallVec<[InstructionInput; 2]>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum TerminatorInstruction {
   Jump(BlockId),
   Return,
+  #[default]
   Trap,
 }
 

@@ -25,13 +25,7 @@ impl FunctionBuilder {
   pub fn new(sig: Signature) -> Self {
     FunctionBuilder {
       next_variable: 0,
-      function:      Function {
-        sig,
-        blocks: vec![Block {
-          instructions: vec![],
-          terminator:   crate::TerminatorInstruction::Trap,
-        }],
-      },
+      function:      Function { sig, blocks: vec![Block::default()] },
       block:         BlockId(0),
     }
   }
@@ -56,10 +50,7 @@ impl FunctionBuilder {
 
   pub fn new_block(&mut self) -> BlockBuilder<'_> {
     let id = BlockId(self.function.blocks.len() as u32);
-    self
-      .function
-      .blocks
-      .push(Block { instructions: vec![], terminator: crate::TerminatorInstruction::Trap });
+    self.function.blocks.push(Block::default());
 
     self.block(id)
   }
