@@ -1,6 +1,6 @@
 use crate::{RbArray, RbSlice, RbStruct, Value};
 use rb_mir::MirContext;
-use rb_value::{DynamicValueType, RebarArgs, ValueType};
+use rb_value::{RebarArgs, ValueType};
 
 pub struct RebarArgsParser<'a> {
   ctx: &'a MirContext,
@@ -52,7 +52,7 @@ impl<'a> RebarArgsParser<'a> {
 
         // Parse all the values, so we can parse the next value.
         for field in strct.fields.iter() {
-          let _ = self.value(DynamicValueType::for_type(self.ctx, &field.1));
+          let _ = self.value(ValueType::for_type(self.ctx, &field.1));
         }
 
         Value::Struct(RbStruct::new(self.ctx, id, ptr))
@@ -62,26 +62,15 @@ impl<'a> RebarArgsParser<'a> {
     }
   }
 
-  pub unsafe fn value(&mut self, dvt: DynamicValueType) -> Value<'a> {
+  pub unsafe fn value(&mut self, vt: ValueType) -> Value<'a> {
     let start = self.offset;
-    let v = match dvt {
-      DynamicValueType::Const(vt) => self.value_const(vt),
-      DynamicValueType::Union(_) => {
-        // A nil will only take up one slot, so we must check for that to avoid reading
-        // out of bounds.
-        let dyn_ty = self.next();
+    let v = self.value_const(vt);
 
-        let vt = ValueType::try_from(dyn_ty).unwrap();
-
-        self.value_const(vt)
-      }
-    };
-
-    let expected_end = start + dvt.len(self.ctx) as usize;
+    let expected_end = start + vt.len(self.ctx) as usize;
     if self.offset < expected_end {
       self.offset = expected_end;
     } else if self.offset > expected_end {
-      panic!("read too many slots while parsing argument of type {dvt:?}");
+      panic!("read too many slots while parsing argument of type {vt:?}");
     }
 
     v

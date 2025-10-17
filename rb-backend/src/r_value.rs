@@ -174,14 +174,5 @@ impl RValue {
   /// whenever the length of arguments can change (for example in a function
   /// call). For block arguments, which must have a consistent size, use
   /// `to_sized_ir`.
-  pub fn to_ir(&self, kind: ParamKind, func: &mut FuncBuilder) -> Variable {
-    match kind {
-      ParamKind::Compact => self.to_compact_ir(func),
-      _ => todo!(),
-      /*
-      ParamKind::Extended(len) => self.to_extended_ir(func, Some(len)),
-      ParamKind::Unsized => self.to_extended_ir(func, None),
-      */
-    }
-  }
+  pub fn to_ir(&self, func: &mut FuncBuilder) -> Variable { self.to_compact_ir(func) }
 }

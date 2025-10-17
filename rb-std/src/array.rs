@@ -1,7 +1,7 @@
 use std::{cell::UnsafeCell, fmt};
 
 use rb_mir::MirContext;
-use rb_value::{DynamicValueType, RbVec};
+use rb_value::{RbVec, ValueType};
 
 use crate::RbSlice;
 
@@ -11,7 +11,7 @@ use crate::RbSlice;
 #[repr(C)]
 pub struct RbArray {
   pub arr: UnsafeCell<RbVec>,
-  pub vt:  DynamicValueType,
+  pub vt:  ValueType,
 }
 
 impl RbArray {

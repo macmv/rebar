@@ -8,7 +8,7 @@ use rb_mir::{ast as mir, MirContext};
 mod r_value;
 // mod slot;
 
-use rb_value::{DynamicValueType, ValueType};
+use rb_value::ValueType;
 
 use crate::r_value::RValue;
 
@@ -70,7 +70,7 @@ impl ThreadCtx<'_> {
     let mut args = vec![];
 
     for arg in mir.params.iter() {
-      let dvt = DynamicValueType::for_type(self.mir_ctx, &arg);
+      let dvt = ValueType::for_type(self.mir_ctx, &arg);
       for _ in 0..dvt.len(self.mir_ctx) {
         args.push(Bit64);
       }
@@ -111,9 +111,9 @@ impl FuncBuilder<'_> {
   fn compile_stmt(&mut self, stmt: mir::StmtId) -> RValue {
     match self.mir.stmts[stmt] {
       mir::Stmt::Expr(expr) => self.compile_expr(expr),
-      mir::Stmt::Let(id, ref ty, expr) => {
+      mir::Stmt::Let(id, ref _ty, expr) => {
         let value = self.compile_expr(expr);
-        let ir = value.to_ir(DynamicValueType::for_type(self.ctx, &ty).param_kind(self.ctx), self);
+        let ir = value.to_ir(self);
         self.locals.insert(id, ir);
 
         RValue::nil()
@@ -137,12 +137,8 @@ impl FuncBuilder<'_> {
       mir::Expr::Local(id, ref ty) => {
         let var = self.locals[&id];
 
-        let dvt = DynamicValueType::for_type(self.ctx, ty);
-
-        match dvt {
-          DynamicValueType::Const(ty) => RValue::TypedDyn(ty, var),
-          _ => todo!(),
-        }
+        let vt = ValueType::for_type(self.ctx, ty);
+        RValue::TypedDyn(vt, var)
       }
 
       mir::Expr::UserFunction(id, _) => RValue::TypedConst(ValueType::UserFunction, vec![id.0]),

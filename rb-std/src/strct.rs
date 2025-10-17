@@ -1,7 +1,7 @@
 use std::fmt;
 
 use rb_mir::{ast::StructId, MirContext};
-use rb_value::DynamicValueType;
+use rb_value::ValueType;
 
 use crate::{RebarArgsParser, Value};
 
@@ -61,9 +61,8 @@ impl<'a> Iterator for FieldsIter<'a> {
       return None;
     }
 
-    let value = unsafe {
-      self.parser.value(DynamicValueType::for_type(self.ctx, &self.strct.fields[self.idx].1))
-    };
+    let value =
+      unsafe { self.parser.value(ValueType::for_type(self.ctx, &self.strct.fields[self.idx].1)) };
     self.idx += 1;
 
     Some(value)
@@ -79,7 +78,7 @@ impl fmt::Debug for RbStruct<'_> {
       let mut parser = RebarArgsParser::new(self.ctx, self.ptr as *const _);
 
       for field in &strct.fields {
-        s.field("foo", &parser.value(DynamicValueType::for_type(self.ctx, &field.1)));
+        s.field("foo", &parser.value(ValueType::for_type(self.ctx, &field.1)));
       }
     }
 

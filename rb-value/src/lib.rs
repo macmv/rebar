@@ -30,32 +30,6 @@ pub enum ValueType {
   Struct(StructId),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum DynamicValueType {
-  Const(ValueType),
-
-  /// Maximum size of any type that can be stored in this slot. NB: Doesn't
-  /// include the type tag.
-  Union(u32),
-}
-
-impl DynamicValueType {
-  pub fn encode(&self) -> i64 {
-    match self {
-      DynamicValueType::Const(ty) => ty.as_i64(),
-      DynamicValueType::Union(len) => -(*len as i64),
-    }
-  }
-
-  pub fn decode(value: i64) -> Self {
-    if value >= 0 {
-      DynamicValueType::Const(ValueType::try_from(value).unwrap())
-    } else {
-      DynamicValueType::Union(-value as u32)
-    }
-  }
-}
-
 impl ValueType {
   pub fn as_i64(&self) -> i64 {
     match self {
@@ -128,50 +102,25 @@ impl ValueType {
       ValueType::UserFunction => 1,
 
       ValueType::Struct(id) => {
-        ctx.structs[id].fields.iter().map(|f| DynamicValueType::for_type(ctx, &f.1).len(ctx)).sum()
+        ctx.structs[id].fields.iter().map(|f| ValueType::for_type(ctx, &f.1).len(ctx)).sum()
       }
-    }
-  }
-}
-
-impl DynamicValueType {
-  pub fn len(&self, ctx: &MirContext) -> u32 {
-    match self {
-      DynamicValueType::Const(ty) => ty.len(ctx),
-      DynamicValueType::Union(len) => *len + 1, // Add 1 for the type tag.
-    }
-  }
-
-  pub fn param_kind(&self, ctx: &MirContext) -> ParamKind {
-    match self {
-      DynamicValueType::Const(_) => ParamKind::Compact,
-      DynamicValueType::Union(_) => ParamKind::Extended(NonZero::new(self.len(ctx)).unwrap()),
     }
   }
 
   pub fn for_type(ctx: &MirContext, ty: &Type) -> Self {
     match ty {
-      Type::Literal(Literal::Unit) => DynamicValueType::Const(ValueType::Nil),
-      Type::Literal(Literal::Int) => DynamicValueType::Const(ValueType::Int),
-      Type::Literal(Literal::Bool) => DynamicValueType::Const(ValueType::Bool),
-      Type::Literal(Literal::String) => DynamicValueType::Const(ValueType::String),
-      Type::Array(_) => DynamicValueType::Const(ValueType::Array),
-      Type::Union(tys) => DynamicValueType::Union(
-        tys
-          .iter()
-          .map(|ty| match DynamicValueType::for_type(ctx, ty) {
-            DynamicValueType::Const(ty) => ty.len(ctx),
-            DynamicValueType::Union(len) => len,
-          })
-          .max()
-          .unwrap(),
-      ),
+      Type::Literal(Literal::Unit) => ValueType::Nil,
+      Type::Literal(Literal::Int) => ValueType::Int,
+      Type::Literal(Literal::Bool) => ValueType::Bool,
+      Type::Literal(Literal::String) => ValueType::String,
+      Type::Array(_) => ValueType::Array,
+      Type::Union(_) => todo!("unions in backend"),
       Type::Function(..) => todo!("function types to values"),
 
       // This requires some type of MIR-context to resolve this.
       Type::Struct(ref path) => {
         let id = ctx.struct_paths[path];
-        DynamicValueType::Const(ValueType::Struct(id))
+        ValueType::Struct(id)
       }
     }
   }
