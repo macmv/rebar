@@ -3,8 +3,10 @@ use std::fmt;
 use smallvec::SmallVec;
 
 mod instr;
+mod tvec;
 
 pub use instr::{BlockBuilder, FunctionBuilder, InstrBuilder};
+pub use tvec::{TIndex, TVec};
 
 pub struct Signature {
   pub args: Vec<VariableSize>,
@@ -16,12 +18,17 @@ pub struct Function {
   pub blocks: Vec<Block>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FunctionId(u32);
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BlockId(u32);
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Variable(u32);
+
+impl<T> TIndex<T> for BlockId {
+  fn from_index(index: usize) -> Self { BlockId(index as u32) }
+  fn to_index(self) -> usize { self.0 as usize }
+}
 
 impl fmt::Debug for Variable {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -140,6 +147,10 @@ impl Variable {
     // SAFETY: `new` ensures that the bits are valid.
     unsafe { std::mem::transmute(bits) }
   }
+}
+
+impl Function {
+  pub fn entry(&self) -> BlockId { BlockId::new(0) }
 }
 
 impl From<Variable> for InstructionInput {
