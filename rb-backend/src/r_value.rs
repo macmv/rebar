@@ -159,7 +159,7 @@ impl RValue {
     match self {
       Self::TypedConst(_, items) => {
         if items.is_empty() {
-          panic!();
+          panic!("cannot encode empty items");
         } else if items.len() == 1 {
           func.builder.instr().mov(Bit64, items[0])
         } else {

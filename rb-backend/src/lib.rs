@@ -10,6 +10,7 @@ mod r_value;
 // mod slot;
 
 use rb_value::ValueType;
+use smallvec::smallvec;
 
 use crate::r_value::RValue;
 
@@ -84,9 +85,14 @@ impl ThreadCtx<'_> {
 
 impl FuncBuilder<'_> {
   fn translate(mut self) -> Function {
+    let mut res = None;
     for &stmt in &self.mir.items {
-      let _res = self.compile_stmt(stmt);
-      // self.def_var(return_variable, res.to_ir());
+      res = Some(self.compile_stmt(stmt));
+    }
+
+    if let Some(res) = res {
+      let ir = res.to_ir(&mut self);
+      self.builder.current_block().terminate(TerminatorInstruction::Return(smallvec![ir.into()]));
     }
 
     self.builder.build()

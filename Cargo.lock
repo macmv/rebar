@@ -691,6 +691,7 @@ dependencies = [
  "rb-mir",
  "rb-typer",
  "rb-value",
+ "smallvec",
 ]
 
 [[package]]

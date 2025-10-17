@@ -10,3 +10,5 @@ rb-value.workspace = true
 rb-codegen.workspace = true
 rb-codegen-opt.workspace = true
 rb-codegen-x86.workspace = true
+
+smallvec = "1.15.1"
