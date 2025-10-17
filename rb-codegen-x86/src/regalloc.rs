@@ -274,15 +274,20 @@ impl PinnedVariables {
           Opcode::Math(
             Math::Imul | Math::Umul | Math::Idiv | Math::Udiv | Math::Neg | Math::Not,
           ) => {
-            p.pin(loc, inst.input[0].unwrap_var(), RegisterIndex::Eax);
-            p.pin(loc, inst.output[0].unwrap_var(), RegisterIndex::Eax);
+            let i0 = p.to_var(inst.input[0]);
+            let o0 = p.to_var(inst.output[0]);
+            p.pin(loc, i0, RegisterIndex::Eax);
+            p.pin(loc, o0, RegisterIndex::Eax);
           }
           Opcode::Math(Math::Irem | Math::Urem) => {
-            p.pin(loc, inst.input[0].unwrap_var(), RegisterIndex::Eax);
-            p.pin(loc, inst.output[0].unwrap_var(), RegisterIndex::Edx);
+            let i0 = p.to_var(inst.input[0]);
+            let o0 = p.to_var(inst.output[0]);
+            p.pin(loc, i0, RegisterIndex::Eax);
+            p.pin(loc, o0, RegisterIndex::Edx);
           }
           Opcode::Math(Math::Ishr | Math::Ushr | Math::Shl) => {
-            p.pin(loc, inst.input[1].unwrap_var(), RegisterIndex::Ecx);
+            let i1 = p.to_var(inst.input[1]);
+            p.pin(loc, i1, RegisterIndex::Ecx);
           }
           Opcode::Syscall => p.pin_cc(loc, CallingConvention::Syscall, &inst.input),
           _ => {}
@@ -337,6 +342,30 @@ impl PinnedVariables {
       self.changes.push(Change::AddCopy { loc, from: var });
     } else {
       self.pinned[var.id() as usize] = Some(index);
+    }
+  }
+
+  fn to_var(&mut self, v: impl ToVar) -> Variable { v.to_var(self) }
+}
+
+trait ToVar {
+  fn to_var(&self, p: &mut PinnedVariables) -> Variable;
+}
+
+impl ToVar for InstructionInput {
+  fn to_var(&self, p: &mut PinnedVariables) -> Variable {
+    match self {
+      InstructionInput::Var(v) => *v,
+      InstructionInput::Imm(_) => panic!("expected variable input, got immediate"),
+    }
+  }
+}
+
+impl ToVar for InstructionOutput {
+  fn to_var(&self, p: &mut PinnedVariables) -> Variable {
+    match self {
+      InstructionOutput::Var(v) => *v,
+      InstructionOutput::Syscall => panic!("cannot turn syscall into var"),
     }
   }
 }
