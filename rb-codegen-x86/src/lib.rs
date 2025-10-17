@@ -311,7 +311,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
 
           match (inst.output[0], inst.input[0], inst.input[1]) {
             (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
-              debug_assert_eq!(reg.get(v).size, reg.get(a).size, "shifts must be in place");
+              debug_assert_eq!(reg.get(v), reg.get(a), "shifts must be in place");
               debug_assert_eq!(
                 reg.get(b).index,
                 RegisterIndex::Ecx,
@@ -325,7 +325,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
               );
             }
             (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
-              debug_assert_eq!(reg.get(v).size, reg.get(a).size, "shifts must be in place");
+              debug_assert_eq!(reg.get(v), reg.get(a), "shifts must be in place");
               if b == 1 {
                 builder.instr(
                   encode_sized(reg.get(v).size, Opcode::SHIFT_1_8, Opcode::SHIFT_1_32)
