@@ -147,7 +147,10 @@ impl ValueUses {
         // ...
       }
 
-      Opcode::Branch(_, _) => {}
+      Opcode::Branch(_, _) => {
+        self.set(out, VariableValue::Unknown);
+        self.mark_required(out);
+      }
     }
 
     for output in &instr.output {
