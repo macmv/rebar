@@ -6,15 +6,15 @@ use rb_test::Expect;
 use crate::analysis::{Analysis, AnalysisPass};
 
 mod diff;
-// mod parse_ir;
+mod parse_ir;
 
 pub struct TestFunction {
   analysis: Analysis,
   function: Function,
 }
 
-pub fn parse(_asm: &str) -> TestFunction {
-  TestFunction { analysis: Analysis::default(), function: todo!() /* parse_ir::parse(asm) */ }
+pub fn parse(asm: &str) -> TestFunction {
+  TestFunction { analysis: Analysis::default(), function: parse_ir::parse(asm) }
 }
 
 pub fn check_transform(pass: &str, diff: Expect) {
@@ -40,16 +40,13 @@ impl TestFunction {
     transformer.single_pass(name);
   }
 
-  pub fn transform_diff(&mut self, _name: &str) -> String {
-    /*
+  pub fn transform_diff(&mut self, name: &str) -> String {
     let before = self.function.to_string();
     let mut transformer = crate::Transformer::new(&mut self.analysis, &mut self.function);
     transformer.single_pass(name);
     let after = self.function.to_string();
 
     diff::diff(before, after)
-    */
-    todo!()
   }
 
   /*

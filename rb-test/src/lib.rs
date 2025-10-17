@@ -278,7 +278,7 @@ impl Expect {
   /// Returns the content of this expect.
   pub fn data(&self) -> &str { self.data }
 
-  fn trimmed(&self) -> String {
+  pub fn trimmed(&self) -> String {
     if !self.data.contains('\n') {
       return self.data.to_string();
     }

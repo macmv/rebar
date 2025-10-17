@@ -225,3 +225,71 @@ impl InstructionOutput {
     }
   }
 }
+
+impl fmt::Display for Function {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    for (i, block) in self.blocks.iter().enumerate() {
+      writeln!(f, "block {}:", i)?;
+      for instr in &block.instructions {
+        writeln!(f, "  {}", instr)?;
+      }
+      writeln!(f, "  {}", block.terminator)?;
+    }
+    Ok(())
+  }
+}
+
+impl fmt::Display for Instruction {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    for output in &self.output {
+      write!(f, "{} ", output)?;
+    }
+    write!(f, "= {} ", self.opcode)?;
+    for input in &self.input {
+      write!(f, "{} ", input)?;
+    }
+    Ok(())
+  }
+}
+
+impl fmt::Display for TerminatorInstruction {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      TerminatorInstruction::Jump(target) => write!(f, "jump to block {}", target.as_u32()),
+      TerminatorInstruction::Return => write!(f, "return"),
+      TerminatorInstruction::Trap => write!(f, "trap"),
+    }
+  }
+}
+
+impl fmt::Display for InstructionOutput {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      InstructionOutput::Var(v) => write!(f, "{:?}", v),
+      InstructionOutput::Syscall => write!(f, "syscall"),
+    }
+  }
+}
+
+impl fmt::Display for InstructionInput {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      InstructionInput::Var(v) => write!(f, "{:?}", v),
+      InstructionInput::Imm(i) => write!(f, "#{}", i),
+    }
+  }
+}
+
+impl fmt::Display for Opcode {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Opcode::Math(m) => write!(f, "{:?}", m),
+      Opcode::Branch(c, target) => write!(f, "branch {:?} to block {}", c, target.as_u32()),
+      Opcode::Compare(c) => write!(f, "compare {:?}", c),
+      Opcode::Call(func) => write!(f, "call function {}", func.0),
+      Opcode::Lea(symbol) => write!(f, "lea symbol {}", symbol.index),
+      Opcode::Move => write!(f, "mov"),
+      Opcode::Syscall => write!(f, "syscall"),
+    }
+  }
+}

@@ -13,3 +13,21 @@ impl<'a> TransformPass<'a> for EliminateUnreachableBlocks<'a> {
     function.retain_blocks(|b| b.as_u32() == 0 || self.dom.immediate_dominator(b).is_some());
   }
 }
+
+#[cfg(test)]
+mod tests {
+  #[test]
+  fn eliminate_unreachable_block() {
+    crate::tests::check_transform(
+      "eliminate_unreachable_blocks",
+      expect![@r#"
+          block 0:
+            jump to block 1
+          block 1:
+            jump to block 1
+        - block 2:
+        -   jump to block 2
+      "#],
+    );
+  }
+}
