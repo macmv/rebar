@@ -14,16 +14,12 @@ use rb_value::ValueType;
 use crate::r_value::RValue;
 
 pub struct Compiler {
-  mir_ctx: MirContext,
-
-  user_funcs: HashMap<mir::UserFunctionId, Signature>,
-  functions:  Vec<Function>,
+  mir_ctx:   MirContext,
+  functions: Vec<Function>,
 }
 
 pub struct ThreadCtx<'a> {
   mir_ctx: &'a MirContext,
-
-  user_funcs: &'a HashMap<mir::UserFunctionId, Signature>,
 }
 
 pub struct FuncBuilder<'a> {
@@ -36,13 +32,9 @@ pub struct FuncBuilder<'a> {
 }
 
 impl Compiler {
-  pub fn new(mir_ctx: MirContext) -> Self {
-    Compiler { mir_ctx, user_funcs: HashMap::new(), functions: vec![] }
-  }
+  pub fn new(mir_ctx: MirContext) -> Self { Compiler { mir_ctx, functions: vec![] } }
 
-  pub fn new_thread(&self) -> ThreadCtx<'_> {
-    ThreadCtx { mir_ctx: &self.mir_ctx, user_funcs: &self.user_funcs }
-  }
+  pub fn new_thread(&self) -> ThreadCtx<'_> { ThreadCtx { mir_ctx: &self.mir_ctx } }
 
   pub fn finish_function(&mut self, func: Function) { self.functions.push(func); }
 
