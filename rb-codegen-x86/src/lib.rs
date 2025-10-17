@@ -100,6 +100,35 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           }
           _ => todo!("inst {:?}", inst),
         },
+        rb_codegen::Opcode::Compare(_) => match (inst.output[0], inst.input[0], inst.input[1]) {
+          (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
+            encode_binary_reg_imm(
+              &mut builder,
+              reg.get(v),
+              reg.get(a),
+              b,
+              Opcode::CMP_IMM8,
+              Opcode::CMP_IMM32,
+            );
+          }
+          (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
+            encode_binary_reg_reg(
+              &mut builder,
+              reg.get(v),
+              reg.get(a),
+              reg.get(b),
+              Opcode::CMP_RM8,
+              Opcode::CMP_RM32,
+            );
+          }
+          _ => todo!("inst {:?}", inst),
+        },
+        rb_codegen::Opcode::Branch(target) => match inst.input[0] {
+          InstructionInput::Var(_) => builder.instr(
+            Instruction::new(Opcode::JB).with_immediate(Immediate::i8(target.as_u32() as u8 + 3)),
+          ),
+          _ => todo!("inst {:?}", inst),
+        },
         rb_codegen::Opcode::Math(
           math @ (Math::Imul
           | Math::Umul
@@ -276,9 +305,9 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
     }
 
     match block.terminator {
+      rb_codegen::TerminatorInstruction::Jump(_) => {}
       rb_codegen::TerminatorInstruction::Return => builder.instr(Instruction::new(Opcode::RET)),
       rb_codegen::TerminatorInstruction::Trap => builder.instr(Instruction::new(Opcode::INT3)),
-      _ => unimplemented!(),
     }
   }
 

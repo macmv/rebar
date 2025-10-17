@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use rb_codegen::{
-  Comparison, Function, FunctionBuilder, Math, Signature, Variable, VariableSize::*,
+  Comparison, Function, FunctionBuilder, Math, Signature, TerminatorInstruction, Variable,
+  VariableSize::*,
 };
 use rb_mir::{ast as mir, MirContext};
 
@@ -396,38 +397,28 @@ impl FuncBuilder<'_> {
 
         RValue::nil()
       }
-
-      mir::Expr::If { cond, then, els: Some(els), ref ty } => {
+      */
+      mir::Expr::If { cond, then, els: Some(els), ty: _ } => {
         let cond = self.compile_expr(cond);
         let cond = cond.unwrap_single(self);
 
-        let then_block = self.builder.create_block();
-        let else_block = self.builder.create_block();
-        let merge_block = self.builder.create_block();
+        let else_block = self.builder.new_block().id();
+        let merge_block = self.builder.new_block().id();
 
-        let dvt = DynamicValueType::for_type(self.ctx, &ty);
-        let param_kind = dvt.param_kind(self.ctx);
+        // Test the if condition and conditionally branch.
+        self.builder.instr().branch(else_block, Bit64, cond);
+        self.compile_expr(then);
+        self.builder.current_block().terminate(TerminatorInstruction::Jump(merge_block));
 
-        if dvt.len(self.ctx) == 0 {
-          // Test the if condition and conditionally branch.
-          self.builder.instr().brif(cond, then_block, &[], else_block, &[]);
+        self.builder.switch_to(else_block);
+        self.compile_expr(els);
+        self.builder.current_block().terminate(TerminatorInstruction::Jump(merge_block));
 
-          self.builder.switch_to_block(then_block);
-          self.builder.seal_block(then_block);
-          self.compile_expr(then).to_ir(param_kind, self);
+        self.builder.switch_to(merge_block);
 
-          self.builder.instr().jump(merge_block, &[]);
+        RValue::nil()
 
-          self.builder.switch_to_block(else_block);
-          self.builder.seal_block(else_block);
-          self.compile_expr(els).to_ir(param_kind, self);
-
-          self.builder.instr().jump(merge_block, &[]);
-
-          self.builder.switch_to_block(merge_block);
-          self.builder.seal_block(merge_block);
-
-          RValue::nil()
+        /*
         } else if dvt.len(self.ctx) == 1 {
           // Special case: if `dvt.len() == 1`, we can avoid creating a stack slot, and
           // just use a block parameter.
@@ -507,8 +498,10 @@ impl FuncBuilder<'_> {
             }
           }
         }
+        */
       }
 
+      /*
       mir::Expr::StructInit(id, ref fields) => {
         let strct = self.ctx.structs.get(&id).unwrap();
         let len = strct

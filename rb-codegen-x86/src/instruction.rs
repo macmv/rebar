@@ -219,6 +219,10 @@ impl Opcode {
   pub const SUB_IMM8: Opcode = Opcode::new([0x2c]);
   pub const SUB_RM32: Opcode = Opcode::new([0x2b]);
   pub const SUB_RM8: Opcode = Opcode::new([0x2a]);
+  pub const CMP_IMM32: Opcode = Opcode::new([0x3d]);
+  pub const CMP_IMM8: Opcode = Opcode::new([0x3c]);
+  pub const CMP_RM32: Opcode = Opcode::new([0x3b]);
+  pub const CMP_RM8: Opcode = Opcode::new([0x3a]);
   pub const AND_IMM32: Opcode = Opcode::new([0x25]);
   pub const AND_IMM8: Opcode = Opcode::new([0x24]);
   pub const AND_RM32: Opcode = Opcode::new([0x23]);
@@ -229,6 +233,11 @@ impl Opcode {
   pub const OR_RM8: Opcode = Opcode::new([0x0a]);
   pub const INT3: Opcode = Opcode::new([0xcc]);
   pub const LEA: Opcode = Opcode::new([0x8d]);
+  pub const JA: Opcode = Opcode::new([0x77]);
+  pub const JAE: Opcode = Opcode::new([0x73]);
+  pub const JB: Opcode = Opcode::new([0x72]);
+  pub const JBE: Opcode = Opcode::new([0x76]);
+  pub const JECZ: Opcode = Opcode::new([0xe3]);
   pub const MOV_RD_IMM_16: Opcode = Opcode::new([0xb8]);
   pub const MOV_RD_IMM_8: Opcode = Opcode::new([0xb0]);
   pub const MOV_RM_IMM_16: Opcode = Opcode::new([0xc7]);
