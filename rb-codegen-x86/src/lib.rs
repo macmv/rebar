@@ -7,7 +7,7 @@ pub use elf::generate;
 
 pub use instruction::{Immediate, Instruction, ModReg, Opcode, Prefix};
 use object::write::elf::Rel;
-use rb_codegen::{InstructionInput, InstructionOutput, Math};
+use rb_codegen::{BlockId, InstructionInput, InstructionOutput, Math};
 
 use crate::{
   instruction::RegisterIndex,
@@ -19,7 +19,14 @@ mod regalloc;
 #[derive(Default)]
 pub struct Builder {
   pub relocs: Vec<Rel>,
+  pub jumps:  Vec<Jump>,
   pub text:   Vec<u8>,
+}
+
+pub struct Jump {
+  pub size:   RegisterSize,
+  pub offset: u64,
+  pub target: BlockId,
 }
 
 impl Builder {
@@ -30,6 +37,10 @@ impl Builder {
       r_type:   object::elf::R_X86_64_PC32,
       r_addend: addend,
     });
+  }
+
+  fn jmp(&mut self, target: BlockId, size: RegisterSize) {
+    self.jumps.push(Jump { size, offset: self.text.len() as u64 + 1, target });
   }
 
   fn instr(&mut self, instr: Instruction) {
@@ -124,9 +135,12 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           _ => todo!("inst {:?}", inst),
         },
         rb_codegen::Opcode::Branch(target) => match inst.input[0] {
-          InstructionInput::Var(_) => builder.instr(
-            Instruction::new(Opcode::JB).with_immediate(Immediate::i8(target.as_u32() as u8 + 3)),
-          ),
+          InstructionInput::Var(_) => {
+            builder.jmp(target, RegisterSize::Bit8);
+            builder.instr(
+              Instruction::new(Opcode::JB).with_immediate(Immediate::i8(target.as_u32() as u8 + 3)),
+            )
+          }
           _ => todo!("inst {:?}", inst),
         },
         rb_codegen::Opcode::Math(
@@ -305,9 +319,12 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
     }
 
     match block.terminator {
-      rb_codegen::TerminatorInstruction::Jump(target) => builder.instr(
-        Instruction::new(Opcode::JMP).with_immediate(Immediate::i8(target.as_u32() as u8 + 3)),
-      ),
+      rb_codegen::TerminatorInstruction::Jump(target) => {
+        builder.jmp(target, RegisterSize::Bit8);
+        builder.instr(
+          Instruction::new(Opcode::JMP).with_immediate(Immediate::i8(target.as_u32() as u8 + 3)),
+        )
+      }
       rb_codegen::TerminatorInstruction::Return => builder.instr(Instruction::new(Opcode::RET)),
       rb_codegen::TerminatorInstruction::Trap => builder.instr(Instruction::new(Opcode::INT3)),
     }
