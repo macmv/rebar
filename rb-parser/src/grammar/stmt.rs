@@ -55,13 +55,26 @@ pub fn stmt(p: &mut Parser) {
     // fn foo(bar: int, baz: float) -> string {
     //   bar + baz
     // }
-    T![fn] => {
+    T![extern] | T![fn] => {
       let m = p.start();
+
+      // test ok
+      // extern fn foo()
+      if p.at(T![extern]) {
+        p.eat(T![extern]);
+        if p.at(T!['"']) {
+          p.eat(T!['"']);
+        }
+      }
+
       p.eat(T![fn]);
       p.expect(T![ident]);
 
       params(p);
-      block(p);
+
+      if p.at(T!['{']) {
+        block(p);
+      }
 
       m.complete(p, FUNCTION_DEF);
     }

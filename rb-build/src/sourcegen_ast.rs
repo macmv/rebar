@@ -622,6 +622,8 @@ impl Field {
       Field::Node { name, .. } => {
         if name == "type" {
           format_ident!("ty")
+        } else if name == "extern" {
+          format_ident!("ext")
         } else {
           format_ident!("{}", name)
         }

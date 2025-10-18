@@ -203,6 +203,7 @@ impl<'a> Lexer<'a> {
           "else" => T![else],
           "let" => T![let],
           "fn" => T![fn],
+          "extern" => T![extern],
           "true" => T![true],
           "false" => T![false],
           "nil" => T![nil],
@@ -520,9 +521,9 @@ mod tests {
     assert_eq!(lexer.slice(), "{");
     assert_eq!(lexer.next(), Ok(T![nl]));
     assert_eq!(lexer.next(), Ok(T![ws]));
-    assert_eq!(lexer.slice(), "        ");
+    assert_eq!(lexer.slice(), "         ");
     assert_eq!(lexer.next(), Ok(T![fn]));
-    assert_eq!(lexer.slice(), "def");
+    assert_eq!(lexer.slice(), "fn");
     assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");
     assert_eq!(lexer.next(), Ok(T![ident]));
@@ -555,7 +556,7 @@ mod tests {
     assert_eq!(lexer.slice(), "3");
     assert_eq!(lexer.next(), Ok(T![nl]));
     assert_eq!(lexer.next(), Ok(T![ws]));
-    assert_eq!(lexer.slice(), "      ");
+    assert_eq!(lexer.slice(), "       ");
     assert_eq!(lexer.next(), Ok(T!['}']));
     assert_eq!(lexer.slice(), "}");
     assert_eq!(lexer.next(), Err(LexError::Eof));

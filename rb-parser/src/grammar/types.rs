@@ -8,7 +8,7 @@ pub fn ty(p: &mut Parser) { ty_bp(p, 0); }
 
 fn op_bp(t: SyntaxKind) -> Option<(u8, u8)> {
   // test ok
-  // def foo(a: int | str) {}
+  // fn foo(a: int | str) {}
   let prec = match t {
     T![|] => 1,
 
@@ -59,8 +59,8 @@ fn ty_bp(p: &mut Parser, min_bp: u8) {
 fn atom_type(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
   match p.current() {
     // test ok
-    // def foo(a: int) {}
-    // def foo(a: nil) {}
+    // fn foo(a: int) {}
+    // fn foo(a: nil) {}
     T![ident] | T![nil] => {
       p.bump();
       Some(m.complete(p, NAME_TYPE))
