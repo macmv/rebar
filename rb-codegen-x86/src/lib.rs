@@ -108,7 +108,8 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
   let mut reg = VariableRegisters::new();
   reg.pass(&mut function);
 
-  for block in &function.blocks {
+  for id in function.blocks() {
+    let block = function.block(id);
     builder.start_block();
 
     for inst in &block.instructions {
@@ -442,6 +443,11 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
 
     match block.terminator {
       rb_codegen::TerminatorInstruction::Jump(target) => {
+        // Fallthrough
+        if target == BlockId::new(id.as_u32() + 1) {
+          continue;
+        }
+
         builder.jmp(target, RegisterSize::Bit8);
         builder.instr(
           Instruction::new(Opcode::JMP).with_immediate(Immediate::i8(target.as_u32() as u8 + 3)),
