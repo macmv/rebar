@@ -202,7 +202,7 @@ impl<'a> Lexer<'a> {
           "if" => T![if],
           "else" => T![else],
           "let" => T![let],
-          "def" => T![def],
+          "fn" => T![fn],
           "true" => T![true],
           "false" => T![false],
           "nil" => T![nil],
@@ -505,8 +505,8 @@ mod tests {
   fn whole_file() {
     let mut lexer = Lexer::new(
       "class Foo {
-        def bar(): Int = 2 + 3
-      }",
+         fn bar(): Int = 2 + 3
+       }",
     );
     assert_eq!(lexer.next(), Ok(T![ident]));
     assert_eq!(lexer.slice(), "class");
@@ -521,7 +521,7 @@ mod tests {
     assert_eq!(lexer.next(), Ok(T![nl]));
     assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), "        ");
-    assert_eq!(lexer.next(), Ok(T![def]));
+    assert_eq!(lexer.next(), Ok(T![fn]));
     assert_eq!(lexer.slice(), "def");
     assert_eq!(lexer.next(), Ok(T![ws]));
     assert_eq!(lexer.slice(), " ");

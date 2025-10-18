@@ -52,18 +52,18 @@ pub fn stmt(p: &mut Parser) {
     }
 
     // test ok
-    // def foo(bar: int, baz: float) -> string {
+    // fn foo(bar: int, baz: float) -> string {
     //   bar + baz
     // }
-    T![def] => {
+    T![fn] => {
       let m = p.start();
-      p.eat(T![def]);
+      p.eat(T![fn]);
       p.expect(T![ident]);
 
       params(p);
       block(p);
 
-      m.complete(p, DEF);
+      m.complete(p, FUNCTION_DEF);
     }
 
     // test ok
@@ -165,17 +165,17 @@ fn struct_item(p: &mut Parser) {
   match p.current() {
     // test ok
     // struct Foo {
-    //   def bar() {}
+    //   fn bar() {}
     // }
-    T![def] => {
+    T![fn] => {
       let m = p.start();
-      p.eat(T![def]);
+      p.eat(T![fn]);
       p.expect(T![ident]);
 
       params(p);
       block(p);
 
-      m.complete(p, DEF);
+      m.complete(p, FUNCTION_DEF);
     }
 
     // test ok

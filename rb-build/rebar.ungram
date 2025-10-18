@@ -70,12 +70,12 @@ StructExpr = Expr '{' FieldInit* '}'
 FieldInit = 'ident' ':' Expr
 
 ExprStmt = Expr
-Stmt = Let | Assign | Def | Struct | ExprStmt
+Stmt = Let | Assign | FunctionDef | Struct | ExprStmt
 
 Let = 'let' 'ident' (':' Type)? '=' Expr
 Assign = Expr '=' Expr
 
-Def = 'def' 'ident' Params Block
+FunctionDef = 'fn' 'ident' Params Block
 Struct = 'struct' 'ident' StructBlock
 
 Params = '(' Param* ')' ReturnType?
@@ -83,7 +83,7 @@ Param = 'ident' ':' Type
 ReturnType = '->' Type
 
 StructBlock = '{' StructItem* '}'
-StructItem = Field | Def | ConstructorDef
+StructItem = Field | FunctionDef | ConstructorDef
 ConstructorDef = 'constructor' Params Block
 
 Field = 'ident' ':' Type

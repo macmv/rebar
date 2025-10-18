@@ -40,7 +40,7 @@ impl SourceLower<'_> {
     self.out.functions.alloc(func)
   }
 
-  fn function(&mut self, cst: &cst::Def) -> hir::FunctionId {
+  fn function(&mut self, cst: &cst::FunctionDef) -> hir::FunctionId {
     let mut f = hir::Function::default();
     let mut span_map = SpanMap::default();
     let mut lower = FunctionLower { source: self, f: &mut f, span_map: &mut span_map };
@@ -123,7 +123,7 @@ impl FunctionLower<'_, '_> {
       }
 
       // TODO: Allow inner defs to capture local variables.
-      cst::Stmt::Def(ref def) => {
+      cst::Stmt::FunctionDef(ref def) => {
         self.source.function(def);
 
         let name = def.ident_token().unwrap().to_string();

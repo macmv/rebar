@@ -1,9 +1,9 @@
 // def assert_two(a: int, b: int) { assert_one(a + 1, b) }
 // assert_two(0, 2)
 
-def assert_one(a: int, b: int) { assert_eq(a + 1, b) }
-def assert_union(a: int | bool, b: int | nil) { assert(a == b) }
-def assert_union_ne(a: int | bool, b: int | nil) { assert(!(a == b)) }
+fn assert_one(a: int, b: int) { assert_eq(a + 1, b) }
+fn assert_union(a: int | bool, b: int | nil) { assert(a == b) }
+fn assert_union_ne(a: int | bool, b: int | nil) { assert(!(a == b)) }
 
 assert_one(0, 1)
 assert_union(1, 1)
