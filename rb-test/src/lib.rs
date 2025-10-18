@@ -420,14 +420,17 @@ impl Runtime {
     let mut rt = RT.lock();
     let rt = rt.get_or_insert_with(Default::default);
     if update_expect() {
-      println!("\x1b[1m\x1b[92mupdating\x1b[0m: {}", expect.position);
+      // Write directly to stdout, so that the test harness doesn't capture it.
+      use std::io::Write;
+      let mut output = std::io::stdout();
+      writeln!(output, "\x1b[1m\x1b[92mupdating\x1b[0m {}", expect.position).unwrap();
       rt.per_file
         .entry(expect.position.file)
         .or_insert_with(|| FileRuntime::new(expect))
         .update(expect, actual);
-      return;
+    } else {
+      rt.panic(expect.position.to_string(), expected, actual);
     }
-    rt.panic(expect.position.to_string(), expected, actual);
   }
 
   fn panic(&mut self, position: String, expected: &str, actual: &str) {
