@@ -84,7 +84,7 @@ pub fn diff(before: String, after: String) -> String {
 
 fn reconcile(before: &[&str], after: &[&str]) -> (usize, usize) {
   for i in 0..(before.len().max(after.len())) {
-    for j in 0..i {
+    for j in 0..=i {
       let b = before.get(i);
       let a = after.get(j);
       if b.is_some() && a.is_some() && b == a {

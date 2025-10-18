@@ -70,9 +70,8 @@ mod tests {
           block 0:
             mov r0 = 0x00
         -   mov r1 = r0
-        -   trap
         +   mov r1 = 0x00
-        +   trap
+            trap
       "#],
     );
   }
