@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet, hash_map::Entry};
 
 use rb_codegen::{
-  BlockId, Instruction, InstructionInput, InstructionOutput, Math, Opcode, Variable,
+  BlockId, Immediate, Instruction, InstructionInput, InstructionOutput, Math, Opcode, Variable,
 };
 use smallvec::SmallVec;
 
@@ -26,22 +26,13 @@ pub struct VariableInfo {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VariableValue {
   Unknown,
-  Direct(u64),
+  Immediate(Immediate),
   Variable(Variable),
   Compare { inputs: Box<(VariableValue, VariableValue)> },
   Math { math: Math, input: Vec<VariableValue> },
 
   Phi { from: BTreeMap<BlockId, VariableValue> },
   DefinedLater,
-}
-
-impl PartialEq<u64> for VariableValue {
-  fn eq(&self, other: &u64) -> bool {
-    match self {
-      VariableValue::Direct(v) => v == other,
-      _ => false,
-    }
-  }
 }
 
 impl ValueUses {
@@ -232,7 +223,7 @@ impl ValueUses {
           value
         }
       }
-      VariableValue::Direct(_) => value,
+      VariableValue::Immediate(_) => value,
       VariableValue::Compare { inputs } => {
         let a = self.simplify_value(phis, seen, inputs.0);
         let b = self.simplify_value(phis, seen, inputs.1);
@@ -260,7 +251,7 @@ impl ValueUses {
           input.into_iter().map(|v| self.simplify_value(phis, seen, v)).collect();
 
         if let Some(c) = const_eval(math, &simplified) {
-          VariableValue::Direct(c)
+          VariableValue::Immediate(c)
         } else {
           VariableValue::Math { math, input: simplified.into_vec() }
         }
@@ -274,7 +265,7 @@ impl ValueUses {
   fn input_to_value(&self, input: InstructionInput) -> VariableValue {
     match input {
       InstructionInput::Var(var) => VariableValue::Variable(var),
-      InstructionInput::Imm(imm) => VariableValue::Direct(imm),
+      InstructionInput::Imm(imm) => VariableValue::Immediate(imm),
     }
   }
 
@@ -299,13 +290,23 @@ impl ValueUses {
   }
 }
 
-fn const_eval(m: Math, args: &[VariableValue]) -> Option<u64> {
+fn const_eval(m: Math, args: &[VariableValue]) -> Option<Immediate> {
   macro_rules! bin_op {
     ($op:ident, $func:ident) => {
       if m == Math::$op
-        && let (VariableValue::Direct(a), VariableValue::Direct(b)) = (&args[0], &args[1])
+        && let (VariableValue::Immediate(a), VariableValue::Immediate(b)) = (&args[0], &args[1])
       {
-        return Some(a.$func(*b));
+        match (a, b) {
+          (Immediate::I8(a), Immediate::I8(b)) => return Some(Immediate::I8(a.$func(*b))),
+          (Immediate::I16(a), Immediate::I16(b)) => return Some(Immediate::I16(a.$func(*b))),
+          (Immediate::I32(a), Immediate::I32(b)) => return Some(Immediate::I32(a.$func(*b))),
+          (Immediate::I64(a), Immediate::I64(b)) => return Some(Immediate::I64(a.$func(*b))),
+          (Immediate::U8(a), Immediate::U8(b)) => return Some(Immediate::U8(a.$func(*b))),
+          (Immediate::U16(a), Immediate::U16(b)) => return Some(Immediate::U16(a.$func(*b))),
+          (Immediate::U32(a), Immediate::U32(b)) => return Some(Immediate::U32(a.$func(*b))),
+          (Immediate::U64(a), Immediate::U64(b)) => return Some(Immediate::U64(a.$func(*b))),
+          _ => {}
+        }
       }
     };
   }

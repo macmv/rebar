@@ -7,7 +7,7 @@ pub use elf::generate;
 
 pub use instruction::{Immediate, Instruction, ModReg, Opcode, Prefix};
 use object::write::elf::Rel;
-use rb_codegen::{BlockId, InstructionInput, InstructionOutput, Math};
+use rb_codegen::{BlockId, InstructionInput, InstructionOutput, Math, VariableSize};
 
 use crate::{
   instruction::RegisterIndex,
@@ -195,22 +195,17 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           (InstructionInput::Var(a), InstructionInput::Imm(b)) => {
             let a = reg.get(a);
 
-            if b == 0 {
+            if b.is_zero() {
               builder.instr(
                 encode_sized(a.size, Opcode::TEST_MR8, Opcode::TEST_MR32)
                   .with_mod(0b11, a.index)
                   .with_reg(a.index),
               );
             } else if a.index == RegisterIndex::Eax {
+              debug_assert_eq!(a.size, var_to_reg_size(b.size()).unwrap());
               builder.instr(
-                encode_sized(a.size, Opcode::CMP_A_IMM8, Opcode::CMP_A_IMM32).with_immediate(
-                  match a.size {
-                    RegisterSize::Bit8 => Immediate::i8(b.try_into().unwrap()),
-                    RegisterSize::Bit16 => Immediate::i16(b.try_into().unwrap()),
-                    RegisterSize::Bit32 => Immediate::i32(b.try_into().unwrap()),
-                    RegisterSize::Bit64 => Immediate::i32(b.try_into().unwrap()),
-                  },
-                ),
+                encode_sized(a.size, Opcode::CMP_A_IMM8, Opcode::CMP_A_IMM32)
+                  .with_immediate(Immediate::from(b)),
               );
             } else {
               todo!("encode comparisons with other registers");
@@ -328,7 +323,11 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
                   .with_mod(0b11, reg.get(v).index),
               );
             }
-            (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
+            (
+              InstructionOutput::Var(v),
+              InstructionInput::Var(a),
+              InstructionInput::Imm(rb_codegen::Immediate::I8(b)),
+            ) => {
               debug_assert_eq!(reg.get(v), reg.get(a), "shifts must be in place");
               if b == 1 {
                 builder.instr(
@@ -341,7 +340,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
                   encode_sized(reg.get(v).size, Opcode::SHIFT_IMM_8, Opcode::SHIFT_IMM_32)
                     .with_digit(opcode_digit)
                     .with_mod(0b11, reg.get(v).index)
-                    .with_immediate(Immediate::i8(b.try_into().unwrap())),
+                    .with_immediate(Immediate::i8(b as u8)),
                 );
               }
             }
@@ -365,22 +364,22 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
             // mov reg, imm32
             (InstructionOutput::Var(o), InstructionInput::Imm(i)) => {
               let reg = reg.get(o);
+              debug_assert_eq!(reg.size, var_to_reg_size(i.size()).unwrap());
+              let imm = Immediate::from(i);
               match reg.size {
                 RegisterSize::Bit8 => builder.instr(
-                  Instruction::new(Opcode::MOV_RD_IMM_8.with_rd(reg.index))
-                    .with_immediate(Immediate::i8(i.try_into().unwrap())),
+                  Instruction::new(Opcode::MOV_RD_IMM_8.with_rd(reg.index)).with_immediate(imm),
                 ),
                 RegisterSize::Bit16 => builder.instr(
                   Instruction::new(Opcode::MOV_RD_IMM_16.with_rd(reg.index))
                     .with_prefix(Prefix::OperandSizeOverride)
-                    .with_immediate(Immediate::i16(i.try_into().unwrap())),
+                    .with_immediate(imm),
                 ),
                 RegisterSize::Bit32 => builder.instr(
-                  Instruction::new(Opcode::MOV_RD_IMM_16.with_rd(reg.index))
-                    .with_immediate(Immediate::i32(i.try_into().unwrap())),
+                  Instruction::new(Opcode::MOV_RD_IMM_16.with_rd(reg.index)).with_immediate(imm),
                 ),
                 RegisterSize::Bit64 => {
-                  if let Ok(i) = u32::try_from(i) {
+                  if let Ok(i) = u32::try_from(i.bits()) {
                     // 32-bit registers get zero-extended to 64-bit
                     builder.instr(
                       Instruction::new(Opcode::MOV_RD_IMM_16.with_rd(reg.index))
@@ -391,7 +390,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
                     builder.instr(
                       Instruction::new(Opcode::MOV_RD_IMM_16)
                         .with_prefix(Prefix::RexW)
-                        .with_immediate(Immediate::i64(i.into())),
+                        .with_immediate(imm),
                     );
                   }
                 }
@@ -461,21 +460,51 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
   builder.finish()
 }
 
+fn var_to_reg_size(v: VariableSize) -> Option<RegisterSize> {
+  match v {
+    VariableSize::Bit1 => None,
+    VariableSize::Bit8 => Some(RegisterSize::Bit8),
+    VariableSize::Bit16 => Some(RegisterSize::Bit16),
+    VariableSize::Bit32 => Some(RegisterSize::Bit32),
+    VariableSize::Bit64 => Some(RegisterSize::Bit64),
+  }
+}
+
+impl From<rb_codegen::Immediate> for Immediate {
+  fn from(value: rb_codegen::Immediate) -> Self {
+    match value {
+      rb_codegen::Immediate::I8(v) => Immediate::i8(v as u8),
+      rb_codegen::Immediate::I16(v) => Immediate::i16(v as u16),
+      rb_codegen::Immediate::I32(v) => Immediate::i32(v as u32),
+      rb_codegen::Immediate::I64(v) => Immediate::i64(v as u64),
+      rb_codegen::Immediate::U8(v) => Immediate::i8(v),
+      rb_codegen::Immediate::U16(v) => Immediate::i16(v),
+      rb_codegen::Immediate::U32(v) => Immediate::i32(v),
+      rb_codegen::Immediate::U64(v) => Immediate::i64(v),
+    }
+  }
+}
+
 fn encode_binary_reg_imm(
   builder: &mut Builder,
   output: Register,
   input1: Register,
-  input2: u64,
+  input2: rb_codegen::Immediate,
   opcode_8: Opcode,
   opcode_32: Opcode,
 ) {
   debug_assert_eq!(output.size, input1.size, "binary must have the same size");
+  debug_assert_eq!(
+    output.size,
+    var_to_reg_size(input2.size()).unwrap(),
+    "binary must have the same size"
+  );
 
   builder.instr(
     encode_sized(output.size, opcode_8, opcode_32)
       .with_mod(0b11, input1.index)
       .with_reg(output.index)
-      .with_immediate(Immediate::for_size(input2, output.size)),
+      .with_immediate(Immediate::from(input2)),
   );
 }
 

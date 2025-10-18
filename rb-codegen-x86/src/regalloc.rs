@@ -1,11 +1,11 @@
 use std::fmt;
 
 use rb_codegen::{
-  Function, InstructionInput, InstructionOutput, Math, Opcode, Variable, VariableSize,
+  Function, Immediate, InstructionInput, InstructionOutput, Math, Opcode, Variable, VariableSize,
 };
 use smallvec::smallvec;
 
-use crate::instruction::RegisterIndex;
+use crate::{instruction::RegisterIndex, var_to_reg_size};
 
 pub struct VariableRegisters {
   registers: Vec<Register>,
@@ -27,7 +27,7 @@ struct PinnedVariables {
 
 enum Change {
   AddCopy { loc: InstructionLocation, from: Variable },
-  AddVariable { loc: InstructionLocation, value: u64, new: Variable },
+  AddVariable { loc: InstructionLocation, value: Immediate, new: Variable },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,13 +76,7 @@ impl VariableRegisters {
 
         for output in &inst.output {
           if let InstructionOutput::Var(v) = *output {
-            let size = match v.size() {
-              VariableSize::Bit1 => continue,
-              VariableSize::Bit8 => RegisterSize::Bit8,
-              VariableSize::Bit16 => RegisterSize::Bit16,
-              VariableSize::Bit32 => RegisterSize::Bit32,
-              VariableSize::Bit64 => RegisterSize::Bit64,
-            };
+            let Some(size) = var_to_reg_size(v.size()) else { continue };
 
             if let Some(index) = pinned.get(v) {
               if used[index as usize].is_some_and(|u| lifetimes.is_used_at(u, loc)) {

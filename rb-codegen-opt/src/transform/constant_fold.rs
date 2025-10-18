@@ -49,7 +49,7 @@ impl ConstantFold<'_> {
     match instr.output.as_slice() {
       &[InstructionOutput::Var(v)] => {
         match self.value_uses.actual_value(rb_codegen::InstructionInput::Var(v)) {
-          VariableValue::Direct(d) => {
+          VariableValue::Immediate(d) => {
             instr.opcode = Opcode::Move;
             instr.input = smallvec![d.into()];
             instr.output = smallvec![v.into()];
@@ -64,7 +64,7 @@ impl ConstantFold<'_> {
     for input in &mut instr.input {
       match self.value_uses.actual_value(*input) {
         VariableValue::Variable(v) => *input = v.into(),
-        VariableValue::Direct(v) => *input = v.into(),
+        VariableValue::Immediate(v) => *input = v.into(),
         _ => {}
       }
     }
