@@ -203,10 +203,28 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
               );
             } else if a.index == RegisterIndex::Eax {
               debug_assert_eq!(a.size, var_to_reg_size(b.size()).unwrap());
-              builder.instr(
-                encode_sized(a.size, Opcode::CMP_A_IMM8, Opcode::CMP_A_IMM32)
-                  .with_immediate(Immediate::from(b)),
-              );
+
+              match b {
+                // TODO: CMP imm64 doesn't exist, need to move it to a register.
+                rb_codegen::Immediate::I64(v) => {
+                  builder.instr(
+                    encode_sized(a.size, Opcode::CMP_A_IMM8, Opcode::CMP_A_IMM32)
+                      .with_immediate(Immediate::i32(v.try_into().unwrap())),
+                  );
+                }
+                rb_codegen::Immediate::U64(v) => {
+                  builder.instr(
+                    encode_sized(a.size, Opcode::CMP_A_IMM8, Opcode::CMP_A_IMM32)
+                      .with_immediate(Immediate::i32(v.try_into().unwrap())),
+                  );
+                }
+                _ => {
+                  builder.instr(
+                    encode_sized(a.size, Opcode::CMP_A_IMM8, Opcode::CMP_A_IMM32)
+                      .with_immediate(Immediate::from(b)),
+                  );
+                }
+              }
             } else {
               todo!("encode comparisons with other registers");
             }
@@ -323,11 +341,14 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
                   .with_mod(0b11, reg.get(v).index),
               );
             }
-            (
-              InstructionOutput::Var(v),
-              InstructionInput::Var(a),
-              InstructionInput::Imm(rb_codegen::Immediate::I8(b)),
-            ) => {
+            (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
+              let b = match b {
+                rb_codegen::Immediate::I8(v) => v,
+                // TODO: Get rid of this once number typing is sane.
+                rb_codegen::Immediate::U64(v) => v as i8,
+                _ => panic!("shift immediate must be an 8-bit value"),
+              };
+
               debug_assert_eq!(reg.get(v), reg.get(a), "shifts must be in place");
               if b == 1 {
                 builder.instr(
