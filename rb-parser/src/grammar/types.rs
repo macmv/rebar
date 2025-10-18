@@ -67,6 +67,7 @@ fn atom_type(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
     }
 
     _ => {
+      m.abandon(p);
       p.error("expected type");
 
       None
