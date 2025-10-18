@@ -63,7 +63,7 @@ mod tests {
   use crate::tests::check_transform;
 
   #[test]
-  fn folds_constants() {
+  fn fold_constants() {
     check_transform(
       "constant_fold",
       expect![@r#"
@@ -71,6 +71,33 @@ mod tests {
             mov r0 = 0x00
         -   mov r1 = r0
         +   mov r1 = 0x00
+            trap
+      "#],
+    );
+
+    check_transform(
+      "constant_fold",
+      expect![@r#"
+          block 0:
+            mov r0 = 0x00
+        -   mov r1 = r0
+        -   mov r2 = r1
+        +   mov r1 = 0x00
+        +   mov r2 = 0x00
+            trap
+      "#],
+    );
+  }
+
+  #[test]
+  fn fold_adds() {
+    check_transform(
+      "constant_fold",
+      expect![@r#"
+          block 0:
+            mov r0 = 0x01
+        -   math(add) r1 = r0, 0x02
+        +   math(add) r1 = 0x01, 0x02
             trap
       "#],
     );
