@@ -1,6 +1,9 @@
 use std::collections::{BTreeMap, HashMap, HashSet, hash_map::Entry};
 
-use rb_codegen::{BlockId, Instruction, InstructionInput, InstructionOutput, Opcode, Variable};
+use rb_codegen::{
+  BlockId, Instruction, InstructionInput, InstructionOutput, Math, Opcode, Variable,
+};
+use smallvec::SmallVec;
 
 use super::*;
 
@@ -26,6 +29,7 @@ pub enum VariableValue {
   Direct(u64),
   Variable(Variable),
   Compare { inputs: Box<(VariableValue, VariableValue)> },
+  Math { math: Math, input: Vec<VariableValue> },
 
   Phi { from: BTreeMap<BlockId, VariableValue> },
   DefinedLater,
@@ -151,8 +155,14 @@ impl ValueUses {
 
         self.set(out, cmp);
       }
-      Opcode::Math(_) => {
-        // ...
+      Opcode::Math(math) => {
+        self.set(
+          out,
+          VariableValue::Math {
+            math,
+            input: instr.input.iter().map(|i| self.actual_value(*i)).collect(),
+          },
+        );
       }
 
       Opcode::Branch(_, _) => {
@@ -245,6 +255,17 @@ impl ValueUses {
         }
       }
 
+      VariableValue::Math { math, input } => {
+        let simplified: SmallVec<[VariableValue; 2]> =
+          input.into_iter().map(|v| self.simplify_value(phis, seen, v)).collect();
+
+        if let Some(c) = const_eval(math, &simplified) {
+          VariableValue::Direct(c)
+        } else {
+          VariableValue::Math { math, input: simplified.into_vec() }
+        }
+      }
+
       _ => value,
     }
   }
@@ -275,6 +296,20 @@ impl ValueUses {
       }
     }
     self.variables_to_block.insert(v, self.current_block);
+  }
+}
+
+fn const_eval(m: Math, args: &[VariableValue]) -> Option<u64> {
+  match m {
+    Math::Add => {
+      if let (VariableValue::Direct(a), VariableValue::Direct(b)) = (&args[0], &args[1]) {
+        Some(a.wrapping_add(*b))
+      } else {
+        None
+      }
+    }
+
+    _ => None,
   }
 }
 

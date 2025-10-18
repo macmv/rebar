@@ -1,4 +1,4 @@
-use rb_codegen::Instruction;
+use rb_codegen::{Instruction, InstructionOutput, Opcode};
 
 use super::*;
 use crate::analysis::{
@@ -46,6 +46,21 @@ enum InstrChange {
 
 impl ConstantFold<'_> {
   fn pass_instr(&self, instr: &mut Instruction) -> InstrChange {
+    match instr.output.as_slice() {
+      &[InstructionOutput::Var(v)] => {
+        match self.value_uses.actual_value(rb_codegen::InstructionInput::Var(v)) {
+          VariableValue::Direct(d) => {
+            instr.opcode = Opcode::Move;
+            instr.input = smallvec![d.into()];
+            instr.output = smallvec![v.into()];
+            return InstrChange::None;
+          }
+          _ => {}
+        }
+      }
+      _ => {}
+    }
+
     for input in &mut instr.input {
       match self.value_uses.actual_value(*input) {
         VariableValue::Variable(v) => *input = v.into(),
@@ -97,7 +112,7 @@ mod tests {
           block 0:
             mov r0 = 0x01
         -   math(add) r1 = r0, 0x02
-        +   math(add) r1 = 0x01, 0x02
+        +   mov r1 = 0x03
             trap
       "#],
     );
