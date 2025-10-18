@@ -300,17 +300,19 @@ impl ValueUses {
 }
 
 fn const_eval(m: Math, args: &[VariableValue]) -> Option<u64> {
-  match m {
-    Math::Add => {
-      if let (VariableValue::Direct(a), VariableValue::Direct(b)) = (&args[0], &args[1]) {
-        Some(a.wrapping_add(*b))
-      } else {
-        None
+  macro_rules! bin_op {
+    ($op:ident, $func:ident) => {
+      if m == Math::$op
+        && let (VariableValue::Direct(a), VariableValue::Direct(b)) = (&args[0], &args[1])
+      {
+        return Some(a.$func(*b));
       }
-    }
-
-    _ => None,
+    };
   }
+
+  bin_op!(Add, wrapping_add);
+
+  None
 }
 
 #[cfg(test)]
