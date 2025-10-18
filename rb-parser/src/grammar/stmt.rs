@@ -64,7 +64,9 @@ pub fn stmt(p: &mut Parser) {
       if p.at(T![extern]) {
         p.eat(T![extern]);
         if p.at(T!['"']) {
+          let m = p.start();
           super::expr::string(p);
+          m.complete(p, STRING);
         }
       }
 
@@ -263,6 +265,42 @@ mod tests {
               NL_KW '\n'
               WHITESPACE '        '
               CLOSE_CURLY '}'
+          NL_KW '\n'
+          WHITESPACE '      '
+      "#],
+    );
+  }
+
+  #[test]
+  fn extern_fns() {
+    check(
+      r#"
+        extern "syscall" fn foo(fd: int)
+      "#,
+      expect![@r#"
+        SOURCE_FILE
+          NL_KW '\n'
+          WHITESPACE '        '
+          FUNCTION_DEF
+            EXTERN_KW 'extern'
+            WHITESPACE ' '
+            STRING
+              DOUBLE_QUOTE '"'
+              IDENT 'syscall'
+              DOUBLE_QUOTE '"'
+            WHITESPACE ' '
+            FN_KW 'fn'
+            WHITESPACE ' '
+            IDENT 'foo'
+            PARAMS
+              OPEN_PAREN '('
+              PARAM
+                IDENT 'fd'
+                COLON ':'
+                WHITESPACE ' '
+                NAME_TYPE
+                  IDENT 'int'
+              CLOSE_PAREN ')'
           NL_KW '\n'
           WHITESPACE '      '
       "#],
