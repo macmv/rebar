@@ -127,7 +127,16 @@ impl FormatterContext<'_> {
       (T!['}'], _) => (Space, None),
       (T!['{'], _) => (None, Space),
 
-      (T![let] | T![if] | T![fn] | T![struct], _) => (None, Space),
+      (T![fn], _) => {
+        // extern "syscall" fn...
+        if self.before(token).kind() == STRING {
+          (Space, Space)
+        } else {
+          (None, Space)
+        }
+      }
+      (T![->], _) => (Space, Space),
+      (T![let] | T![if] | T![fn] | T![extern] | T![struct], _) => (None, Space),
       (T![else], _) => (Space, None),
 
       (_, BINARY_OP) => {

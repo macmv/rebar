@@ -2,6 +2,7 @@ use crate::fmt::{format_opts, Formatter};
 use rb_syntax::cst;
 use rb_test::{expect, Expect};
 
+#[track_caller]
 fn check(input: &str, expected: Expect) {
   let input = input.strip_prefix('\n').unwrap();
 
@@ -406,26 +407,33 @@ fn long_binary_op() {
 }
 
 #[test]
-fn def_stmt() {
+fn fn_stmt() {
   check(
     &r#"
-      def  foo  (  x : int ,  y : str )  {
+      fn  foo  (  x : int ,  y : str )  {
         x  +  y
       }
     "#,
     expect![@r#"
-      def foo(x: int, y: str) { x
-        + y }
+      fn foo(x: int, y: str) { x + y }
     "#],
   );
 
   check(
     &r#"
-      def foo(x:int,y:str){x+y}
+      fn foo(x:int,y:str){x+y}
     "#,
     expect![@r#"
-      def foo(x: int, y: str) { x
-        + y }
+      fn foo(x: int, y: str) { x + y }
+    "#],
+  );
+
+  check(
+    &r#"
+      extern "syscall" fn foo(x: int) -> int
+    "#,
+    expect![@r#"
+      extern "syscall" fn foo(x: int) -> int
     "#],
   );
 }
