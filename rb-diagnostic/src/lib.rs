@@ -36,6 +36,19 @@ pub fn run<T>(sources: Arc<Sources>, f: impl FnOnce() -> T) -> Result<T, Vec<Dia
   }
 }
 
+pub fn run_both<T>(sources: Arc<Sources>, f: impl FnOnce() -> T) -> (T, Vec<Diagnostic>) {
+  Context::init(sources);
+  Context::run(|ctx| {
+    ctx.collect_errors();
+  });
+
+  let res = f();
+  let errors = Context::run(|ctx| ctx.take_errors());
+  Context::cleanup();
+
+  (res, errors)
+}
+
 pub fn emit(diagnostic: Diagnostic) {
   Context::run(|ctx| {
     ctx.error(diagnostic);

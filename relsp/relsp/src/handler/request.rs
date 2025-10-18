@@ -24,7 +24,7 @@ pub fn handle_semantic_tokens_full(
     let id = sources.add(Source::new("inline.rbr".into(), file.clone()));
     let sources = Arc::new(sources);
 
-    let res = rb_diagnostic::run(sources.clone(), || {
+    let ((hir, span_maps), _) = rb_diagnostic::run_both(sources.clone(), || {
       let res = cst::SourceFile::parse(&file);
 
       if res.errors().is_empty() {
@@ -33,11 +33,6 @@ pub fn handle_semantic_tokens_full(
         Default::default()
       }
     });
-
-    let (hir, span_maps) = match res {
-      Ok(hir) => hir,
-      Err(_) => return Ok(None),
-    };
 
     let highlight = Highlight::from_ast(hir, &span_maps);
 
