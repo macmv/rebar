@@ -73,15 +73,15 @@ impl<'a> Typer<'a> {
 
     for &item in function.items.iter() {
       match function.stmts[item] {
-        hir::Stmt::Def(ref name, ref args, ref ret) => {
-          let args = args.iter().map(|(_, ty)| type_of_type_expr(ty)).collect();
-          let ret = match ret {
-            Some(ty) => Box::new(type_of_type_expr(ty)),
+        hir::Stmt::FunctionDef(ref func) => {
+          let args = func.args.iter().map(|(_, ty)| type_of_type_expr(ty)).collect();
+          let ret = match func.ret {
+            Some(ref ty) => Box::new(type_of_type_expr(&ty)),
             None => Box::new(Type::Literal(Literal::Unit)),
           };
 
           let ty = Type::Function(args, ret);
-          typer.local_functions.insert(name.clone(), ty);
+          typer.local_functions.insert(func.name.clone(), ty);
         }
         _ => {}
       }
@@ -141,7 +141,7 @@ impl<'a> Typer<'a> {
         let res = self.type_expr(expr);
         self.locals.insert(name.clone(), res);
       }
-      hir::Stmt::Def(_, _, _) => {}
+      hir::Stmt::FunctionDef(_) => {}
       hir::Stmt::Struct => {}
     }
   }

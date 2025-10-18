@@ -80,7 +80,7 @@ impl Lower<'_> {
         self.locals.insert(name.clone(), id);
         mir::Stmt::Let(id, ty, mir_expr)
       }
-      hir::Stmt::Def(_, _, _) | hir::Stmt::Struct => return None,
+      hir::Stmt::FunctionDef(_) | hir::Stmt::Struct => return None,
     };
 
     Some(self.mir.stmts.alloc(stmt))

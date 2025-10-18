@@ -127,7 +127,7 @@ impl FunctionLower<'_, '_> {
         self.source.function(def);
 
         let name = def.ident_token().unwrap().to_string();
-        let params = def
+        let args = def
           .params()
           .unwrap()
           .params()
@@ -139,7 +139,7 @@ impl FunctionLower<'_, '_> {
           })
           .collect();
 
-        hir::Stmt::Def(name, params, None)
+        hir::Stmt::FunctionDef(hir::FunctionDef { name, args, ret: None })
       }
 
       cst::Stmt::Struct(ref strct) => {

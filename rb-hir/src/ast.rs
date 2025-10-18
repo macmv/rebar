@@ -79,10 +79,17 @@ pub enum Stmt {
   // TODO: Add type literals for explicit types.
   Let(String, ExprId),
 
-  Def(String, Vec<(String, TypeExpr)>, Option<TypeExpr>),
+  FunctionDef(FunctionDef),
 
   // TODO: Do we need this?
   Struct,
+}
+
+#[derive(Debug)]
+pub struct FunctionDef {
+  pub name: String,
+  pub args: Vec<(String, TypeExpr)>,
+  pub ret:  Option<TypeExpr>,
 }
 
 #[derive(Debug)]
