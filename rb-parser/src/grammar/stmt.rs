@@ -60,10 +60,11 @@ pub fn stmt(p: &mut Parser) {
 
       // test ok
       // extern fn foo()
+      // extern "syscall" fn foo()
       if p.at(T![extern]) {
         p.eat(T![extern]);
         if p.at(T!['"']) {
-          p.eat(T!['"']);
+          super::expr::string(p);
         }
       }
 

@@ -106,23 +106,7 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
     // test ok
     // print("hello world!")
     T!['"'] => {
-      p.bump();
-
-      // TODO: Escapes and such.
-      while !p.at(EOF) && !p.at(T!['"']) {
-        if p.at(T![#]) && p.peek() == T!['{'] {
-          let m = p.start();
-          p.eat(T![#]);
-          p.eat(T!['{']);
-          expr(p);
-          p.expect(T!['}']);
-          m.complete(p, INTERPOLATION);
-        } else {
-          p.bump();
-        }
-      }
-
-      p.eat(T!['"']);
+      string(p);
       Some(m.complete(p, STRING))
     }
 
@@ -206,6 +190,26 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
       None
     }
   }
+}
+
+pub fn string(p: &mut Parser) {
+  p.eat(T!['"']);
+
+  // TODO: Escapes and such.
+  while !p.at(EOF) && !p.at(T!['"']) {
+    if p.at(T![#]) && p.peek() == T!['{'] {
+      let m = p.start();
+      p.eat(T![#]);
+      p.eat(T!['{']);
+      expr(p);
+      p.expect(T!['}']);
+      m.complete(p, INTERPOLATION);
+    } else {
+      p.bump();
+    }
+  }
+
+  p.eat(T!['"']);
 }
 
 fn postfix_expr(p: &mut Parser, mut lhs: CompletedMarker) -> CompletedMarker {
