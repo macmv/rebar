@@ -54,9 +54,11 @@ impl SourceLower<'_> {
       lower.f.args.push((name, ty));
     }
 
-    for stmt in cst.block().unwrap().stmts() {
-      let item = lower.stmt(stmt);
-      lower.f.items.push(item);
+    if let Some(block) = cst.block() {
+      for stmt in block.stmts() {
+        let item = lower.stmt(stmt);
+        lower.f.items.push(item);
+      }
     }
 
     self.span_maps.push(span_map);
