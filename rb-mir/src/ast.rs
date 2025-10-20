@@ -116,3 +116,7 @@ pub enum BinaryOp {
   Gt,
   Gte,
 }
+
+impl StringInterp {
+  pub fn is_literal(&self) -> bool { matches!(self, StringInterp::Literal(_)) }
+}
