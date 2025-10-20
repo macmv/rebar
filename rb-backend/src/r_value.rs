@@ -4,33 +4,44 @@ use rb_codegen::{Variable, VariableSize::*};
 use rb_value::ValueType;
 
 #[derive(Debug, Clone)]
-pub enum RValue {
-  TypedConst(ValueType, Vec<u64>),
-  TypedDyn(ValueType, Variable),
-  // Untyped(Slot),
-  //
-  // TypedPtr(ValueType, ir::Value),
-  // UntypedPtr(u32, ir::Value),
+pub struct RValue {
+  ty:   ValueType,
+  kind: RValueKind,
+}
+
+#[derive(Debug, Clone)]
+enum RValueKind {
+  Const(Vec<u64>),
+  Dyn(Variable),
 }
 
 impl RValue {
-  pub fn nil() -> Self { RValue::TypedConst(ValueType::Nil, vec![]) }
+  pub fn new(ty: ValueType, ir: Variable) -> Self { RValue { ty, kind: RValueKind::Dyn(ir) } }
 
-  pub fn const_bool(ir: bool) -> Self { RValue::TypedConst(ValueType::Bool, vec![ir as u64]) }
+  pub fn nil() -> Self { RValue { ty: ValueType::Nil, kind: RValueKind::Const(vec![]) } }
 
-  pub fn bool(ir: Variable) -> Self { RValue::TypedDyn(ValueType::Bool, ir) }
-  pub fn int(ir: Variable) -> Self { RValue::TypedDyn(ValueType::Int, ir) }
-  pub fn function(ir: Variable) -> Self { RValue::TypedDyn(ValueType::Function, ir) }
+  pub fn const_bool(ir: bool) -> Self {
+    RValue { ty: ValueType::Bool, kind: RValueKind::Const(vec![ir as u64]) }
+  }
+  pub fn const_user_function(v: u64) -> Self {
+    RValue { ty: ValueType::UserFunction, kind: RValueKind::Const(vec![v]) }
+  }
+
+  pub fn bool(ir: Variable) -> Self { RValue { ty: ValueType::Bool, kind: RValueKind::Dyn(ir) } }
+  pub fn int(ir: Variable) -> Self { RValue { ty: ValueType::Int, kind: RValueKind::Dyn(ir) } }
+  pub fn function(ir: Variable) -> Self {
+    RValue { ty: ValueType::Function, kind: RValueKind::Dyn(ir) }
+  }
 }
 
 impl RValue {
   pub fn unwrap_single(&self, func: &mut FuncBuilder) -> Variable {
-    match self {
-      Self::TypedConst(_, items) => {
+    match self.kind {
+      RValueKind::Const(ref items) => {
         assert_eq!(items.len(), 1, "expected single value, got {items:?}");
         func.builder.instr().mov(Bit64, items[0])
       }
-      Self::TypedDyn(_, v) => *v,
+      RValueKind::Dyn(v) => v,
       /*
       Self::Untyped(slot) => match slot {
         Slot::Empty => panic!(),
@@ -44,14 +55,7 @@ impl RValue {
     }
   }
 
-  pub fn const_ty(&self) -> Option<ValueType> {
-    match self {
-      Self::TypedConst(ty, _) => Some(*ty),
-      Self::TypedDyn(ty, _) => Some(*ty),
-      // Self::TypedPtr(ty, _) => Some(*ty),
-      // _ => None,
-    }
-  }
+  pub fn const_ty(&self) -> Option<ValueType> { Some(self.ty) }
 
   /*
   /// Returns the extended form of this value. This is used when passing a value
@@ -156,8 +160,8 @@ impl RValue {
   /// values can change depending on the type (so this works for function
   /// arguments, but not for block arguments).
   fn to_compact_ir(&self, func: &mut FuncBuilder) -> Variable {
-    match self {
-      Self::TypedConst(_, items) => {
+    match self.kind {
+      RValueKind::Const(ref items) => {
         if items.is_empty() {
           panic!("cannot encode empty items");
         } else if items.len() == 1 {
@@ -166,7 +170,7 @@ impl RValue {
           panic!();
         }
       }
-      Self::TypedDyn(_, slot) => *slot,
+      RValueKind::Dyn(slot) => slot,
     }
   }
 

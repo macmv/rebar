@@ -135,10 +135,10 @@ impl FuncBuilder<'_> {
         let var = self.locals[&id];
 
         let vt = ValueType::for_type(self.ctx, ty);
-        RValue::TypedDyn(vt, var)
+        RValue::new(vt, var)
       }
 
-      mir::Expr::UserFunction(id, _) => RValue::TypedConst(ValueType::UserFunction, vec![id.0]),
+      mir::Expr::UserFunction(id, _) => RValue::const_user_function(id.0),
 
       mir::Expr::Native(ref id, _) => RValue::function(self.builder.instr().mov(Bit64, id.0)),
 
