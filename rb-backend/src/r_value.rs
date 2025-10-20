@@ -12,11 +12,11 @@ pub struct RValue {
 #[derive(Debug, Clone)]
 enum RValueKind {
   Const(Vec<u64>),
-  Dyn(Variable),
+  Dyn(Vec<Variable>),
 }
 
 impl RValue {
-  pub fn new(ty: ValueType, ir: Variable) -> Self { RValue { ty, kind: RValueKind::Dyn(ir) } }
+  pub fn new(ty: ValueType, ir: Variable) -> Self { RValue { ty, kind: RValueKind::Dyn(vec![ir]) } }
 
   pub fn nil() -> Self { RValue { ty: ValueType::Nil, kind: RValueKind::Const(vec![]) } }
 
@@ -27,11 +27,9 @@ impl RValue {
     RValue { ty: ValueType::UserFunction, kind: RValueKind::Const(vec![v]) }
   }
 
-  pub fn bool(ir: Variable) -> Self { RValue { ty: ValueType::Bool, kind: RValueKind::Dyn(ir) } }
-  pub fn int(ir: Variable) -> Self { RValue { ty: ValueType::Int, kind: RValueKind::Dyn(ir) } }
-  pub fn function(ir: Variable) -> Self {
-    RValue { ty: ValueType::Function, kind: RValueKind::Dyn(ir) }
-  }
+  pub fn bool(ir: Variable) -> Self { RValue::new(ValueType::Bool, ir) }
+  pub fn int(ir: Variable) -> Self { RValue::new(ValueType::Int, ir) }
+  pub fn function(ir: Variable) -> Self { RValue::new(ValueType::Function, ir) }
 }
 
 impl RValue {
@@ -41,17 +39,20 @@ impl RValue {
         assert_eq!(items.len(), 1, "expected single value, got {items:?}");
         func.builder.instr().mov(Bit64, items[0])
       }
-      RValueKind::Dyn(v) => v,
-      /*
-      Self::Untyped(slot) => match slot {
-        Slot::Empty => panic!(),
-        Slot::Single(_) => panic!(),
-        Slot::Multiple(_, _) => slot.get(&mut func.builder, 1),
-      },
+      RValueKind::Dyn(ref v) => {
+        assert_eq!(v.len(), 1, "expected single value, got {v:?}");
 
-      Self::TypedPtr(_, ptr) => func.builder.ins().load(ir::types::I64, MemFlags::new(), *ptr, 0),
-      Self::UntypedPtr(_, ptr) => func.builder.ins().load(ir::types::I64, MemFlags::new(), *ptr, 8),
-      */
+        v[0]
+      } /*
+        Self::Untyped(slot) => match slot {
+          Slot::Empty => panic!(),
+          Slot::Single(_) => panic!(),
+          Slot::Multiple(_, _) => slot.get(&mut func.builder, 1),
+        },
+
+        Self::TypedPtr(_, ptr) => func.builder.ins().load(ir::types::I64, MemFlags::new(), *ptr, 0),
+        Self::UntypedPtr(_, ptr) => func.builder.ins().load(ir::types::I64, MemFlags::new(), *ptr, 8),
+        */
     }
   }
 
@@ -170,7 +171,13 @@ impl RValue {
           panic!();
         }
       }
-      RValueKind::Dyn(slot) => slot,
+      RValueKind::Dyn(ref v) => {
+        if v.len() != 1 {
+          panic!("expected single value, got {v:?}");
+        }
+
+        v[0]
+      }
     }
   }
 
