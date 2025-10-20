@@ -271,6 +271,23 @@ impl Immediate {
   }
 }
 
+#[macro_export]
+macro_rules! immediate {
+  ($a:ident, $b:ident, $bin:expr) => {
+    match ($a, $b) {
+      (Immediate::I8(a), Immediate::I8(b)) => Some($bin(a, b)),
+      (Immediate::I16(a), Immediate::I16(b)) => Some($bin(a, b)),
+      (Immediate::I32(a), Immediate::I32(b)) => Some($bin(a, b)),
+      (Immediate::I64(a), Immediate::I64(b)) => Some($bin(a, b)),
+      (Immediate::U8(a), Immediate::U8(b)) => Some($bin(a, b)),
+      (Immediate::U16(a), Immediate::U16(b)) => Some($bin(a, b)),
+      (Immediate::U32(a), Immediate::U32(b)) => Some($bin(a, b)),
+      (Immediate::U64(a), Immediate::U64(b)) => Some($bin(a, b)),
+      _ => None,
+    }
+  };
+}
+
 impl InstructionInput {
   #[track_caller]
   pub fn unwrap_var(self) -> Variable {

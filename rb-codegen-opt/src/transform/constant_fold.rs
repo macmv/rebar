@@ -1,4 +1,6 @@
-use rb_codegen::{Instruction, InstructionOutput, Opcode};
+use rb_codegen::{
+  BlockId, Condition, Immediate, Instruction, InstructionInput, InstructionOutput, Opcode,
+};
 
 use super::*;
 use crate::analysis::{
@@ -16,32 +18,33 @@ pub struct ConstantFold<'a> {
 impl<'a> TransformPass<'a> for ConstantFold<'a> {
   fn run(&self, function: &mut Function) {
     for block in &mut function.blocks {
-      let mut delete = false;
+      let mut to_jump = None;
       block.instructions.retain_mut(|instr| {
-        if delete {
+        if to_jump.is_some() {
           return false;
         }
 
         match self.pass_instr(instr) {
           InstrChange::None => true,
           InstrChange::Remove => false,
-          InstrChange::DeleteAfter => {
-            delete = true;
+          InstrChange::ReplaceWithJump { target } => {
+            to_jump = Some(target);
             true
           }
         }
       });
+
+      if let Some(target) = to_jump {
+        block.terminator = rb_codegen::TerminatorInstruction::Jump(target);
+      }
     }
   }
 }
 
-// TODO: `pass_instr` should find conditional branches that are always taken,
-// and remove all instructions after those.
-#[allow(unused)]
 enum InstrChange {
   None,
   Remove,
-  DeleteAfter,
+  ReplaceWithJump { target: BlockId },
 }
 
 impl ConstantFold<'_> {
@@ -69,7 +72,34 @@ impl ConstantFold<'_> {
       }
     }
 
+    match instr.opcode {
+      Opcode::Branch(cond, target) => {
+        if let &[InstructionInput::Imm(a), InstructionInput::Imm(b)] = instr.input.as_slice() {
+          if let Some(res) = const_condition(cond, a, b) {
+            if res {
+              return InstrChange::ReplaceWithJump { target };
+            } else {
+              return InstrChange::Remove;
+            }
+          }
+        }
+      }
+      _ => {}
+    }
+
     InstrChange::None
+  }
+}
+
+fn const_condition(cond: Condition, a: Immediate, b: Immediate) -> Option<bool> {
+  match cond {
+    Condition::Equal => rb_codegen::immediate!(a, b, |a, b| a == b),
+    Condition::NotEqual => rb_codegen::immediate!(a, b, |a, b| a != b),
+    // TODO: Signed-ness
+    Condition::Less => rb_codegen::immediate!(a, b, |a, b| a < b),
+    Condition::Greater => rb_codegen::immediate!(a, b, |a, b| a > b),
+    Condition::LessEqual => rb_codegen::immediate!(a, b, |a, b| a <= b),
+    Condition::GreaterEqual => rb_codegen::immediate!(a, b, |a, b| a >= b),
   }
 }
 
