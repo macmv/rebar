@@ -34,7 +34,7 @@ pub struct FuncBuilder<'a> {
   builder: FunctionBuilder,
   mir:     &'a mir::Function,
 
-  locals: HashMap<mir::VarId, Variable>,
+  locals: HashMap<mir::VarId, RValue>,
 }
 
 impl Compiler {
@@ -95,13 +95,13 @@ impl ThreadCtx<'_> {
 
     let mut i = 0;
     for (var, arg) in mir.params.iter().enumerate() {
-      let dvt = ValueType::for_type(self.mir_ctx, &arg);
+      let vt = ValueType::for_type(self.mir_ctx, &arg);
       let mut values = vec![];
-      for _ in 0..dvt.len(self.mir_ctx) {
+      for _ in 0..vt.len(self.mir_ctx) {
         values.push(builder.arg(i));
         i += 1;
       }
-      locals.insert(mir::VarId(var as u32), values[0]);
+      locals.insert(mir::VarId(var as u32), RValue::new(vt, values));
     }
 
     FuncBuilder { ctx: *self, mir, builder, locals }
@@ -143,8 +143,7 @@ impl FuncBuilder<'_> {
       mir::Stmt::Expr(expr) => self.compile_expr(expr),
       mir::Stmt::Let(id, ref _ty, expr) => {
         let value = self.compile_expr(expr);
-        let ir = value.to_ir(self);
-        self.locals.insert(id, ir);
+        self.locals.insert(id, value);
 
         RValue::nil()
       }
@@ -160,18 +159,13 @@ impl FuncBuilder<'_> {
         mir::Literal::String(s) => {
           let addr = self.builder.add_data(s.as_bytes());
           let addr = self.builder.instr().lea(addr, Bit64);
-          RValue::int(addr)
+          RValue::string(addr, self.builder.instr().mov(Bit64, s.len() as u64))
         }
       },
 
       mir::Expr::Array(_, _) => todo!("array literals"),
 
-      mir::Expr::Local(id, ref ty) => {
-        let var = self.locals[&id];
-
-        let vt = ValueType::for_type(self.mir(), ty);
-        RValue::new(vt, var)
-      }
+      mir::Expr::Local(id, _) => self.locals[&id].clone(),
 
       mir::Expr::UserFunction(id, _) => RValue::const_user_function(id.0),
 

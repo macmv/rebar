@@ -16,7 +16,10 @@ enum RValueKind {
 }
 
 impl RValue {
-  pub fn new(ty: ValueType, ir: Variable) -> Self { RValue { ty, kind: RValueKind::Dyn(vec![ir]) } }
+  pub fn new(ty: ValueType, ir: Vec<Variable>) -> Self { RValue { ty, kind: RValueKind::Dyn(ir) } }
+  pub fn single(ty: ValueType, ir: Variable) -> Self {
+    RValue { ty, kind: RValueKind::Dyn(vec![ir]) }
+  }
 
   pub fn nil() -> Self { RValue { ty: ValueType::Nil, kind: RValueKind::Const(vec![]) } }
 
@@ -27,12 +30,16 @@ impl RValue {
     RValue { ty: ValueType::UserFunction, kind: RValueKind::Const(vec![v]) }
   }
 
-  pub fn bool(ir: Variable) -> Self { RValue::new(ValueType::Bool, ir) }
-  pub fn int(ir: Variable) -> Self { RValue::new(ValueType::Int, ir) }
-  pub fn function(ir: Variable) -> Self { RValue::new(ValueType::Function, ir) }
+  pub fn bool(ir: Variable) -> Self { RValue::single(ValueType::Bool, ir) }
+  pub fn int(ir: Variable) -> Self { RValue::single(ValueType::Int, ir) }
+  pub fn function(ir: Variable) -> Self { RValue::single(ValueType::Function, ir) }
+  pub fn string(ptr: Variable, len: Variable) -> Self {
+    RValue::new(ValueType::String, vec![ptr, len])
+  }
 }
 
 impl RValue {
+  #[track_caller]
   pub fn unwrap_single(&self, func: &mut FuncBuilder) -> Variable {
     match self.kind {
       RValueKind::Const(ref items) => {
@@ -160,6 +167,7 @@ impl RValue {
   /// type of the value is simple (ie, not a union), and when the number of
   /// values can change depending on the type (so this works for function
   /// arguments, but not for block arguments).
+  #[track_caller]
   fn to_compact_ir(&self, func: &mut FuncBuilder) -> Variable {
     match self.kind {
       RValueKind::Const(ref items) => {
@@ -185,5 +193,6 @@ impl RValue {
   /// whenever the length of arguments can change (for example in a function
   /// call). For block arguments, which must have a consistent size, use
   /// `to_sized_ir`.
+  #[track_caller]
   pub fn to_ir(&self, func: &mut FuncBuilder) -> Variable { self.to_compact_ir(func) }
 }
