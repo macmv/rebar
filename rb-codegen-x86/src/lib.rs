@@ -8,7 +8,7 @@ pub use elf::generate;
 pub use instruction::{Immediate, Instruction, ModReg, Opcode, Prefix};
 use object::write::elf::Rel;
 use rb_codegen::{
-  BlockId, FunctionId, InstructionInput, InstructionOutput, Math, VariableSize, immediate,
+  BlockId, FunctionId, InstructionInput, InstructionOutput, Math, Symbol, VariableSize, immediate,
 };
 
 use crate::{
@@ -24,6 +24,7 @@ pub struct ObjectBuilder {
   pub functions: Vec<u64>,
   pub text:      Vec<u8>,
   calls:         Vec<Call>,
+  ro_data:       Vec<u8>,
 }
 
 struct Call {
@@ -55,6 +56,8 @@ pub struct Jump {
 
 impl ObjectBuilder {
   pub fn add_function(&mut self, function: rb_codegen::Function) {
+    self.ro_data.extend_from_slice(&function.data);
+
     let lowered = lower(function);
 
     let offset = self.text.len() as u64;
@@ -79,7 +82,7 @@ impl ObjectBuilder {
       }
     }
 
-    Object { text: self.text, ro_data: vec![], relocs: self.relocs }
+    Object { text: self.text, ro_data: self.ro_data, relocs: self.relocs }
   }
 }
 
@@ -790,6 +793,7 @@ mod tests {
         ],
         terminator:   rb_codegen::TerminatorInstruction::Trap,
       }],
+      data:   vec![],
     };
 
     let builder = lower(function);
@@ -869,6 +873,7 @@ mod tests {
         ],
         terminator:   rb_codegen::TerminatorInstruction::Trap,
       }],
+      data:   vec![],
     };
 
     let data = b"Hello, world!\n";

@@ -27,9 +27,15 @@ impl FunctionBuilder {
   pub fn new(sig: Signature) -> Self {
     FunctionBuilder {
       next_variable: 0,
-      function:      Function { sig, blocks: vec![Block::default()] },
+      function:      Function { sig, blocks: vec![Block::default()], data: vec![] },
       block:         BlockId(0),
     }
+  }
+
+  pub fn add_data(&mut self, data: &[u8]) -> Symbol {
+    self.function.data.extend_from_slice(data);
+
+    Symbol { index: 1 }
   }
 
   pub fn build(self) -> Function { self.function }

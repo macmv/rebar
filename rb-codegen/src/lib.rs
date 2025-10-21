@@ -16,6 +16,7 @@ pub struct Signature {
 pub struct Function {
   pub sig:    Signature,
   pub blocks: Vec<Block>,
+  pub data:   Vec<u8>,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

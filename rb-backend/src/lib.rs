@@ -157,7 +157,11 @@ impl FuncBuilder<'_> {
         mir::Literal::Nil => RValue::nil(),
         mir::Literal::Bool(v) => RValue::bool(self.builder.instr().mov(Bit1, *v as u64)),
         mir::Literal::Int(i) => RValue::int(self.builder.instr().mov(Bit64, *i as u64)),
-        mir::Literal::String(_) => todo!("string literals"),
+        mir::Literal::String(s) => {
+          let addr = self.builder.add_data(s.as_bytes());
+          let addr = self.builder.instr().lea(addr, Bit64);
+          RValue::int(addr)
+        }
       },
 
       mir::Expr::Array(_, _) => todo!("array literals"),
