@@ -21,12 +21,9 @@ mod regalloc;
 
 #[derive(Default)]
 pub struct ObjectBuilder {
-  relocs:       Vec<Rel>,
-  functions:    Vec<u64>,
-  text:         Vec<u8>,
-  calls:        Vec<Call>,
-  ro_data:      Vec<u8>,
-  data_symbols: Vec<SymbolDef>,
+  functions: Vec<u64>,
+  calls:     Vec<Call>,
+  object:    Object,
 }
 
 struct Call {
@@ -59,14 +56,15 @@ pub struct Jump {
 
 impl ObjectBuilder {
   pub fn add_function(&mut self, mut function: rb_codegen::Function) {
-    self.ro_data.extend_from_slice(&function.data);
-    self.data_symbols.extend(function.data_symbols.drain(..));
+    self.object.ro_data.extend_from_slice(&function.data);
+    self.object.data_symbols.extend(function.data_symbols.drain(..));
 
     let lowered = lower(function);
 
-    let offset = self.text.len() as u64;
-    self.text.extend_from_slice(&lowered.text);
+    let offset = self.object.text.len() as u64;
+    self.object.text.extend_from_slice(&lowered.text);
     self
+      .object
       .relocs
       .extend(lowered.relocs.into_iter().map(|rel| Rel { r_offset: rel.r_offset + offset, ..rel }));
     self
@@ -79,19 +77,14 @@ impl ObjectBuilder {
     for call in self.calls {
       let rel = self.functions[call.target.as_u32() as usize] as i64 - (call.offset as i64 + 4);
       if let Ok(offset) = i32::try_from(rel) {
-        self.text[call.offset as usize..call.offset as usize + 4]
+        self.object.text[call.offset as usize..call.offset as usize + 4]
           .copy_from_slice(&offset.to_le_bytes());
       } else {
         panic!("call target too far away");
       }
     }
 
-    Object {
-      text:         self.text,
-      ro_data:      self.ro_data,
-      relocs:       self.relocs,
-      data_symbols: self.data_symbols,
-    }
+    self.object
   }
 }
 
