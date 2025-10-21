@@ -271,9 +271,9 @@ mod tests {
     let mut ast = parse(
       r#"
       block 0:
-        mov A 0x04
-        mov [0x80](v?) A
-        mov [0xff] A
+        mov r0 = 0x04
+        mov r1 = r0
+        mov r2 = r0
         jump to block 0
       "#,
     );
@@ -282,11 +282,12 @@ mod tests {
 
     ast.check(expect![@r#"
       block 0:
-        [0x80](v0) = phi(block 0 -> v3, block before -> v?)
-        A(v1) = phi(block 0 -> v2, block before -> v?)
-        mov A(v2) 0x04
-        mov [0x80](v3) A(v2)
-        mov [0x00ff] A(v2)
+        r0 = phi(block 0 -> r3, block before -> <undef>)
+        r1 = phi(block 0 -> r4, block before -> <undef>)
+        r2 = phi(block 0 -> r5, block before -> <undef>)
+        mov r3 = 0x04
+        mov r4 = r3
+        mov r5 = r3
         jump to block 0
     "#]);
   }

@@ -481,5 +481,11 @@ impl fmt::Display for Variable {
 }
 
 impl fmt::Display for BlockId {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "block {}", self.as_u32()) }
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    if *self == BlockId::BEFORE {
+      write!(f, "block before")
+    } else {
+      write!(f, "block {}", self.as_u32())
+    }
+  }
 }
