@@ -29,6 +29,7 @@ impl TestFunction {
     self.analysis.get::<T>()
   }
 
+  #[allow(dead_code)]
   pub fn full_optimize(&mut self) {
     let mut transformer = crate::Transformer::new(&mut self.analysis, &mut self.function);
     transformer.full_optimize();
