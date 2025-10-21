@@ -20,12 +20,12 @@ mod regalloc;
 
 #[derive(Default)]
 pub struct ObjectBuilder {
-  pub relocs:    Vec<Rel>,
-  pub functions: Vec<u64>,
-  pub text:      Vec<u8>,
-  calls:         Vec<Call>,
-  ro_data:       Vec<u8>,
-  symbols:       Vec<SymbolDef>,
+  relocs:    Vec<Rel>,
+  functions: Vec<u64>,
+  text:      Vec<u8>,
+  calls:     Vec<Call>,
+  ro_data:   Vec<u8>,
+  symbols:   Vec<SymbolDef>,
 }
 
 struct Call {
@@ -35,10 +35,10 @@ struct Call {
 
 #[derive(Default)]
 pub struct Object {
-  pub text:    Vec<u8>,
-  pub ro_data: Vec<u8>,
-  pub relocs:  Vec<Rel>,
-  pub symbols: Vec<SymbolDef>,
+  text:    Vec<u8>,
+  ro_data: Vec<u8>,
+  relocs:  Vec<Rel>,
+  symbols: Vec<SymbolDef>,
 }
 
 pub struct SymbolDef {
@@ -47,11 +47,11 @@ pub struct SymbolDef {
 
 #[derive(Default)]
 pub struct Builder {
-  pub relocs:        Vec<Rel>,
-  calls:             Vec<Call>,
-  pub jumps:         Vec<Jump>,
-  pub block_offsets: Vec<u64>,
-  pub text:          Vec<u8>,
+  relocs:        Vec<Rel>,
+  calls:         Vec<Call>,
+  jumps:         Vec<Jump>,
+  block_offsets: Vec<u64>,
+  text:          Vec<u8>,
 }
 
 pub struct Jump {
