@@ -40,7 +40,7 @@ impl Env<'_> {
   }
 }
 
-pub fn lower_function(env: &Env, ty: &Typer, hir: &hir::Function) -> mir::Function {
+pub fn lower_function(env: &Env, ty: &Typer, hir: &hir::Function) -> Option<mir::Function> {
   let mut mir = mir::Function::default();
 
   let mut lower = Lower { env, ty, hir, mir: &mut mir, locals: HashMap::new() };
@@ -57,13 +57,17 @@ pub fn lower_function(env: &Env, ty: &Typer, hir: &hir::Function) -> mir::Functi
     lower.mir.ret = Some(rb_typer::type_of_type_expr(ret));
   }
 
-  for stmt in hir.items.iter() {
-    if let Some(stmt) = lower.lower_stmt(*stmt) {
-      lower.mir.items.push(stmt);
+  if let Some(body) = &hir.body {
+    for stmt in body.iter() {
+      if let Some(stmt) = lower.lower_stmt(*stmt) {
+        lower.mir.items.push(stmt);
+      }
     }
+  } else {
+    return None;
   }
 
-  mir
+  Some(mir)
 }
 
 struct Lower<'a> {

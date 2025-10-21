@@ -26,7 +26,7 @@ pub struct Function {
   pub exprs: Arena<Expr>,
   pub stmts: Arena<Stmt>,
 
-  pub items: Vec<StmtId>,
+  pub body: Option<Vec<StmtId>>,
 }
 
 #[derive(Debug)]

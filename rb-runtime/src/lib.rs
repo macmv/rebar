@@ -46,10 +46,11 @@ pub fn eval(src: &str) {
 
       let typer = rb_typer::Typer::check(&typer_env, &function, &span_map);
       if rb_diagnostic::is_ok() {
-        let mut func = rb_mir_lower::lower_function(&mir_env, &typer, &function);
-        func.id = rb_mir::ast::UserFunctionId(idx.into_raw().into_u32() as u64);
+        if let Some(mut func) = rb_mir_lower::lower_function(&mir_env, &typer, &function) {
+          func.id = rb_mir::ast::UserFunctionId(idx.into_raw().into_u32() as u64);
 
-        functions.push(func);
+          functions.push(func);
+        }
       }
     }
   });
@@ -96,10 +97,11 @@ pub fn run(
 
       let typer = rb_typer::Typer::check(&typer_env, &function, &span_map);
       if rb_diagnostic::is_ok() {
-        let mut func = rb_mir_lower::lower_function(&mir_env, &typer, &function);
-        func.id = rb_mir::ast::UserFunctionId(idx.into_raw().into_u32() as u64);
+        if let Some(mut func) = rb_mir_lower::lower_function(&mir_env, &typer, &function) {
+          func.id = rb_mir::ast::UserFunctionId(idx.into_raw().into_u32() as u64);
 
-        functions.push(func);
+          functions.push(func);
+        }
       }
     }
   })?;

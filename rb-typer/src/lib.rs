@@ -71,7 +71,7 @@ impl<'a> Typer<'a> {
       typer.locals.insert(arg.clone(), ty.into());
     }
 
-    for &item in function.items.iter() {
+    for &item in function.body.iter().flatten() {
       match function.stmts[item] {
         hir::Stmt::FunctionDef(ref func) => {
           let args = func.args.iter().map(|(_, ty)| type_of_type_expr(ty)).collect();
@@ -87,7 +87,7 @@ impl<'a> Typer<'a> {
       }
     }
 
-    for &item in function.items.iter() {
+    for &item in function.body.iter().flatten() {
       typer.type_stmt(item);
     }
 

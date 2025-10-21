@@ -51,10 +51,12 @@ impl SourceLower<'_> {
       ast_id_map: &mut ast_id_map,
     };
 
+    let mut body = vec![];
     for stmt in cst.stmts() {
       let item = lower.stmt(stmt);
-      lower.f.items.push(item);
+      body.push(item);
     }
+    lower.f.body = Some(body);
 
     self.span_maps.push(span_map);
     self.ast_id_maps.push(ast_id_map);
@@ -90,10 +92,12 @@ impl SourceLower<'_> {
     }
 
     if let Some(block) = cst.block() {
+      let mut body = vec![];
       for stmt in block.stmts() {
         let item = lower.stmt(stmt);
-        lower.f.items.push(item);
+        body.push(item);
       }
+      lower.f.body = Some(body);
     }
 
     self.span_maps.push(span_map);
