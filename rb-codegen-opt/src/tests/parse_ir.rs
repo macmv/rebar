@@ -1,6 +1,6 @@
 use rb_codegen::{
   Block, BlockId, Function, Instruction, InstructionInput, InstructionOutput, Math, Opcode, Phi,
-  Signature, Variable, VariableSize,
+  Variable, VariableSize,
 };
 use smallvec::SmallVec;
 
@@ -15,8 +15,7 @@ macro_rules! v {
 }
 
 pub fn parse(asm: &str) -> Function {
-  let mut function =
-    Function { sig: Signature { args: vec![], rets: vec![] }, blocks: Vec::new() };
+  let mut function = Function::default();
 
   for line in asm.lines() {
     let line = line.trim();

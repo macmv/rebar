@@ -8,11 +8,13 @@ mod tvec;
 pub use instr::{BlockBuilder, FunctionBuilder, InstrBuilder};
 pub use tvec::{TIndex, TVec};
 
+#[derive(Default)]
 pub struct Signature {
   pub args: Vec<VariableSize>,
   pub rets: Vec<VariableSize>,
 }
 
+#[derive(Default)]
 pub struct Function {
   pub sig:          Signature,
   pub blocks:       Vec<Block>,
