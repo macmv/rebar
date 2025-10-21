@@ -1,5 +1,5 @@
 use rb_hir::{ast as hir, SpanMap};
-use rb_syntax::TextRange;
+use rb_syntax::{cst, AstNode, NodeOrToken, Parse, SyntaxKind::*, TextRange};
 
 #[derive(Debug, Clone)]
 pub struct Highlight {
@@ -37,6 +37,9 @@ pub enum HighlightKind {
   /// Type references, like the `int` in `let x: int = 92` or `def foo(x: int)`.
   Type,
 
+  /// Comments.
+  Comment,
+
   /// Local variables.
   // Keep last!
   Variable,
@@ -50,15 +53,51 @@ struct Highlighter<'a> {
 }
 
 impl Highlight {
-  pub fn from_ast(file: hir::SourceFile, span_maps: &[SpanMap]) -> Highlight {
+  pub fn from_ast(
+    cst: Parse<cst::SourceFile>,
+    file: hir::SourceFile,
+    span_maps: &[SpanMap],
+  ) -> Highlight {
     let mut hl = Highlight { tokens: vec![] };
 
+    for child in cst.syntax_node().descendants_with_tokens() {
+      match child {
+        NodeOrToken::Token(t) => match t.kind() {
+          WHITESPACE
+            if t.text().trim_start().starts_with("//")
+              || t.text().trim_start().starts_with("/*") =>
+          {
+            hl.tokens.push(HighlightToken {
+              range:      t.text_range(),
+              kind:       HighlightKind::Comment,
+              modifierst: 0,
+            });
+          }
+
+          _ => {}
+        },
+        NodeOrToken::Node(n) => {
+          let _hl = Highlighter {
+            func:     &file.functions[file.main_function.unwrap()],
+            span_map: &span_maps[file.main_function.unwrap().into_raw().into_u32() as usize],
+            hl:       &mut hl,
+          };
+
+          if let Some(_expr) = cst::Expr::cast(n) {
+            // hl.visit_expr(expr);
+          }
+        }
+      }
+    }
+
+    /*
     for (i, func) in file.functions.values().enumerate() {
       let mut hl = Highlighter { func: &func, span_map: &span_maps[i], hl: &mut hl };
       for stmt in &func.items {
         hl.visit_stmt(*stmt);
       }
     }
+    */
 
     hl
   }

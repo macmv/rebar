@@ -24,17 +24,18 @@ pub fn handle_semantic_tokens_full(
     let id = sources.add(Source::new("inline.rbr".into(), file.clone()));
     let sources = Arc::new(sources);
 
-    let ((hir, span_maps), _) = rb_diagnostic::run_both(sources.clone(), || {
+    let ((cst, hir, span_maps), _) = rb_diagnostic::run_both(sources.clone(), || {
       let res = cst::SourceFile::parse(&file);
 
       if res.errors().is_empty() {
-        rb_hir_lower::lower_source(res.tree(), id)
+        let (hir, span_maps) = rb_hir_lower::lower_source(res.tree(), id);
+        (res, hir, span_maps)
       } else {
-        Default::default()
+        (res, Default::default(), Default::default())
       }
     });
 
-    let highlight = Highlight::from_ast(hir, &span_maps);
+    let highlight = Highlight::from_ast(cst, hir, &span_maps);
 
     let tokens = to_semantic_tokens(snap, file_id, &highlight)?;
 
@@ -57,6 +58,7 @@ pub fn semantic_tokens_legend() -> lsp_types::SemanticTokensLegend {
       HighlightKind::String => SemanticTokenType::new("string"),
       HighlightKind::Parameter => SemanticTokenType::new("parameter"),
       HighlightKind::Type => SemanticTokenType::new("type"),
+      HighlightKind::Comment => SemanticTokenType::new("comment"),
       HighlightKind::Variable => SemanticTokenType::new("variable"),
     }
   }
