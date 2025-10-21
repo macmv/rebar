@@ -18,12 +18,18 @@ pub struct Env<'a> {
 
 pub enum Item {
   NativeFunction(mir::NativeFunctionId),
-  UserFunction(UserFunctionId),
+  UserFunction(UserFunction),
+}
+
+pub struct UserFunction {
+  pub id: UserFunctionId,
 }
 
 impl Env<'_> {
   pub fn declare_user_function(&mut self, id: u64, function: &hir::Function) {
-    self.items.insert(function.name.clone(), Item::UserFunction(UserFunctionId(id)));
+    self
+      .items
+      .insert(function.name.clone(), Item::UserFunction(UserFunction { id: UserFunctionId(id) }));
   }
 }
 
@@ -121,9 +127,9 @@ impl Lower<'_> {
       hir::Expr::Name(ref v) => match self.locals.get(v) {
         Some(local) => mir::Expr::Local(*local, self.ty.type_of_expr(expr)),
         None => match self.env.items[v] {
-          Item::UserFunction(id) => {
-            self.mir.deps.insert(id);
-            mir::Expr::UserFunction(id, self.ty.type_of_expr(expr))
+          Item::UserFunction(ref func) => {
+            self.mir.deps.insert(func.id);
+            mir::Expr::UserFunction(func.id, self.ty.type_of_expr(expr))
           }
           Item::NativeFunction(id) => mir::Expr::Native(id, self.ty.type_of_expr(expr)),
         },
@@ -195,9 +201,9 @@ impl Lower<'_> {
 
       hir::Expr::Call(lhs, ref args) => match self.hir.exprs[lhs] {
         hir::Expr::Name(ref name) => {
-          let id = if let Some(&Item::UserFunction(id)) = self.env.items.get(name) {
-            self.mir.deps.insert(id);
-            id
+          let func = if let Some(Item::UserFunction(func)) = self.env.items.get(name) {
+            self.mir.deps.insert(func.id);
+            func
           } else {
             panic!("unresolved function {name}");
           };
@@ -205,7 +211,7 @@ impl Lower<'_> {
           let lhs_ty = self.ty.type_of_expr(lhs);
           let args = args.iter().map(|&arg| self.lower_expr(arg)).collect();
 
-          mir::Expr::Call(id, lhs_ty, args)
+          mir::Expr::Call(func.id, lhs_ty, args)
         }
         _ => panic!("todo: dynamic dispatch"),
       },
