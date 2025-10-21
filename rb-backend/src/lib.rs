@@ -68,12 +68,21 @@ impl ThreadCtx<'_> {
       }
     }
 
-    FuncBuilder {
-      ctx: self.mir_ctx,
-      builder: FunctionBuilder::new(Signature { args, rets: vec![] }),
-      mir,
-      locals: HashMap::new(),
+    let builder = FunctionBuilder::new(Signature { args, rets: vec![] });
+    let mut locals = HashMap::new();
+
+    let mut i = 0;
+    for (var, arg) in mir.params.iter().enumerate() {
+      let dvt = ValueType::for_type(self.mir_ctx, &arg);
+      let mut values = vec![];
+      for _ in 0..dvt.len(self.mir_ctx) {
+        values.push(builder.arg(i));
+        i += 1;
+      }
+      locals.insert(mir::VarId(var as u32), values[0]);
     }
+
+    FuncBuilder { ctx: self.mir_ctx, mir, builder, locals }
   }
 
   pub fn compile_function(&mut self, mir: &mir::Function) -> Function {
