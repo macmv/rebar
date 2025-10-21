@@ -1,6 +1,8 @@
 use rb_hir::{ast as hir, SpanMap};
 use rb_hir_lower::AstIdMap;
-use rb_syntax::{cst, AstNode, NodeOrToken, Parse, SyntaxKind::*, SyntaxNodePtr, TextRange};
+use rb_syntax::{
+  cst, AstNode, NodeOrToken, Parse, SyntaxKind::*, SyntaxNodePtr, TextRange, TextSize,
+};
 
 #[derive(Debug, Clone)]
 pub struct Highlight {
@@ -66,10 +68,42 @@ impl Highlight {
     for child in cst.syntax_node().descendants_with_tokens() {
       match child {
         NodeOrToken::Token(t) => match t.kind() {
-          WHITESPACE
-            if t.text().trim_start().starts_with("//")
-              || t.text().trim_start().starts_with("/*") =>
-          {
+          WHITESPACE if t.text().trim_start().starts_with("//") => {
+            let mut line_start = None;
+            let mut prev = '\n';
+            let mut offset = 0;
+
+            let mut add_token = |line_start: &mut Option<usize>, offset: usize| {
+              if let Some(start) = line_start.take() {
+                hl.tokens.push(HighlightToken {
+                  range:      TextRange::new(
+                    t.text_range().start() + TextSize::from(start as u32),
+                    t.text_range().end() + TextSize::from(offset as u32),
+                  ),
+                  kind:       HighlightKind::Comment,
+                  modifierst: 0,
+                });
+              }
+            };
+
+            for c in t.text().chars() {
+              if prev == '/' && c == '/' {
+                line_start = Some(offset - 1);
+                add_token(&mut line_start, offset);
+              }
+
+              if c == '\n' {}
+
+              prev = c;
+              offset += c.len_utf8();
+            }
+
+            add_token(&mut line_start, offset);
+          }
+
+          // TODO: This is wrong, it should be in the same block as above, as multiple types of
+          // comments in a row will form a single whitespace token.
+          WHITESPACE if t.text().trim_start().starts_with("/*") => {
             hl.tokens.push(HighlightToken {
               range:      t.text_range(),
               kind:       HighlightKind::Comment,
