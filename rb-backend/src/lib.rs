@@ -185,7 +185,7 @@ impl FuncBuilder<'_> {
               _ => unreachable!(),
             };
 
-            let output = self.builder.instr().call(FunctionId::new(1), Bit64, 0);
+            let output = self.builder.instr().call(FunctionId::new(0), Bit64, 0);
             RValue::int(output)
           }
 

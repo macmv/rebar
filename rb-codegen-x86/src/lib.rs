@@ -39,6 +39,7 @@ pub struct Object {
 #[derive(Default)]
 pub struct Builder {
   pub relocs:        Vec<Rel>,
+  calls:             Vec<Call>,
   pub jumps:         Vec<Jump>,
   pub block_offsets: Vec<u64>,
   pub text:          Vec<u8>,
@@ -59,13 +60,16 @@ impl ObjectBuilder {
     self
       .relocs
       .extend(lowered.relocs.into_iter().map(|rel| Rel { r_offset: rel.r_offset + offset, ..rel }));
+    self
+      .calls
+      .extend(lowered.calls.into_iter().map(|call| Call { offset: call.offset + offset, ..call }));
     self.functions.push(offset);
   }
 
   pub fn finish(mut self) -> Object {
     for call in self.calls {
-      let target = self.functions[call.target.as_u32() as usize] as i64 - (call.offset as i64 + 4);
-      if let Ok(offset) = i32::try_from(target) {
+      let rel = self.functions[call.target.as_u32() as usize] as i64 - (call.offset as i64 + 4);
+      if let Ok(offset) = i32::try_from(rel) {
         self.text[call.offset as usize..call.offset as usize + 4]
           .copy_from_slice(&offset.to_le_bytes());
       } else {
@@ -145,6 +149,10 @@ impl Builder {
 
   fn jmp(&mut self, target: BlockId, size: RegisterSize) {
     self.jumps.push(Jump { size, offset: self.text.len() as u64 + 1, target });
+  }
+
+  fn call(&mut self, target: FunctionId) {
+    self.calls.push(Call { offset: self.text.len() as u64 + 1, target });
   }
 
   fn instr(&mut self, instr: Instruction) {
@@ -552,9 +560,14 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
             _ => todo!("mov {inst:?}"),
           }
         }
+
+        rb_codegen::Opcode::Call(func) => {
+          builder.call(func);
+          builder.instr(Instruction::new(Opcode::CALL).with_immediate(Immediate::i32(0)))
+        }
+
         // syscall
         rb_codegen::Opcode::Syscall => builder.instr(Instruction::new(Opcode::SYSCALL)),
-        op => unimplemented!("opcode {:?}", op),
       }
     }
 
