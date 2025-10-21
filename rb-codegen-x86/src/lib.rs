@@ -812,12 +812,12 @@ mod tests {
     disass(
       &object_path,
       expect![@r#"
-        0x08000250      b003                   mov al, 3
-        0x08000252      66b80500               mov ax, 5
-        0x08000256      b807000000             mov eax, 7
-        0x0800025b      b809000000             mov eax, 9
-        0x08000260      48b80400000001000000   movabs rax, 0x100000004
-        0x0800026a      cc                     int3
+        0x08000230      b003                   mov al, 3
+        0x08000232      66b80500               mov ax, 5
+        0x08000236      b807000000             mov eax, 7
+        0x0800023b      b809000000             mov eax, 9
+        0x08000240      48b80400000001000000   movabs rax, 0x100000004
+        0x0800024a      cc                     int3
       "#],
     );
   }
@@ -1006,16 +1006,16 @@ mod tests {
     disass(
       &dir.path().join("foo.o"),
       expect![@r#"
-        0x08000250      e810000000             call 0x8000265
-        0x08000255      48c7c03c000000         mov rax, 0x3c
-        0x0800025c      48c7c700000000         mov rdi, 0
-        0x08000263      0f05                   syscall
-        0x08000265      48c7c001000000         mov rax, 1
-        0x0800026c      48c7c701000000         mov rdi, 1
-        0x08000273      488d35fcffffff         lea rsi, [0x08000276]
-        0x0800027a      48c7c20e000000         mov rdx, 0xe
-        0x08000281      0f05                   syscall
-        0x08000283      c3                     ret
+        0x08000230      e810000000             call 0x8000245
+        0x08000235      48c7c03c000000         mov rax, 0x3c
+        0x0800023c      48c7c700000000         mov rdi, 0
+        0x08000243      0f05                   syscall
+        0x08000245      48c7c001000000         mov rax, 1
+        0x0800024c      48c7c701000000         mov rdi, 1
+        0x08000253      488d35fcffffff         lea rsi, [0x08000256]
+        0x0800025a      48c7c20e000000         mov rdx, 0xe
+        0x08000261      0f05                   syscall
+        0x08000263      c3                     ret
       "#],
     );
   }

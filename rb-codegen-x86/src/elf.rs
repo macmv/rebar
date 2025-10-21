@@ -18,7 +18,7 @@ pub fn generate(filename: &Path, object: &Object) {
   writer.reserve_file_header();
 
   let start = writer.add_string(b"_start");
-  let symbol_names = object
+  let data_symbols = object
     .data_symbols
     .iter()
     .map(|s| (s, writer.add_string(s.name.as_bytes())))
@@ -40,8 +40,10 @@ pub fn generate(filename: &Path, object: &Object) {
   writer.reserve_section_headers();
 
   writer.reserve_null_symbol_index();
+  for _ in &data_symbols {
+    writer.reserve_symbol_index(Some(ro_data_section));
+  }
   writer.reserve_symbol_index(Some(text_section));
-  writer.reserve_symbol_index(Some(ro_data_section));
 
   writer.reserve_strtab();
   writer.reserve_shstrtab();
@@ -109,9 +111,9 @@ pub fn generate(filename: &Path, object: &Object) {
   writer.write_strtab();
   writer.write_shstrtab();
 
-  // 2 local symbols
+  // local symbols
   writer.write_null_symbol();
-  for (symbol, id) in symbol_names {
+  for (symbol, id) in data_symbols {
     writer.write_symbol(&Sym {
       name:     Some(id),
       section:  Some(ro_data_section),
