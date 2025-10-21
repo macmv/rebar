@@ -698,27 +698,27 @@ mod tests {
         instructions: vec![
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Move,
-            input:  smallvec::smallvec![3.into()],
+            input:  smallvec::smallvec![rb_codegen::Immediate::U8(3).into()],
             output: smallvec::smallvec![Variable::new(0, VariableSize::Bit8).into()],
           },
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Move,
-            input:  smallvec::smallvec![5.into()],
+            input:  smallvec::smallvec![rb_codegen::Immediate::U16(5).into()],
             output: smallvec::smallvec![Variable::new(1, VariableSize::Bit16).into()],
           },
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Move,
-            input:  smallvec::smallvec![7.into()],
+            input:  smallvec::smallvec![rb_codegen::Immediate::U32(7).into()],
             output: smallvec::smallvec![Variable::new(2, VariableSize::Bit32).into()],
           },
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Move,
-            input:  smallvec::smallvec![9.into()],
+            input:  smallvec::smallvec![rb_codegen::Immediate::U64(9).into()],
             output: smallvec::smallvec![Variable::new(3, VariableSize::Bit64).into()],
           },
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Move,
-            input:  smallvec::smallvec![(u32::MAX as u64 + 5).into()],
+            input:  smallvec::smallvec![rb_codegen::Immediate::U64(u32::MAX as u64 + 5).into()],
             output: smallvec::smallvec![Variable::new(4, VariableSize::Bit64).into()],
           },
         ],
