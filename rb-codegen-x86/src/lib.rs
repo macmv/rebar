@@ -118,27 +118,18 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           math @ (Math::Add | Math::Sub | Math::And | Math::Or | Math::Xor),
         ) => match (inst.output[0], inst.input[0], inst.input[1]) {
           (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
-            encode_binary_reg_imm(
-              &mut builder,
-              reg.get(v),
-              reg.get(a),
-              b,
-              match math {
-                Math::Add => Opcode::ADD_IMM8,
-                Math::Sub => Opcode::SUB_IMM8,
-                Math::And => Opcode::AND_IMM8,
-                Math::Or => Opcode::OR_IMM8,
-                Math::Xor => Opcode::XOR_IMM8,
-                _ => unreachable!(),
-              },
-              match math {
-                Math::Add => Opcode::ADD_IMM32,
-                Math::Sub => Opcode::SUB_IMM32,
-                Math::And => Opcode::AND_IMM32,
-                Math::Or => Opcode::OR_IMM32,
-                Math::Xor => Opcode::XOR_IMM32,
-                _ => unreachable!(),
-              },
+            debug_assert_eq!(reg.get(v), reg.get(a), "math must be in-place");
+
+            builder.instr(
+              encode_binary_reg_imm(reg.get(v), b, Opcode::MATH_IMM8, Opcode::MATH_IMM32)
+                .with_digit(match math {
+                  Math::Add => 0,
+                  Math::Sub => 5,
+                  Math::And => 4,
+                  Math::Or => 1,
+                  Math::Xor => 6,
+                  _ => unreachable!(),
+                }),
             );
           }
           (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
@@ -170,14 +161,14 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
         rb_codegen::Opcode::Compare(_) => match (inst.output[0], inst.input[0], inst.input[1]) {
           (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
             // FIXME: This is wrong. `CMP_A` doesn't take a mod/rm byte.
-            encode_binary_reg_imm(
-              &mut builder,
+            debug_assert_eq!(reg.get(v), reg.get(a), "compare must be in-place");
+
+            builder.instr(encode_binary_reg_imm(
               reg.get(v),
-              reg.get(a),
               b,
               Opcode::CMP_A_IMM8,
               Opcode::CMP_A_IMM32,
-            );
+            ));
           }
           (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
             encode_binary_reg_reg(
@@ -507,26 +498,42 @@ impl From<rb_codegen::Immediate> for Immediate {
 }
 
 fn encode_binary_reg_imm(
-  builder: &mut Builder,
-  output: Register,
-  input1: Register,
+  reg: Register,
   input2: rb_codegen::Immediate,
   opcode_8: Opcode,
   opcode_32: Opcode,
-) {
-  debug_assert_eq!(output.size, input1.size, "binary must have the same size");
+) -> Instruction {
   debug_assert_eq!(
-    output.size,
+    reg.size,
     var_to_reg_size(input2.size()).unwrap(),
     "binary must have the same size"
   );
 
-  builder.instr(
-    encode_sized(output.size, opcode_8, opcode_32)
-      .with_mod(0b11, input1.index)
-      .with_reg(output.index)
-      .with_immediate(Immediate::from(input2)),
-  );
+  match input2 {
+    rb_codegen::Immediate::I64(v) => {
+      if let Ok(v) = i32::try_from(v) {
+        return encode_sized(reg.size, opcode_8, opcode_32)
+          .with_mod(0b11, reg.index)
+          .with_immediate(Immediate::i32(v as u32));
+      } else {
+        panic!("immediate too large for binary operation");
+      }
+    }
+    rb_codegen::Immediate::U64(v) => {
+      if let Ok(v) = u32::try_from(v) {
+        return encode_sized(reg.size, opcode_8, opcode_32)
+          .with_mod(0b11, reg.index)
+          .with_immediate(Immediate::i32(v));
+      } else {
+        panic!("immediate too large for binary operation");
+      }
+    }
+    _ => {
+      return encode_sized(reg.size, opcode_8, opcode_32)
+        .with_mod(0b11, reg.index)
+        .with_immediate(Immediate::from(input2));
+    }
+  }
 }
 
 fn encode_binary_reg_reg(
