@@ -298,7 +298,7 @@ impl PinnedVariables {
             p.pin(i0, RegisterIndex::Eax);
             p.pin(o0, RegisterIndex::Eax);
           }
-          Opcode::Syscall => p.pin_cc(CallingConvention::Syscall, &inst.input),
+          Opcode::Syscall => p.pin_cc(CallingConvention::Syscall, &mut inst.input),
           _ => {}
         }
       }
@@ -311,25 +311,23 @@ impl PinnedVariables {
     self.pinned.get(var.id() as usize).copied().flatten()
   }
 
-  fn pin_cc(&mut self, cc: CallingConvention, inputs: &[InstructionInput]) {
+  fn pin_cc(&mut self, cc: CallingConvention, inputs: &mut [InstructionInput]) {
     match cc {
       CallingConvention::Syscall => {
         let mut arg_index = 0;
         for input in inputs {
-          if let InstructionInput::Var(v) = input {
-            let reg = match arg_index {
-              0 => Register::RAX,
-              1 => Register::RDI,
-              2 => Register::RSI,
-              3 => Register::RDX,
-              4 => Register::RCX,
-              _ => panic!("too many syscall arguments"),
-            };
-            self.pin(*v, reg.index);
-            arg_index += 1;
-          } else {
-            panic!("expected variable input for syscall");
-          }
+          let v = self.to_var(input);
+
+          let reg = match arg_index {
+            0 => Register::RAX,
+            1 => Register::RDI,
+            2 => Register::RSI,
+            3 => Register::RDX,
+            4 => Register::RCX,
+            _ => panic!("too many syscall arguments"),
+          };
+          self.pin(v, reg.index);
+          arg_index += 1;
         }
       }
     }
