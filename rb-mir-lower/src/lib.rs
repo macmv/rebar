@@ -22,14 +22,25 @@ pub enum Item {
 }
 
 pub struct UserFunction {
-  pub id: UserFunctionId,
+  pub id:        UserFunctionId,
+  pub intrinsic: Option<Intrinsic>,
+}
+
+pub enum Intrinsic {
+  Syscall,
 }
 
 impl Env<'_> {
   pub fn declare_user_function(&mut self, id: u64, function: &hir::Function) {
-    self
-      .items
-      .insert(function.name.clone(), Item::UserFunction(UserFunction { id: UserFunctionId(id) }));
+    let mut func = UserFunction { id: UserFunctionId(id), intrinsic: None };
+
+    for attr in &function.attrs {
+      if attr.path == "rebar::intrinsic" {
+        func.intrinsic = Some(Intrinsic::Syscall);
+      }
+    }
+
+    self.items.insert(function.name.clone(), Item::UserFunction(func));
   }
 }
 
