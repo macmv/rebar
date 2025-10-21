@@ -255,8 +255,13 @@ impl FunctionLower<'_, '_> {
         hir::Expr::Array(items)
       }
 
-      cst::Expr::Name(ref name) => {
-        let name = name.ident_token().unwrap().to_string();
+      cst::Expr::PathExpr(ref path) => {
+        if path.path().unwrap().ident_tokens().count() != 1 {
+          todo!("parse paths");
+        }
+
+        let ident = path.path().unwrap().ident_tokens().next().unwrap();
+        let name = ident.text().to_string();
 
         hir::Expr::Name(name)
       }
@@ -321,10 +326,7 @@ impl FunctionLower<'_, '_> {
 
       cst::Expr::StructExpr(ref expr) => {
         // TODO: Names should get resolved here.
-        let name = match expr.expr().unwrap() {
-          cst::Expr::Name(ref name) => name.ident_token().unwrap().to_string(),
-          _ => unreachable!(),
-        };
+        let name = expr.path().unwrap().ident_tokens().next().unwrap().text().to_string();
 
         let mut fields = Vec::with_capacity(expr.field_inits().size_hint().0);
         for field in expr.field_inits() {

@@ -299,7 +299,7 @@ fn generate_nodes(grammar: &AstSrc) -> String {
   let ast = quote! {
     #![allow(non_snake_case, non_camel_case_types)]
     use crate::{
-      support, ext::{AstChildren, AstNode},
+      support, ext::{AstChildren, AstTokenChildren, AstNode},
       node::{SyntaxNode, SyntaxToken},
     };
     use rb_parser::{
@@ -592,16 +592,27 @@ fn token_name(name: &str) -> &str {
 }
 
 impl Field {
-  fn is_many(&self) -> bool { matches!(self, Field::Node { cardinality: Cardinality::Many, .. }) }
+  fn is_many(&self) -> bool {
+    matches!(
+      self,
+      Field::Token { cardinality: Cardinality::Many, .. }
+        | Field::Node { cardinality: Cardinality::Many, .. }
+    )
+  }
   fn token_kind(&self) -> Option<proc_macro2::TokenStream> {
     match self {
-      Field::Token(token) => match token.as_str() {
+      Field::Token { ty, .. } => match ty.as_str() {
         "'" => Some(quote! { T!['\''] }),
         "\"" => Some(quote! { T!['"'] }),
         "\\" => Some(quote! { T!['\\'] }),
         _ => {
-          let token: proc_macro2::TokenStream = token.parse().unwrap();
-          Some(quote! { T![#token] })
+          if "[]{}()".contains(ty) {
+            let c = ty.chars().next().unwrap();
+            Some(quote! { T![#c] })
+          } else {
+            let token: proc_macro2::TokenStream = ty.parse().unwrap();
+            Some(quote! { T![#token] })
+          }
         }
       },
       Field::Node { ty, .. } if TOKEN_SHORTHANDS.contains(&ty.as_str()) => {
@@ -613,9 +624,8 @@ impl Field {
   }
   fn method_name(&self) -> proc_macro2::Ident {
     match self {
-      Field::Token(name) => {
-        let name = token_name(name);
-        format_ident!("{}_token", name)
+      Field::Token { name, .. } => {
+        format_ident!("{name}")
       }
       Field::Node { name, .. } if TOKEN_SHORTHANDS.contains(&name.as_str()) => {
         format_ident!("{}_token", name)
@@ -633,7 +643,7 @@ impl Field {
   }
   fn ty(&self) -> proc_macro2::Ident {
     match self {
-      Field::Token(_) => format_ident!("SyntaxToken"),
+      Field::Token { .. } => format_ident!("SyntaxToken"),
       Field::Node { ty, .. } if TOKEN_SHORTHANDS.contains(&ty.as_str()) => {
         format_ident!("SyntaxToken")
       }
@@ -713,11 +723,9 @@ fn lower_rule(acc: &mut Vec<Field>, grammar: &Grammar, label: Option<&String>, r
     }
     Rule::Token(token) => {
       assert!(label.is_none());
-      let mut name = grammar[*token].name.clone();
-      if "[]{}()".contains(&name) {
-        name = format!("'{}'", name);
-      }
-      let field = Field::Token(name);
+      let ty = grammar[*token].name.clone();
+      let name = label.cloned().unwrap_or_else(|| format!("{}_token", token_name(&ty)));
+      let field = Field::Token { ty, name, cardinality: Cardinality::Optional };
       acc.push(field);
     }
     Rule::Rep(inner) => match **inner {
@@ -725,6 +733,14 @@ fn lower_rule(acc: &mut Vec<Field>, grammar: &Grammar, label: Option<&String>, r
         let ty = grammar[node].name.clone();
         let name = label.cloned().unwrap_or_else(|| pluralize(&to_lower_snake_case(&ty)));
         let field = Field::Node { name, ty, cardinality: Cardinality::Many };
+        acc.push(field);
+      }
+      Rule::Token(token) => {
+        assert!(label.is_none());
+        let ty = grammar[token].name.clone();
+        let name =
+          label.cloned().unwrap_or_else(|| pluralize(&format!("{}_token", token_name(&ty))));
+        let field = Field::Token { name, ty, cardinality: Cardinality::Many };
         acc.push(field);
       }
       _ => println!("unhandled rep: {:?}", rule),
