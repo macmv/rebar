@@ -138,10 +138,10 @@ impl Builder {
     }
   }
 
-  fn reloc(&mut self, symbol: u32, offset: u64, addend: i64) {
+  fn reloc(&mut self, symbol: Symbol, offset: u64, addend: i64) {
     self.relocs.push(Rel {
-      r_offset: self.text.len() as u64 + offset,
-      r_sym:    symbol,
+      r_offset: offset,
+      r_sym:    symbol.index,
       r_type:   object::elf::R_X86_64_PC32,
       r_addend: addend,
     });
@@ -478,7 +478,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
         rb_codegen::Opcode::Lea(symbol) => match inst.output[0] {
           // lea reg, [rel symbol]
           InstructionOutput::Var(v) => {
-            builder.reloc(symbol.index, 3, -4);
+            builder.reloc(symbol, 3, -4);
             let reg = reg.get(v);
             debug_assert_eq!(reg.size, RegisterSize::Bit64, "lea only supports 64-bit registers");
             builder.instr(
