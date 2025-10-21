@@ -4,7 +4,7 @@ use smallvec::smallvec;
 
 use crate::{
   Block, BlockId, Condition, Function, FunctionId, InstructionInput, Math, Signature, Symbol,
-  Variable, VariableSize,
+  SymbolDef, Variable, VariableSize,
 };
 
 pub struct FunctionBuilder {
@@ -27,15 +27,23 @@ impl FunctionBuilder {
   pub fn new(sig: Signature) -> Self {
     FunctionBuilder {
       next_variable: 0,
-      function:      Function { sig, blocks: vec![Block::default()], data: vec![] },
+      function:      Function {
+        sig,
+        blocks: vec![Block::default()],
+        data: vec![],
+        symbols: vec![],
+      },
       block:         BlockId(0),
     }
   }
 
   pub fn add_data(&mut self, data: &[u8]) -> Symbol {
+    let offset = self.function.data.len() as u32;
     self.function.data.extend_from_slice(data);
 
-    Symbol { index: 1 }
+    let symbol = Symbol { index: self.function.symbols.len() as u32 };
+    self.function.symbols.push(SymbolDef { name: "foooooo".to_string(), offset });
+    symbol
   }
 
   pub fn build(self) -> Function { self.function }

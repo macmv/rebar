@@ -8,7 +8,8 @@ pub use elf::generate;
 pub use instruction::{Immediate, Instruction, ModReg, Opcode, Prefix};
 use object::write::elf::Rel;
 use rb_codegen::{
-  BlockId, FunctionId, InstructionInput, InstructionOutput, Math, Symbol, VariableSize, immediate,
+  BlockId, FunctionId, InstructionInput, InstructionOutput, Math, Symbol, SymbolDef, VariableSize,
+  immediate,
 };
 
 use crate::{
@@ -41,10 +42,6 @@ pub struct Object {
   symbols: Vec<SymbolDef>,
 }
 
-pub struct SymbolDef {
-  pub name: String,
-}
-
 #[derive(Default)]
 pub struct Builder {
   relocs:        Vec<Rel>,
@@ -52,6 +49,7 @@ pub struct Builder {
   jumps:         Vec<Jump>,
   block_offsets: Vec<u64>,
   text:          Vec<u8>,
+  symbols:       Vec<SymbolDef>,
 }
 
 pub struct Jump {
@@ -74,6 +72,7 @@ impl ObjectBuilder {
     self
       .calls
       .extend(lowered.calls.into_iter().map(|call| Call { offset: call.offset + offset, ..call }));
+    self.symbols.extend(lowered.symbols);
     self.functions.push(offset);
   }
 
@@ -772,8 +771,8 @@ mod tests {
   #[test]
   fn mov_small_variables() {
     let function = rb_codegen::Function {
-      sig:    Signature { args: vec![], rets: vec![] },
-      blocks: vec![rb_codegen::Block {
+      sig:     Signature { args: vec![], rets: vec![] },
+      blocks:  vec![rb_codegen::Block {
         phis:         vec![],
         instructions: vec![
           rb_codegen::Instruction {
@@ -804,7 +803,8 @@ mod tests {
         ],
         terminator:   rb_codegen::TerminatorInstruction::Trap,
       }],
-      data:   vec![],
+      data:    vec![],
+      symbols: vec![],
     };
 
     let builder = lower(function);
@@ -835,8 +835,8 @@ mod tests {
     let v5 = Variable::new(5, VariableSize::Bit64);
 
     let function = rb_codegen::Function {
-      sig:    Signature { args: vec![], rets: vec![] },
-      blocks: vec![rb_codegen::Block {
+      sig:     Signature { args: vec![], rets: vec![] },
+      blocks:  vec![rb_codegen::Block {
         phis:         vec![],
         instructions: vec![
           // write 1 reloc.foo 14
@@ -884,7 +884,8 @@ mod tests {
         ],
         terminator:   rb_codegen::TerminatorInstruction::Trap,
       }],
-      data:   vec![],
+      data:    vec![],
+      symbols: vec![],
     };
 
     let data = b"Hello, world!\n";

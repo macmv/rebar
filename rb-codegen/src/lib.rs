@@ -14,9 +14,15 @@ pub struct Signature {
 }
 
 pub struct Function {
-  pub sig:    Signature,
-  pub blocks: Vec<Block>,
-  pub data:   Vec<u8>,
+  pub sig:     Signature,
+  pub blocks:  Vec<Block>,
+  pub data:    Vec<u8>,
+  pub symbols: Vec<SymbolDef>,
+}
+
+pub struct SymbolDef {
+  pub name:   String,
+  pub offset: u32,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
