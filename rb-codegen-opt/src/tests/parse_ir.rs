@@ -168,7 +168,7 @@ fn parse_phi(s: &str) -> Phi {
         BlockId::new(block.parse::<u32>().unwrap())
       };
 
-      (block, parse_variable_id(rhs).unwrap())
+      (block, Some(parse_variable_id(rhs).unwrap()))
     })
     .collect();
 
