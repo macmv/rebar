@@ -56,7 +56,8 @@ impl Compiler {
       }
     }
 
-    let sig = Signature { args, rets: vec![] };
+    // TODO: I think the compiler needs the signature?
+    let _sig = Signature { args, rets: vec![] };
     let func_id = FunctionId::new(self.function_ids.len() as u32);
     self.function_ids.insert(mir::UserFunctionId(mir.id.0), func_id);
   }
