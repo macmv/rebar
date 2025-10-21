@@ -193,13 +193,22 @@ impl Lower<'_> {
         mir::Expr::Index(lhs, rhs, self.ty.type_of_expr(expr))
       }
 
-      hir::Expr::Call(lhs, ref args) => {
-        let lhs_ty = self.ty.type_of_expr(lhs);
-        let lhs = self.lower_expr(lhs);
-        let args = args.iter().map(|&arg| self.lower_expr(arg)).collect();
+      hir::Expr::Call(lhs, ref args) => match self.hir.exprs[lhs] {
+        hir::Expr::Name(ref name) => {
+          let id = if let Some(&Item::UserFunction(id)) = self.env.items.get(name) {
+            self.mir.deps.insert(id);
+            id
+          } else {
+            panic!("unresolved function {name}");
+          };
 
-        mir::Expr::Call(lhs, lhs_ty, args)
-      }
+          let lhs_ty = self.ty.type_of_expr(lhs);
+          let args = args.iter().map(|&arg| self.lower_expr(arg)).collect();
+
+          mir::Expr::Call(id, lhs_ty, args)
+        }
+        _ => panic!("todo: dynamic dispatch"),
+      },
 
       hir::Expr::If { cond, then, els } => {
         let cond = self.lower_expr(cond);

@@ -47,7 +47,7 @@ pub struct StructId(pub u64);
 #[derive(Debug)]
 pub enum Expr {
   Literal(Literal),
-  Call(ExprId, Type, Vec<ExprId>),
+  Call(UserFunctionId, Type, Vec<ExprId>),
 
   StringInterp(Vec<StringInterp>),
   Array(Vec<ExprId>, Type),

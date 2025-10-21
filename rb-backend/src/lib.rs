@@ -185,97 +185,83 @@ impl FuncBuilder<'_> {
         return_value
       }
 
-      mir::Expr::Call(lhs, ref sig_ty, ref args) => {
-        let lhs = self.compile_expr(lhs);
+      mir::Expr::Call(function, ref sig_ty, ref args) => {
+        let arg_types = match sig_ty {
+          Type::Function(ref args, _) => args,
+          _ => unreachable!(),
+        };
 
-        match lhs.const_ty() {
-          Some(ValueType::UserFunction) => {
-            let arg_types = match sig_ty {
-              Type::Function(ref args, _) => args,
-              _ => unreachable!(),
-            };
+        // Argument length in 8 byte increments.
+        let mut arg_values = vec![];
+        for (&arg, _arg_ty) in args.iter().zip(arg_types.iter()) {
+          let arg = self.compile_expr(arg);
 
-            // Argument length in 8 byte increments.
-            let mut arg_values = vec![];
-            for (&arg, _arg_ty) in args.iter().zip(arg_types.iter()) {
-              let arg = self.compile_expr(arg);
-
-              let v = arg.to_ir(self);
-              arg_values.push(v);
-            }
-
-            let function = lhs.unwrap_const()[0];
-
-            let _ret_ty = match *sig_ty {
-              Type::Function(_, ref ret) => ret,
-              _ => unreachable!(),
-            };
-
-            let output = self.builder.instr().call(
-              self.ctx.function_ids[&mir::UserFunctionId(function)],
-              Bit64,
-              0,
-            );
-            RValue::int(output)
-          }
-
-          /*
-          Some(ValueType::UserFunction) => {
-            let id = match lhs {
-              RValue::TypedConst(_, v) => UserFunctionId(v[0] as u64),
-              _ => todo!(),
-            };
-
-            let arg_types = match sig_ty {
-              Type::Function(ref args, _) => args,
-              _ => unreachable!(),
-            };
-
-            assert_eq!(args.len(), arg_types.len());
-
-            // Argument length in 8 byte increments.
-            let mut arg_values = vec![];
-            for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
-              let arg = self.compile_expr(arg);
-
-              let slot =
-                arg.to_ir(DynamicValueType::for_type(self.ctx, &arg_ty).param_kind(self.ctx), self);
-              match slot {
-                Slot::Empty => {}
-                Slot::Single(v) => match v.size() {
-                  Bit64 => arg_values.push(v),
-                  _ => todo!(),
-                },
-                Slot::Multiple(len, slot) => {
-                  todo!();
-                  // for i in 0..len {
-                  //   arg_values.push(self.builder.instr().stack_load(
-                  //     VariableSize::Bit64,
-                  //     slot.clone(),
-                  //     i as i32 * 8,
-                  //   ));
-                  // }
-                }
-              }
-            }
-
-            let func_ref = self.user_funcs[&id];
-            let call = self.builder.instr().call(func_ref, Bit64, &arg_values);
-
-            match *sig_ty {
-              Type::Function(_, ref ret) => match **ret {
-                // FIXME: Need to create RValues from ir extended form.
-                Type::Literal(Literal::Unit) => RValue::nil(),
-                _ => RValue::int(self.builder.inst_results(call)[0]),
-              },
-              _ => unreachable!(),
-            }
-          }
-          */
-          v => todo!("call function {v:?}"),
+          let v = arg.to_ir(self);
+          arg_values.push(v);
         }
+
+        let _ret_ty = match *sig_ty {
+          Type::Function(_, ref ret) => ret,
+          _ => unreachable!(),
+        };
+
+        let output = self.builder.instr().call(self.ctx.function_ids[&function], Bit64, 0);
+        RValue::int(output)
       }
 
+      /*
+      Some(ValueType::UserFunction) => {
+        let id = match lhs {
+          RValue::TypedConst(_, v) => UserFunctionId(v[0] as u64),
+          _ => todo!(),
+        };
+
+        let arg_types = match sig_ty {
+          Type::Function(ref args, _) => args,
+          _ => unreachable!(),
+        };
+
+        assert_eq!(args.len(), arg_types.len());
+
+        // Argument length in 8 byte increments.
+        let mut arg_values = vec![];
+        for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
+          let arg = self.compile_expr(arg);
+
+          let slot =
+            arg.to_ir(DynamicValueType::for_type(self.ctx, &arg_ty).param_kind(self.ctx), self);
+          match slot {
+            Slot::Empty => {}
+            Slot::Single(v) => match v.size() {
+              Bit64 => arg_values.push(v),
+              _ => todo!(),
+            },
+            Slot::Multiple(len, slot) => {
+              todo!();
+              // for i in 0..len {
+              //   arg_values.push(self.builder.instr().stack_load(
+              //     VariableSize::Bit64,
+              //     slot.clone(),
+              //     i as i32 * 8,
+              //   ));
+              // }
+            }
+          }
+        }
+
+        let func_ref = self.user_funcs[&id];
+        let call = self.builder.instr().call(func_ref, Bit64, &arg_values);
+
+        match *sig_ty {
+          Type::Function(_, ref ret) => match **ret {
+            // FIXME: Need to create RValues from ir extended form.
+            Type::Literal(Literal::Unit) => RValue::nil(),
+            _ => RValue::int(self.builder.inst_results(call)[0]),
+          },
+          _ => unreachable!(),
+        }
+      }
+      */
       mir::Expr::Unary(lhs, ref op, _) => {
         let lhs = self.compile_expr(lhs);
         let lhs = lhs.unwrap_single(self);

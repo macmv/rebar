@@ -33,14 +33,6 @@ impl RValue {
 }
 
 impl RValue {
-  #[track_caller]
-  pub fn unwrap_const(&self) -> &[u64] {
-    match self.kind {
-      RValueKind::Const(ref items) => items,
-      RValueKind::Dyn(_) => panic!("expected const value, got dynamic"),
-    }
-  }
-
   pub fn unwrap_single(&self, func: &mut FuncBuilder) -> Variable {
     match self.kind {
       RValueKind::Const(ref items) => {
