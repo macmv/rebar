@@ -47,7 +47,7 @@ impl AnalysisPass for ValueUses {
       self.current_block = block;
 
       for phi in &function.block(block).phis {
-        for &from in phi.from.values() {
+        for &from in phi.from.values().flatten() {
           if !self.variables.contains_key(&from) {
             self.set(from, VariableValue::DefinedLater);
           }
@@ -58,7 +58,8 @@ impl AnalysisPass for ValueUses {
         let values = phi
           .from
           .iter()
-          .map(|(&block, &var)| {
+          .filter_map(|(&block, &var)| var.map(|v| (block, v)))
+          .map(|(block, var)| {
             (
               block,
               self.simplify_value(
@@ -178,11 +179,11 @@ impl ValueUses {
 
   #[track_caller]
   fn attach_use(&mut self, out: Variable, input: Variable) {
-    self.variables.get_mut(&input).unwrap().used_by.insert(out);
+    self.variables.get_mut(&input).expect("no such variable").used_by.insert(out);
   }
   #[track_caller]
   fn mark_required(&mut self, var: Variable) {
-    self.variables.get_mut(&var).unwrap().required = true;
+    self.variables.get_mut(&var).expect("no such variable").required = true;
   }
 
   pub fn actual_value(&self, input: InstructionInput) -> VariableValue {

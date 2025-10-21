@@ -36,8 +36,16 @@ impl fmt::Debug for Variable {
   }
 }
 
+impl PartialOrd for Variable {
+  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(other)) }
+}
+
+impl Ord for Variable {
+  fn cmp(&self, other: &Self) -> std::cmp::Ordering { self.id().cmp(&other.id()) }
+}
+
 // This gets encoded into the high bits of `Variable`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum VariableSize {
   Bit1,
@@ -57,7 +65,7 @@ pub struct Block {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Phi {
   pub to:   Variable,
-  pub from: BTreeMap<BlockId, Variable>,
+  pub from: BTreeMap<BlockId, Option<Variable>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -146,6 +154,9 @@ pub struct Symbol {
 }
 
 impl BlockId {
+  pub const BEFORE: BlockId = BlockId(u32::MAX);
+  pub const ENTRY: BlockId = BlockId(0);
+
   pub const fn new(id: u32) -> Self { BlockId(id) }
 
   pub const fn as_u32(&self) -> u32 { self.0 }
@@ -346,7 +357,11 @@ impl fmt::Display for Phi {
       if i != 0 {
         write!(f, ", ")?;
       }
-      write!(f, "{} -> {}", from.0, from.1)?;
+      if let Some(var) = from.1 {
+        write!(f, "{} -> {var}", from.0)?;
+      } else {
+        write!(f, "{} -> <undef>", from.0)?;
+      }
     }
     write!(f, ")")
   }

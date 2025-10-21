@@ -85,5 +85,5 @@ passes![
   eliminate_unused_vars::EliminateUnusedVars,
   // legalize::Legalize,
   // merge_blocks::MergeBlocks,
-  // update_phis::UpdatePhis,
+  update_phis::UpdatePhis,
 ];

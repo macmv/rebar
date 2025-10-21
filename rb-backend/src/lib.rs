@@ -421,10 +421,9 @@ impl FuncBuilder<'_> {
         } else {
           let then_res = then_res.to_ir(self);
           let else_res = else_res.to_ir(self);
-          let res = self
-            .builder
-            .current_block()
-            .phi([(then_block, then_res), (else_block, else_res)].into_iter().collect());
+          let res = self.builder.current_block().phi(
+            [(then_block, Some(then_res)), (else_block, Some(else_res))].into_iter().collect(),
+          );
 
           RValue::int(res)
         }

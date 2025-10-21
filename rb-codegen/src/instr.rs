@@ -72,14 +72,17 @@ impl FunctionBuilder {
 impl BlockBuilder<'_> {
   pub fn id(&self) -> BlockId { self.block }
 
-  pub fn phi(&mut self, from: BTreeMap<BlockId, Variable>) -> Variable {
+  pub fn phi(&mut self, from: BTreeMap<BlockId, Option<Variable>>) -> Variable {
     assert!(
       self.function.function.blocks[self.block.0 as usize].instructions.is_empty(),
       "phis must proceed other instructions",
     );
 
-    let size = from.values().next().expect("phi cannot be empty").size();
-    assert!(from.values().all(|v| v.size() == size), "phi inputs must have the same size");
+    let size = from.values().flatten().next().expect("phi cannot be empty").size();
+    assert!(
+      from.values().flatten().all(|v| v.size() == size),
+      "phi inputs must have the same size"
+    );
 
     let to = self.function.var(size);
     self.function.function.blocks[self.block.0 as usize].phis.push(crate::Phi { from, to });
