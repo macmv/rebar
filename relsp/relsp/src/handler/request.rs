@@ -37,7 +37,6 @@ pub fn handle_semantic_tokens_full(
     let highlight = Highlight::from_ast(hir, &span_maps);
 
     let tokens = to_semantic_tokens(snap, file_id, &highlight)?;
-    info!("tokens: {:?}", tokens);
 
     Ok(Some(lsp_types::SemanticTokensResult::Tokens(lsp_types::SemanticTokens {
       data:      tokens,
@@ -79,8 +78,6 @@ fn to_semantic_tokens(
 
   let mut line = 0;
   let mut col = 0;
-
-  info!("highlight: {:?}", highlight.tokens);
 
   for h in highlight.tokens.iter() {
     let range = h.range;
