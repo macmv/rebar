@@ -1,5 +1,6 @@
 use rb_hir::{ast as hir, SpanMap};
-use rb_syntax::{cst, AstNode, NodeOrToken, Parse, SyntaxKind::*, TextRange};
+use rb_hir_lower::AstIdMap;
+use rb_syntax::{cst, AstNode, NodeOrToken, Parse, SyntaxKind::*, SyntaxNodePtr, TextRange};
 
 #[derive(Debug, Clone)]
 pub struct Highlight {
@@ -46,8 +47,9 @@ pub enum HighlightKind {
 }
 
 struct Highlighter<'a> {
-  func:     &'a hir::Function,
-  span_map: &'a SpanMap,
+  func:       &'a hir::Function,
+  span_map:   &'a SpanMap,
+  ast_id_map: &'a AstIdMap,
 
   hl: &'a mut Highlight,
 }
@@ -57,6 +59,7 @@ impl Highlight {
     cst: Parse<cst::SourceFile>,
     file: hir::SourceFile,
     span_maps: &[SpanMap],
+    ast_id_maps: &[AstIdMap],
   ) -> Highlight {
     let mut hl = Highlight { tokens: vec![] };
 
@@ -77,14 +80,21 @@ impl Highlight {
           _ => {}
         },
         NodeOrToken::Node(n) => {
-          let _hl = Highlighter {
-            func:     &file.functions[file.main_function.unwrap()],
-            span_map: &span_maps[file.main_function.unwrap().into_raw().into_u32() as usize],
-            hl:       &mut hl,
+          let mut hl = Highlighter {
+            func:       &file.functions[file.main_function.unwrap()],
+            span_map:   &span_maps[file.main_function.unwrap().into_raw().into_u32() as usize],
+            ast_id_map: &ast_id_maps[file.main_function.unwrap().into_raw().into_u32() as usize],
+            hl:         &mut hl,
           };
 
-          if let Some(_expr) = cst::Expr::cast(n) {
-            // hl.visit_expr(expr);
+          if cst::Expr::can_cast(n.kind()) {
+            if let Some(id) = hl.ast_id_map.exprs.get(&SyntaxNodePtr::new(&n)) {
+              hl.visit_expr(*id);
+            }
+          } else if cst::Stmt::can_cast(n.kind()) {
+            if let Some(id) = hl.ast_id_map.stmts.get(&SyntaxNodePtr::new(&n)) {
+              hl.visit_stmt(*id);
+            }
           }
         }
       }

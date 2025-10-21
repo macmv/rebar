@@ -433,7 +433,7 @@ fn check(src: &str) -> Vec<Diagnostic> {
   }
 
   let res = rb_diagnostic::run(sources, || {
-    let (hir, span_maps) = hir;
+    let (hir, span_maps, _) = hir;
 
     for (idx, function) in hir.functions {
       let span_map = &span_maps[idx.into_raw().into_u32() as usize];

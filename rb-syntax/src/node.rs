@@ -12,6 +12,7 @@ impl Language for Rebar {
 }
 
 pub type SyntaxNode = rowan::SyntaxNode<Rebar>;
+pub type SyntaxNodePtr = rowan::ast::SyntaxNodePtr<Rebar>;
 pub type SyntaxToken = rowan::SyntaxToken<Rebar>;
 pub type SyntaxElement = rowan::SyntaxElement<Rebar>;
 pub type SyntaxNodeChildren = rowan::SyntaxNodeChildren<Rebar>;

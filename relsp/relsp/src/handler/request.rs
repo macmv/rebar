@@ -24,18 +24,18 @@ pub fn handle_semantic_tokens_full(
     let id = sources.add(Source::new("inline.rbr".into(), file.clone()));
     let sources = Arc::new(sources);
 
-    let ((cst, hir, span_maps), _) = rb_diagnostic::run_both(sources.clone(), || {
+    let ((cst, hir, span_maps, ast_id_maps), _) = rb_diagnostic::run_both(sources.clone(), || {
       let res = cst::SourceFile::parse(&file);
 
       if res.errors().is_empty() {
-        let (hir, span_maps) = rb_hir_lower::lower_source(res.tree(), id);
-        (res, hir, span_maps)
+        let (hir, span_maps, ast_id_maps) = rb_hir_lower::lower_source(res.tree(), id);
+        (res, hir, span_maps, ast_id_maps)
       } else {
-        (res, Default::default(), Default::default())
+        (res, Default::default(), Default::default(), Default::default())
       }
     });
 
-    let highlight = Highlight::from_ast(cst, hir, &span_maps);
+    let highlight = Highlight::from_ast(cst, hir, &span_maps, &ast_id_maps);
 
     let tokens = to_semantic_tokens(snap, file_id, &highlight)?;
 

@@ -1,35 +1,55 @@
 //! Lowers the AST from rb_syntax into an HIR tree. Performs no type inferrence,
 //! and only validates syntax.
 
+use std::collections::HashMap;
+
 use rb_diagnostic::{emit, SourceId, Span};
 use rb_hir::{
   ast::{self as hir, StringInterp},
   SpanMap,
 };
-use rb_syntax::{cst, AstNode};
+use rb_syntax::{cst, AstNode, SyntaxNodePtr};
 
-pub fn lower_source(cst: cst::SourceFile, source: SourceId) -> (hir::SourceFile, Vec<SpanMap>) {
+pub fn lower_source(
+  cst: cst::SourceFile,
+  source: SourceId,
+) -> (hir::SourceFile, Vec<SpanMap>, Vec<AstIdMap>) {
   let mut out = hir::SourceFile::default();
   let mut span_maps = vec![];
+  let mut ast_id_maps = vec![];
 
-  let mut lower = SourceLower { source, out: &mut out, span_maps: &mut span_maps };
+  let mut lower =
+    SourceLower { source, out: &mut out, span_maps: &mut span_maps, ast_id_maps: &mut ast_id_maps };
   let main = lower.source(&cst);
 
   out.main_function = Some(main);
-  (out, span_maps)
+  (out, span_maps, ast_id_maps)
 }
 
 struct SourceLower<'a> {
-  source:    SourceId,
-  span_maps: &'a mut Vec<SpanMap>,
-  out:       &'a mut hir::SourceFile,
+  source:      SourceId,
+  span_maps:   &'a mut Vec<SpanMap>,
+  ast_id_maps: &'a mut Vec<AstIdMap>,
+  out:         &'a mut hir::SourceFile,
+}
+
+#[derive(Default)]
+pub struct AstIdMap {
+  pub exprs: HashMap<rb_syntax::SyntaxNodePtr, hir::ExprId>,
+  pub stmts: HashMap<rb_syntax::SyntaxNodePtr, hir::StmtId>,
 }
 
 impl SourceLower<'_> {
   fn source(&mut self, cst: &cst::SourceFile) -> hir::FunctionId {
     let mut func = hir::Function::default();
     let mut span_map = SpanMap::default();
-    let mut lower = FunctionLower { source: self, f: &mut func, span_map: &mut span_map };
+    let mut ast_id_map = AstIdMap::default();
+    let mut lower = FunctionLower {
+      source:     self,
+      f:          &mut func,
+      span_map:   &mut span_map,
+      ast_id_map: &mut ast_id_map,
+    };
 
     for stmt in cst.stmts() {
       let item = lower.stmt(stmt);
@@ -37,13 +57,20 @@ impl SourceLower<'_> {
     }
 
     self.span_maps.push(span_map);
+    self.ast_id_maps.push(ast_id_map);
     self.out.functions.alloc(func)
   }
 
   fn function(&mut self, cst: &cst::FunctionDef) -> hir::FunctionId {
     let mut f = hir::Function::default();
     let mut span_map = SpanMap::default();
-    let mut lower = FunctionLower { source: self, f: &mut f, span_map: &mut span_map };
+    let mut ast_id_map = AstIdMap::default();
+    let mut lower = FunctionLower {
+      source:     self,
+      f:          &mut f,
+      span_map:   &mut span_map,
+      ast_id_map: &mut ast_id_map,
+    };
 
     lower.f.name = cst.ident_token().unwrap().to_string();
 
@@ -62,6 +89,7 @@ impl SourceLower<'_> {
     }
 
     self.span_maps.push(span_map);
+    self.ast_id_maps.push(ast_id_map);
     self.out.functions.alloc(f)
   }
 
@@ -87,9 +115,10 @@ impl SourceLower<'_> {
 }
 
 struct FunctionLower<'a, 'b> {
-  source:   &'a mut SourceLower<'b>,
-  f:        &'a mut hir::Function,
-  span_map: &'a mut SpanMap,
+  source:     &'a mut SourceLower<'b>,
+  f:          &'a mut hir::Function,
+  span_map:   &'a mut SpanMap,
+  ast_id_map: &'a mut AstIdMap,
 }
 
 macro_rules! match_token {
@@ -155,6 +184,7 @@ impl FunctionLower<'_, '_> {
 
     self.span_map.stmts.push(Span { file: self.source.source, range: cst.syntax().text_range() });
     let id = self.f.stmts.alloc(stmt);
+    self.ast_id_map.stmts.insert(SyntaxNodePtr::new(cst.syntax()), id);
 
     match cst {
       cst::Stmt::Let(ref let_stmt) => {
@@ -312,6 +342,7 @@ impl FunctionLower<'_, '_> {
 
     self.span_map.exprs.push(Span { file: self.source.source, range: cst.syntax().text_range() });
     let id = self.f.exprs.alloc(expr);
+    self.ast_id_map.exprs.insert(SyntaxNodePtr::new(cst.syntax()), id);
 
     match cst {
       cst::Expr::BinaryExpr(ref expr) => {
