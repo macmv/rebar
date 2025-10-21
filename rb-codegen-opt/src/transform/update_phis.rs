@@ -16,25 +16,36 @@ pub struct UpdatePhis<'a> {
   dominator: &'a DominatorTree,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+struct Congruence(u32);
+
+struct CongruenceSet {
+  var_to_congruence:  HashMap<Variable, Congruence>,
+  congruence_to_vars: HashMap<Congruence, HashSet<Variable>>,
+}
+
 struct Renamer<'a> {
-  next_var: u32,
-  stacks:   HashMap<Variable, Vec<Variable>>,
+  next_var:   u32,
+  stacks:     HashMap<Congruence, Vec<Variable>>,
+  congruence: &'a CongruenceSet,
 
   update: &'a UpdatePhis<'a>,
 }
 
 impl<'a> TransformPass<'a> for UpdatePhis<'a> {
   fn run(&self, function: &mut Function) {
-    let mut defs = BTreeMap::<Variable, HashSet<BlockId>>::new();
-    let mut last_variable_by_block = HashMap::<BlockId, HashMap<VariableSize, Variable>>::new();
+    let mut defs = BTreeMap::<Congruence, HashSet<BlockId>>::new();
+    let mut last_variable_by_block = HashMap::<BlockId, HashMap<Congruence, Variable>>::new();
+
+    let congruence = CongruenceSet::new(function);
 
     for block in function.blocks() {
       let mut last_variable = HashMap::new();
       for instr in &function.block(block).instructions {
         for &output in &instr.output {
           if let InstructionOutput::Var(out) = output {
-            defs.entry(out).or_default().insert(block);
-            last_variable.insert(out.size(), out);
+            defs.entry(congruence.lookup(out)).or_default().insert(block);
+            last_variable.insert(congruence.lookup(out), out);
           }
         }
       }
@@ -62,10 +73,11 @@ impl<'a> TransformPass<'a> for UpdatePhis<'a> {
       block.phis.clear();
     }
 
-    for (to, sites) in phi_sites {
+    for (c, sites) in phi_sites {
       for block_id in sites {
         let block = function.block_mut(block_id);
-        let mut phi = Phi { to, from: BTreeMap::new() };
+        let mut phi =
+          Phi { to: *congruence.reverse_lookup(c).iter().next().unwrap(), from: BTreeMap::new() };
 
         for &pred in self.cfg.enters(block_id) {
           phi.from.insert(pred, None);
@@ -79,7 +91,12 @@ impl<'a> TransformPass<'a> for UpdatePhis<'a> {
       }
     }
 
-    let mut renamer = Renamer { next_var: 0, stacks: HashMap::new(), update: self };
+    let mut renamer = Renamer {
+      next_var:   0,
+      stacks:     HashMap::new(),
+      congruence: &congruence,
+      update:     self,
+    };
     renamer.pass(function.entry(), function);
   }
 }
@@ -105,9 +122,10 @@ impl Renamer<'_> {
     let mut pushed = HashMap::new();
 
     for phi in &mut function.block_mut(block).phis {
+      let cong = self.congruence.lookup(phi.to);
       phi.to = self.fresh_var(phi.to.size());
-      self.stacks.entry(phi.to).or_default().push(phi.to);
-      pushed.entry(phi.to).and_modify(|e| *e += 1).or_insert(1);
+      self.stacks.entry(cong).or_default().push(phi.to);
+      pushed.entry(cong).and_modify(|e| *e += 1).or_insert(1);
     }
 
     for instr in &mut function.block_mut(block).instructions {
@@ -116,7 +134,7 @@ impl Renamer<'_> {
           InstructionInput::Var(var) => {
             *var = self
               .stacks
-              .get(&var)
+              .get(&self.congruence.lookup(*var))
               .and_then(|s| s.last())
               .copied()
               .unwrap_or_else(|| panic!("no variable on stack for {:?}", var));
@@ -127,16 +145,37 @@ impl Renamer<'_> {
 
       for output in &mut instr.output {
         if let InstructionOutput::Var(out) = output {
+          let cong = self.congruence.lookup(*out);
           *out = self.fresh_var(out.size());
-          self.stacks.entry(*out).or_default().push(*out);
-          pushed.entry(*out).and_modify(|e| *e += 1).or_insert(1);
+          self.stacks.entry(cong).or_default().push(*out);
+          pushed.entry(cong).and_modify(|e| *e += 1).or_insert(1);
         }
       }
     }
 
+    match &mut function.block_mut(block).terminator {
+      rb_codegen::TerminatorInstruction::Return(inputs) => {
+        for input in inputs {
+          match input {
+            InstructionInput::Var(var) => {
+              *var = self
+                .stacks
+                .get(&self.congruence.lookup(*var))
+                .and_then(|s| s.last())
+                .copied()
+                .unwrap_or_else(|| panic!("no variable on stack for {:?}", var));
+            }
+            _ => {}
+          }
+        }
+      }
+      _ => {}
+    }
+
     for &succ in self.update.cfg.exits(block) {
       for phi in &mut function.block_mut(succ).phis {
-        if let Some(&top) = self.stacks.get(&phi.to).and_then(|s| s.last()) {
+        let cong = self.congruence.lookup(phi.to);
+        if let Some(&top) = self.stacks.get(&cong).and_then(|s| s.last()) {
           phi.from.insert(block, Some(top));
         }
       }
@@ -146,9 +185,9 @@ impl Renamer<'_> {
       self.pass(child, function);
     }
 
-    for (kind, count) in pushed {
-      let new_len = self.stacks[&kind].len() - count;
-      self.stacks.get_mut(&kind).unwrap().truncate(new_len);
+    for (cong, count) in pushed {
+      let new_len = self.stacks[&cong].len() - count;
+      self.stacks.get_mut(&cong).unwrap().truncate(new_len);
     }
   }
 
@@ -156,6 +195,70 @@ impl Renamer<'_> {
     let var = self.next_var;
     self.next_var += 1;
     Variable::new(var, size)
+  }
+}
+
+impl CongruenceSet {
+  pub fn new(function: &Function) -> Self {
+    let mut congruence_to_vars = HashMap::<Congruence, HashSet<Variable>>::new();
+    let mut var_to_congruence = HashMap::<Variable, Congruence>::new();
+    for block in function.blocks() {
+      for instr in &function.block(block).instructions {
+        for &output in &instr.output {
+          if let InstructionOutput::Var(out) = output {
+            let c = Congruence(congruence_to_vars.len() as u32);
+            congruence_to_vars.insert(c, HashSet::from([out]));
+            var_to_congruence.insert(out, c);
+          }
+        }
+      }
+    }
+
+    for block in function.blocks() {
+      for phi in &function.block(block).phis {
+        for from in phi.from.values().flatten() {
+          match (var_to_congruence.get(&phi.to), var_to_congruence.get(from)) {
+            // Not much to do if neither variable was defined. Maybe
+            // merge it with a later variable, if that was defined?
+            (None, None) => {}
+
+            (c1, c2) if c1 == c2 => {} // Already congruent.
+
+            (None, _) => {
+              var_to_congruence.insert(phi.to, var_to_congruence[&from]);
+              congruence_to_vars.entry(var_to_congruence[&from]).and_modify(|s| {
+                s.insert(phi.to);
+              });
+            }
+
+            (_, None) => {
+              var_to_congruence.insert(*from, var_to_congruence[&phi.to]);
+              congruence_to_vars.entry(var_to_congruence[&phi.to]).and_modify(|s| {
+                s.insert(*from);
+              });
+            }
+
+            (Some(&c1), Some(&c2)) => {
+              for o in congruence_to_vars.remove(&c2).unwrap() {
+                var_to_congruence.insert(o, c1);
+                congruence_to_vars.entry(c1).and_modify(|s| {
+                  s.insert(o);
+                });
+              }
+              var_to_congruence.insert(*from, c1);
+            }
+          }
+        }
+      }
+    }
+
+    CongruenceSet { var_to_congruence, congruence_to_vars }
+  }
+
+  pub fn lookup(&self, var: Variable) -> Congruence { self.var_to_congruence[&var] }
+
+  pub fn reverse_lookup(&self, cong: Congruence) -> &HashSet<Variable> {
+    &self.congruence_to_vars[&cong]
   }
 }
 
