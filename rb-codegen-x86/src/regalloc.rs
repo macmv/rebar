@@ -75,35 +75,34 @@ impl VariableRegisters {
         let loc = InstructionLocation { block: b as u32, instruction: i as u32 };
 
         for output in &inst.output {
-          if let InstructionOutput::Var(v) = *output {
-            let Some(size) = var_to_reg_size(v.size()) else { continue };
+          let InstructionOutput::Var(v) = *output;
+          let Some(size) = var_to_reg_size(v.size()) else { continue };
 
-            if let Some(index) = pinned.get(v) {
-              if used[index as usize].is_some_and(|u| lifetimes.is_used_at(u, loc)) {
-                panic!("pinned register {index:?} is already in use");
-              }
-              self.set(v, Register { index, size });
-              used[index as usize] = Some(v);
-              continue;
+          if let Some(index) = pinned.get(v) {
+            if used[index as usize].is_some_and(|u| lifetimes.is_used_at(u, loc)) {
+              panic!("pinned register {index:?} is already in use");
             }
+            self.set(v, Register { index, size });
+            used[index as usize] = Some(v);
+            continue;
+          }
 
-            'outer: for (index, used) in used.iter_mut().enumerate() {
-              let index = unsafe { std::mem::transmute::<u8, RegisterIndex>(index as u8) };
+          'outer: for (index, used) in used.iter_mut().enumerate() {
+            let index = unsafe { std::mem::transmute::<u8, RegisterIndex>(index as u8) };
 
-              if used.is_none_or(|u| !lifetimes.is_used_at(u, loc)) {
-                // If we overlap with a pinned variable, don't use that variable.
-                for variable in lifetimes.overlaps_with(v) {
-                  if let Some(i) = pinned.get(variable) {
-                    if index == i {
-                      continue 'outer;
-                    }
+            if used.is_none_or(|u| !lifetimes.is_used_at(u, loc)) {
+              // If we overlap with a pinned variable, don't use that variable.
+              for variable in lifetimes.overlaps_with(v) {
+                if let Some(i) = pinned.get(variable) {
+                  if index == i {
+                    continue 'outer;
                   }
                 }
-
-                *used = Some(v);
-                self.set(v, Register { index, size });
-                break;
               }
+
+              *used = Some(v);
+              self.set(v, Register { index, size });
+              break;
             }
           }
         }
@@ -136,9 +135,8 @@ impl Lifetimes {
         }
 
         for output in &inst.output {
-          if let InstructionOutput::Var(v) = output {
-            l.add_def(*v, loc);
-          }
+          let InstructionOutput::Var(v) = output;
+          l.add_def(*v, loc);
         }
       }
     }
@@ -213,8 +211,9 @@ impl PinnedVariables {
                 .iter()
                 .flat_map(|b| {
                   b.instructions.iter().flat_map(|i| {
-                    i.output.iter().filter_map(|o| {
-                      if let InstructionOutput::Var(v) = o { Some(v.id()) } else { None }
+                    i.output.iter().map(|o| {
+                      let InstructionOutput::Var(v) = o;
+                      v.id()
                     })
                   })
                 })
@@ -264,9 +263,8 @@ impl PinnedVariables {
               InstructionInput::Var(v) => Some(v.id()),
               _ => None,
             })
-            .chain(i.output.iter().filter_map(|v| match v {
-              InstructionOutput::Var(v) => Some(v.id()),
-              _ => None,
+            .chain(i.output.iter().map(|v| match v {
+              InstructionOutput::Var(v) => v.id(),
             }))
         })
       })
@@ -405,7 +403,6 @@ impl ToVar for InstructionOutput {
   fn to_var(&mut self, _: &mut PinnedVariables) -> Variable {
     match self {
       InstructionOutput::Var(v) => *v,
-      InstructionOutput::Syscall => panic!("cannot turn syscall into var"),
     }
   }
 }

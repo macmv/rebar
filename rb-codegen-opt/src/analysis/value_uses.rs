@@ -164,10 +164,9 @@ impl ValueUses {
     }
 
     for output in &instr.output {
-      if let InstructionOutput::Var(var) = output {
-        if !self.variables.contains_key(var) {
-          self.set(*var, VariableValue::Unknown);
-        }
+      let InstructionOutput::Var(var) = output;
+      if !self.variables.contains_key(var) {
+        self.set(*var, VariableValue::Unknown);
       }
     }
   }

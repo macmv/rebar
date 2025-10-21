@@ -103,9 +103,8 @@ pub fn transform_variables(mut view: impl InstructionViewMut, transform: impl Fn
       }
     }
     for output in &mut instr.output {
-      if let InstructionOutput::Var(var) = output {
-        transform(var);
-      }
+      let InstructionOutput::Var(var) = output;
+      transform(var);
     }
   }
 }

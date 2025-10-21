@@ -495,7 +495,6 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
               Instruction::new(Opcode::LEA).with_prefix(Prefix::RexW).with_disp(reg.index, -4),
             );
           }
-          _ => todo!("inst {:?}", inst),
         },
         rb_codegen::Opcode::Move => {
           match (inst.output[0], inst.input[0]) {
@@ -568,8 +567,6 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
                 ),
               }
             }
-
-            _ => todo!("mov {inst:?}"),
           }
         }
 

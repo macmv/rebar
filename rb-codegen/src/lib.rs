@@ -155,7 +155,6 @@ pub enum Immediate {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InstructionOutput {
   Var(Variable),
-  Syscall,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -339,11 +338,8 @@ impl InstructionInput {
 impl InstructionOutput {
   #[track_caller]
   pub fn unwrap_var(self) -> Variable {
-    if let InstructionOutput::Var(v) = self {
-      v
-    } else {
-      panic!("expected variable output, got {:?}", self);
-    }
+    let InstructionOutput::Var(v) = self;
+    v
   }
 }
 
@@ -425,7 +421,6 @@ impl fmt::Display for InstructionOutput {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       InstructionOutput::Var(v) => write!(f, "{v}"),
-      InstructionOutput::Syscall => write!(f, "syscall"),
     }
   }
 }

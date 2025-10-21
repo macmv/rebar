@@ -43,10 +43,9 @@ impl<'a> TransformPass<'a> for UpdatePhis<'a> {
       let mut last_variable = HashMap::new();
       for instr in &function.block(block).instructions {
         for &output in &instr.output {
-          if let InstructionOutput::Var(out) = output {
-            defs.entry(congruence.lookup(out)).or_default().insert(block);
-            last_variable.insert(congruence.lookup(out), out);
-          }
+          let InstructionOutput::Var(out) = output;
+          defs.entry(congruence.lookup(out)).or_default().insert(block);
+          last_variable.insert(congruence.lookup(out), out);
         }
       }
       last_variable_by_block.insert(block, last_variable);
@@ -144,12 +143,11 @@ impl Renamer<'_> {
       }
 
       for output in &mut instr.output {
-        if let InstructionOutput::Var(out) = output {
-          let cong = self.congruence.lookup(*out);
-          *out = self.fresh_var(out.size());
-          self.stacks.entry(cong).or_default().push(*out);
-          pushed.entry(cong).and_modify(|e| *e += 1).or_insert(1);
-        }
+        let InstructionOutput::Var(out) = output;
+        let cong = self.congruence.lookup(*out);
+        *out = self.fresh_var(out.size());
+        self.stacks.entry(cong).or_default().push(*out);
+        pushed.entry(cong).and_modify(|e| *e += 1).or_insert(1);
       }
     }
 
@@ -205,11 +203,10 @@ impl CongruenceSet {
     for block in function.blocks() {
       for instr in &function.block(block).instructions {
         for &output in &instr.output {
-          if let InstructionOutput::Var(out) = output {
-            let c = Congruence(congruence_to_vars.len() as u32);
-            congruence_to_vars.insert(c, HashSet::from([out]));
-            var_to_congruence.insert(out, c);
-          }
+          let InstructionOutput::Var(out) = output;
+          let c = Congruence(congruence_to_vars.len() as u32);
+          congruence_to_vars.insert(c, HashSet::from([out]));
+          var_to_congruence.insert(out, c);
         }
       }
     }
