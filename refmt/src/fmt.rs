@@ -94,6 +94,7 @@ impl FormatterContext<'_> {
         }
       }
       (T![nl], _) => (None, None),
+      (T![']'], ATTR) => (None, Newline),
 
       (T![')'], _) if self.multiline => {
         if self.before(token).kind() == T![,] {
