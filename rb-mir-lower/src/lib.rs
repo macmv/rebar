@@ -23,11 +23,7 @@ pub enum Item {
 
 pub struct UserFunction {
   pub id:        UserFunctionId,
-  pub intrinsic: Option<Intrinsic>,
-}
-
-pub enum Intrinsic {
-  Syscall,
+  pub intrinsic: Option<mir::Intrinsic>,
 }
 
 impl Env<'_> {
@@ -36,7 +32,7 @@ impl Env<'_> {
 
     for attr in &function.attrs {
       if attr.path == "rebar::intrinsic" {
-        func.intrinsic = Some(Intrinsic::Syscall);
+        func.intrinsic = Some(mir::Intrinsic::Syscall);
       }
     }
 
@@ -212,17 +208,20 @@ impl Lower<'_> {
 
       hir::Expr::Call(lhs, ref args) => match self.hir.exprs[lhs] {
         hir::Expr::Name(ref name) => {
-          let func = if let Some(Item::UserFunction(func)) = self.env.items.get(name) {
+          if let Some(Item::UserFunction(func)) = self.env.items.get(name) {
             self.mir.deps.insert(func.id);
-            func
+
+            let lhs_ty = self.ty.type_of_expr(lhs);
+            let args = args.iter().map(|&arg| self.lower_expr(arg)).collect();
+
+            if let Some(intrinsic) = func.intrinsic {
+              mir::Expr::CallIntrinsic(intrinsic, args)
+            } else {
+              mir::Expr::Call(func.id, lhs_ty, args)
+            }
           } else {
             panic!("unresolved function {name}");
-          };
-
-          let lhs_ty = self.ty.type_of_expr(lhs);
-          let args = args.iter().map(|&arg| self.lower_expr(arg)).collect();
-
-          mir::Expr::Call(func.id, lhs_ty, args)
+          }
         }
         _ => panic!("todo: dynamic dispatch"),
       },

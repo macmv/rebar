@@ -209,6 +209,40 @@ impl FuncBuilder<'_> {
         RValue::int(output)
       }
 
+      mir::Expr::CallIntrinsic(mir::Intrinsic::Syscall, ref args) => {
+        let output = match args.as_slice() {
+          &[a1] => {
+            let a1 = self.compile_expr(a1).unwrap_single(self);
+
+            self.builder.instr().syscall1(Bit64, a1)
+          }
+          &[a1, a2] => {
+            let a1 = self.compile_expr(a1).unwrap_single(self);
+            let a2 = self.compile_expr(a2).unwrap_single(self);
+
+            self.builder.instr().syscall2(Bit64, a1, a2)
+          }
+          &[a1, a2, a3] => {
+            let a1 = self.compile_expr(a1).unwrap_single(self);
+            let a2 = self.compile_expr(a2).unwrap_single(self);
+            let a3 = self.compile_expr(a3).unwrap_single(self);
+
+            self.builder.instr().syscall3(Bit64, a1, a2, a3)
+          }
+          &[a1, a2, a3, a4] => {
+            let a1 = self.compile_expr(a1).unwrap_single(self);
+            let a2 = self.compile_expr(a2).unwrap_single(self);
+            let a3 = self.compile_expr(a3).unwrap_single(self);
+            let a4 = self.compile_expr(a4).unwrap_single(self);
+
+            self.builder.instr().syscall4(Bit64, a1, a2, a3, a4)
+          }
+          _ => unreachable!(),
+        };
+
+        RValue::int(output)
+      }
+
       /*
       Some(ValueType::UserFunction) => {
         let id = match lhs {

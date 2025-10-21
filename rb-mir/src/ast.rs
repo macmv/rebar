@@ -67,6 +67,13 @@ pub enum Expr {
   Assign { variable: String, ty: Type, rhs: ExprId },
 
   While { cond: ExprId },
+
+  CallIntrinsic(Intrinsic, Vec<ExprId>),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Intrinsic {
+  Syscall,
 }
 
 #[derive(Debug)]
