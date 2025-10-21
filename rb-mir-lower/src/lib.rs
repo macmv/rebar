@@ -105,17 +105,12 @@ impl Lower<'_> {
       hir::Expr::Literal(hir::Literal::Bool(v)) => mir::Expr::Literal(mir::Literal::Bool(v)),
       hir::Expr::Literal(hir::Literal::Int(v)) => mir::Expr::Literal(mir::Literal::Int(v)),
 
-      // TODO: It'd be nice to remove StringInterp from MIR
       hir::Expr::String(ref segments) => {
-        let segments = segments
-          .iter()
-          .map(|segment| match segment {
-            hir::StringInterp::Literal(ref v) => mir::StringInterp::Literal(v.clone()),
-            hir::StringInterp::Expr(e) => mir::StringInterp::Expr(self.lower_expr(*e)),
-          })
-          .collect();
-
-        mir::Expr::StringInterp(segments)
+        if let &[hir::StringInterp::Literal(ref lit)] = segments.as_slice() {
+          mir::Expr::Literal(mir::Literal::String(lit.clone()))
+        } else {
+          todo!("lowering interpolated strings literals")
+        }
       }
 
       hir::Expr::Array(ref exprs) => {

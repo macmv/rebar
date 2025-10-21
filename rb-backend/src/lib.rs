@@ -160,8 +160,6 @@ impl FuncBuilder<'_> {
         mir::Literal::String(_) => todo!("string literals"),
       },
 
-      mir::Expr::StringInterp(_) => todo!("interpolated strings"),
-
       mir::Expr::Array(_, _) => todo!("array literals"),
 
       mir::Expr::Local(id, ref ty) => {

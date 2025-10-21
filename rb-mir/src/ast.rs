@@ -49,7 +49,6 @@ pub enum Expr {
   Literal(Literal),
   Call(UserFunctionId, Type, Vec<ExprId>),
 
-  StringInterp(Vec<StringInterp>),
   Array(Vec<ExprId>, Type),
 
   Unary(ExprId, UnaryOp, Type),
@@ -74,12 +73,6 @@ pub enum Expr {
 #[derive(Debug, Clone, Copy)]
 pub enum Intrinsic {
   Syscall,
-}
-
-#[derive(Debug)]
-pub enum StringInterp {
-  Literal(String),
-  Expr(ExprId),
 }
 
 #[derive(Debug)]
@@ -122,8 +115,4 @@ pub enum BinaryOp {
   Lte,
   Gt,
   Gte,
-}
-
-impl StringInterp {
-  pub fn is_literal(&self) -> bool { matches!(self, StringInterp::Literal(_)) }
 }
