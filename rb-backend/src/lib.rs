@@ -16,16 +16,20 @@ use smallvec::smallvec;
 use crate::r_value::RValue;
 
 pub struct Compiler {
-  mir_ctx:   MirContext,
+  mir_ctx:      MirContext,
+  function_ids: HashMap<mir::UserFunctionId, FunctionId>,
+
   functions: Vec<Function>,
 }
 
+#[derive(Clone, Copy)]
 pub struct ThreadCtx<'a> {
-  mir_ctx: &'a MirContext,
+  mir_ctx:      &'a MirContext,
+  function_ids: &'a HashMap<mir::UserFunctionId, FunctionId>,
 }
 
 pub struct FuncBuilder<'a> {
-  ctx: &'a MirContext,
+  ctx: ThreadCtx<'a>,
 
   builder: FunctionBuilder,
   mir:     &'a mir::Function,
@@ -34,9 +38,13 @@ pub struct FuncBuilder<'a> {
 }
 
 impl Compiler {
-  pub fn new(mir_ctx: MirContext) -> Self { Compiler { mir_ctx, functions: vec![] } }
+  pub fn new(mir_ctx: MirContext) -> Self {
+    Compiler { mir_ctx, function_ids: HashMap::new(), functions: vec![] }
+  }
 
-  pub fn new_thread(&self) -> ThreadCtx<'_> { ThreadCtx { mir_ctx: &self.mir_ctx } }
+  pub fn new_thread(&self) -> ThreadCtx<'_> {
+    ThreadCtx { mir_ctx: &self.mir_ctx, function_ids: &self.function_ids }
+  }
 
   pub fn finish_function(&mut self, func: Function) { self.functions.push(func); }
 
@@ -80,7 +88,7 @@ impl ThreadCtx<'_> {
       locals.insert(mir::VarId(var as u32), values[0]);
     }
 
-    FuncBuilder { ctx: self.mir_ctx, mir, builder, locals }
+    FuncBuilder { ctx: *self, mir, builder, locals }
   }
 
   pub fn compile_function(&mut self, mir: &mir::Function) -> Function {
@@ -112,6 +120,8 @@ pub enum Error {
 }
 
 impl FuncBuilder<'_> {
+  const fn mir(&self) -> &MirContext { self.ctx.mir_ctx }
+
   fn compile_stmt(&mut self, stmt: mir::StmtId) -> RValue {
     match self.mir.stmts[stmt] {
       mir::Stmt::Expr(expr) => self.compile_expr(expr),
@@ -141,7 +151,7 @@ impl FuncBuilder<'_> {
       mir::Expr::Local(id, ref ty) => {
         let var = self.locals[&id];
 
-        let vt = ValueType::for_type(self.ctx, ty);
+        let vt = ValueType::for_type(self.mir(), ty);
         RValue::new(vt, var)
       }
 
@@ -404,7 +414,7 @@ impl FuncBuilder<'_> {
       }
       */
       mir::Expr::If { cond, then, els: Some(els), ref ty } => {
-        let vt = ValueType::for_type(self.ctx, ty);
+        let vt = ValueType::for_type(self.mir(), ty);
 
         let (cond, a, b) = self.compile_conditional(cond);
 
