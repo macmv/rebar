@@ -865,4 +865,66 @@ mod tests {
       &[Rel { r_offset: 17, r_sym: 1, r_type: object::elf::R_X86_64_PC32, r_addend: -4 }],
     );
   }
+
+  #[test]
+  fn call_works() {
+    let mut text = vec![];
+
+    let data = b"Hello, world!\n";
+
+    let instructions = [
+      // `call +16`
+      Instruction::new(Opcode::CALL).with_immediate(Immediate::i32(16)),
+      // `exit 0`
+      Instruction::new(Opcode::MOV_RM_IMM_16)
+        .with_prefix(Prefix::RexW)
+        .with_mod(0b11, RegisterIndex::Eax)
+        .with_immediate(Immediate::i32(60)),
+      Instruction::new(Opcode::MOV_RM_IMM_16)
+        .with_prefix(Prefix::RexW)
+        .with_mod(0b11, RegisterIndex::Edi)
+        .with_immediate(Immediate::i32(0)),
+      Instruction::new(Opcode::SYSCALL),
+      // `write 1 reloc.foo 3`
+      Instruction::new(Opcode::MOV_RM_IMM_16)
+        .with_prefix(Prefix::RexW)
+        .with_mod(0b11, RegisterIndex::Eax)
+        .with_immediate(Immediate::i32(1)),
+      Instruction::new(Opcode::MOV_RM_IMM_16)
+        .with_prefix(Prefix::RexW)
+        .with_mod(0b11, RegisterIndex::Edi)
+        .with_immediate(Immediate::i32(1)),
+      Instruction::new(Opcode::LEA).with_prefix(Prefix::RexW).with_disp(RegisterIndex::Esi, -4),
+      Instruction::new(Opcode::MOV_RM_IMM_16)
+        .with_prefix(Prefix::RexW)
+        .with_mod(0b11, RegisterIndex::Edx)
+        .with_immediate(Immediate::i32(data.len() as u32)),
+      Instruction::new(Opcode::SYSCALL),
+      // `ret`
+      Instruction::new(Opcode::RET),
+    ];
+
+    for inst in &instructions {
+      let (bytes, len) = inst.encode();
+      text.extend_from_slice(&bytes[..len]);
+    }
+
+    let dir = temp_dir!();
+    elf::generate(&dir.path().join("foo.o"), &text, data, &[]);
+    disass(
+      &dir.path().join("foo.o"),
+      expect![@r#"
+        0x08000250      e810000000             call 0x8000265
+        0x08000255      48c7c03c000000         mov rax, 0x3c
+        0x0800025c      48c7c700000000         mov rdi, 0
+        0x08000263      0f05                   syscall
+        0x08000265      48c7c001000000         mov rax, 1
+        0x0800026c      48c7c701000000         mov rdi, 1
+        0x08000273      488d35fcffffff         lea rsi, [0x08000276]
+        0x0800027a      48c7c20e000000         mov rdx, 0xe
+        0x08000281      0f05                   syscall
+        0x08000283      c3                     ret
+      "#],
+    );
+  }
 }
