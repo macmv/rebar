@@ -39,7 +39,7 @@ pub fn eval(src: &str) {
   let (typer_env, mir_env) = env.build(&hir.0);
 
   rb_diagnostic::run_or_exit(sources, || {
-    let (hir, span_maps) = hir;
+    let (hir, span_maps, _) = hir;
 
     for (idx, function) in hir.functions {
       let span_map = &span_maps[idx.into_raw().into_u32() as usize];
@@ -89,7 +89,7 @@ pub fn run(
   let (typer_env, mir_env) = env.build(&hir.0);
 
   rb_diagnostic::run(sources, || {
-    let (hir, span_maps) = hir;
+    let (hir, span_maps, _) = hir;
 
     for (idx, function) in hir.functions {
       let span_map = &span_maps[idx.into_raw().into_u32() as usize];
