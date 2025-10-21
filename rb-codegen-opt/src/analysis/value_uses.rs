@@ -109,16 +109,16 @@ impl AnalysisPass for ValueUses {
 
 impl ValueUses {
   fn pass_instr(&mut self, instr: &Instruction) {
+    if instr.opcode == Opcode::Syscall {
+      for input in &instr.input {
+        if let InstructionInput::Var(var) = input {
+          self.mark_required(*var);
+        }
+      }
+    }
+
     let out = match instr.output.as_slice() {
       &[] => return,
-      &[InstructionOutput::Syscall] => {
-        for input in &instr.input {
-          if let InstructionInput::Var(var) = input {
-            self.mark_required(*var);
-          }
-        }
-        return;
-      }
       &[InstructionOutput::Var(v)] => v,
       _ => todo!("handle non-variable outputs in ValueUses analysis"),
     };

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use rb_codegen::{Instruction, InstructionOutput, Variable};
+use rb_codegen::{Instruction, InstructionOutput, Opcode, Variable};
 
 use super::*;
 use crate::analysis::value_uses::ValueUses;
@@ -20,6 +20,10 @@ impl<'a> TransformPass<'a> for EliminateUnusedVars<'a> {
 
 impl EliminateUnusedVars<'_> {
   fn retain_instr(&self, instr: &Instruction) -> bool {
+    if instr.opcode == Opcode::Syscall {
+      return true;
+    }
+
     let [InstructionOutput::Var(var)] = instr.output.as_slice() else { return true };
 
     let mut seen = HashSet::new();
