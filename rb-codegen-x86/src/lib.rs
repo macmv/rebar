@@ -892,10 +892,10 @@ mod tests {
     let object_path = dir.path().join("foo.o");
     let binary_path = dir.path().join("a.out");
     Object {
-      text: builder.text,
-      ro_data: data.to_vec(),
-      relocs: builder.relocs,
-      ..Default::default()
+      text:         builder.text,
+      ro_data:      data.to_vec(),
+      relocs:       builder.relocs,
+      data_symbols: vec![SymbolDef { offset: 0, name: "foo".to_string() }],
     }
     .save(&object_path);
     link(&[object_path], &binary_path);
