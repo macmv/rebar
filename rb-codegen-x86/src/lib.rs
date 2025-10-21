@@ -17,6 +17,18 @@ use crate::{
 mod regalloc;
 
 #[derive(Default)]
+pub struct ObjectBuilder {
+  pub relocs:    Vec<Rel>,
+  pub functions: Vec<u64>,
+  pub text:      Vec<u8>,
+}
+
+pub struct Object {
+  pub relocs: Vec<Rel>,
+  pub text:   Vec<u8>,
+}
+
+#[derive(Default)]
 pub struct Builder {
   pub relocs:        Vec<Rel>,
   pub jumps:         Vec<Jump>,
@@ -28,6 +40,25 @@ pub struct Jump {
   pub size:   RegisterSize,
   pub offset: u64,
   pub target: BlockId,
+}
+
+impl ObjectBuilder {
+  pub fn add_function(&mut self, function: rb_codegen::Function) {
+    let lowered = lower(function);
+
+    let offset = self.text.len() as u64;
+    self.text.extend_from_slice(&lowered.text);
+    self
+      .relocs
+      .extend(lowered.relocs.into_iter().map(|rel| Rel { r_offset: rel.r_offset + offset, ..rel }));
+    self.functions.push(offset);
+  }
+
+  pub fn finish(self) -> Object { Object { relocs: self.relocs, text: self.text } }
+}
+
+impl Object {
+  pub fn save(&self, path: &Path) { elf::generate(path, &self.text, b"", &self.relocs); }
 }
 
 impl Builder {

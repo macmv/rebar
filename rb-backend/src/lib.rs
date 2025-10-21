@@ -41,15 +41,12 @@ impl Compiler {
   pub fn finish_function(&mut self, func: Function) { self.functions.push(func); }
 
   pub fn finish(self) {
-    let mut text = vec![];
-    let ro_data = vec![];
-    let mut relocs = vec![];
+    let mut builder = rb_codegen_x86::ObjectBuilder::default();
     for function in self.functions {
-      let code = rb_codegen_x86::lower(function);
-      text.extend(code.text);
-      relocs.extend(code.relocs);
+      builder.add_function(function);
     }
-    rb_codegen_x86::generate(std::path::Path::new("out.o"), &text, &ro_data, &relocs);
+    let object = builder.finish();
+    object.save(std::path::Path::new("out.o"));
 
     let status = std::process::Command::new("wild").arg("out.o").status().unwrap();
     if !status.success() {
