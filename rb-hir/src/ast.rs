@@ -19,13 +19,19 @@ pub struct SourceFile {
 pub struct Function {
   pub name: String,
 
-  pub args: Vec<(String, TypeExpr)>,
-  pub ret:  Option<TypeExpr>,
+  pub attrs: Vec<Attribute>,
+  pub args:  Vec<(String, TypeExpr)>,
+  pub ret:   Option<TypeExpr>,
 
   pub exprs: Arena<Expr>,
   pub stmts: Arena<Stmt>,
 
   pub items: Vec<StmtId>,
+}
+
+#[derive(Debug)]
+pub struct Attribute {
+  pub path: String,
 }
 
 #[derive(Debug, Default)]

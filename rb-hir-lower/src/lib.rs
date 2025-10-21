@@ -74,6 +74,14 @@ impl SourceLower<'_> {
 
     lower.f.name = cst.ident_token().unwrap().to_string();
 
+    for attr in cst.attrs() {
+      let path = attr.path().unwrap();
+      // TODO: Path type!
+      let name = path.ident_tokens().map(|t| t.text().to_string()).collect::<Vec<_>>().join("::");
+
+      lower.f.attrs.push(hir::Attribute { path: name });
+    }
+
     for arg in cst.params().unwrap().params() {
       let name = arg.ident_token().unwrap().to_string();
       let ty = type_expr(lower.source.source, &arg.ty().unwrap());
