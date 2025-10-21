@@ -56,17 +56,22 @@ pub struct Jump {
 
 impl ObjectBuilder {
   pub fn add_function(&mut self, mut function: rb_codegen::Function) {
+    let ro_offset = self.object.ro_data.len() as u32;
     self.object.ro_data.extend_from_slice(&function.data);
-    self.object.data_symbols.extend(function.data_symbols.drain(..));
+    let symbol_offset = self.object.data_symbols.len() as u32 + 1; // +1 for the null symbol
+    self.object.data_symbols.extend(
+      function.data_symbols.drain(..).map(|s| SymbolDef { offset: s.offset + ro_offset, ..s }),
+    );
 
     let lowered = lower(function);
 
     let offset = self.object.text.len() as u64;
     self.object.text.extend_from_slice(&lowered.text);
-    self
-      .object
-      .relocs
-      .extend(lowered.relocs.into_iter().map(|rel| Rel { r_offset: rel.r_offset + offset, ..rel }));
+    self.object.relocs.extend(lowered.relocs.into_iter().map(|rel| Rel {
+      r_offset: rel.r_offset + offset,
+      r_sym: rel.r_sym + symbol_offset,
+      ..rel
+    }));
     self
       .calls
       .extend(lowered.calls.into_iter().map(|call| Call { offset: call.offset + offset, ..call }));
