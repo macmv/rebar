@@ -231,7 +231,7 @@ impl<'a> Lexer<'a> {
       T![ws] => unreachable!(),
 
       // Double-wide tokens.
-      T![>] | T![<] | T![=] | T![!] | T![-] | T![|] | T![&] => {
+      T![>] | T![<] | T![=] | T![!] | T![-] | T![|] | T![&] | T![:] => {
         fn double(a: SyntaxKind, b: SyntaxKind) -> Option<SyntaxKind> {
           Some(match (a, b) {
             (T![>], T![=]) => T![>=],
@@ -243,6 +243,7 @@ impl<'a> Lexer<'a> {
             (T![&], T![&]) => T![&&],
             (T![<], T![<]) => T![<<],
             (T![>], T![>]) => T![>>],
+            (T![:], T![:]) => T![::],
             _ => return None,
           })
         }

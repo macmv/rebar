@@ -17,6 +17,7 @@
 //   label:A     -- suggested name for field of AST node
 
 Name = 'ident'
+Path = 'ident'* '::'*
 
 BinaryOp = '+' | '-' | '*' | '/' | '%' | '==' | '!=' | '<' | '<=' | '>' | '>=' | '&&' | '||' | '&' | '|' | '^' | '<<' | '>>'
 PrefixOp = '-' | '!'
@@ -27,7 +28,7 @@ Literal = 'integer' | 'float' | 'true' | 'false' | 'nil'
 
 Expr =
   Literal |
-  Name |
+  PathExpr |
   String |
   CallExpr |
   IndexExpr |
@@ -45,6 +46,7 @@ String = '"' 'char'* Escape* Interpolation* '"'
 Escape = '\\' 'ident'
 Interpolation = '#' '{' Expr '}'
 
+PathExpr = Path
 FieldExpr = Expr '.' Name
 PrefixExpr = PrefixOp Expr
 PostfixExpr = PostfixOp Expr
@@ -66,7 +68,7 @@ ArgList = Expr (',' Expr)*
 
 IndexExpr = Expr '[' Expr ']'
 
-StructExpr = Expr '{' FieldInit* '}'
+StructExpr = Path '{' FieldInit* '}'
 FieldInit = 'ident' ':' Expr
 
 ExprStmt = Expr

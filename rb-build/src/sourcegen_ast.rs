@@ -552,6 +552,7 @@ fn token_name(name: &str) -> &str {
     // punctuation
     "=" => "eq",
     ":" => "colon",
+    "::" => "colon_colon",
     "->" => "thin_arrow",
     "=>" => "fat_arrow",
     "#" => "pound",

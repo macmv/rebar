@@ -80,7 +80,15 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
     // hello
     T![ident] => {
       p.eat(T![ident]);
-      let lhs = m.complete(p, NAME);
+
+      // test ok
+      // foo::bar::Baz
+      while p.at(T![::]) {
+        p.eat(T![::]);
+        p.expect(T![ident]);
+      }
+
+      let lhs = m.complete(p, PATH);
 
       // Special case for struct literals.
       match p.current() {
@@ -327,7 +335,7 @@ mod tests {
           WHITESPACE '        '
           EXPR_STMT
             CALL_EXPR
-              NAME
+              PATH
                 IDENT 'print'
               ARG_LIST
                 OPEN_PAREN '('
@@ -343,7 +351,7 @@ mod tests {
           WHITESPACE '        '
           EXPR_STMT
             CALL_EXPR
-              NAME
+              PATH
                 IDENT 'print'
               ARG_LIST
                 OPEN_PAREN '('
@@ -424,7 +432,7 @@ mod tests {
               INTERPOLATION
                 POUND '#'
                 OPEN_CURLY '{'
-                NAME
+                PATH
                   IDENT 'world'
                 CLOSE_CURLY '}'
               DOUBLE_QUOTE '"'
