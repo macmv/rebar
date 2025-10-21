@@ -1,5 +1,6 @@
 use rb_codegen::{Block, Function, Instruction, InstructionInput, InstructionOutput, Variable};
 
+#[allow(dead_code)]
 pub trait InstructionViewMut {
   // type PhiIter<'a>: Iterator<Item = &'a mut Phi>
   // where
@@ -76,6 +77,7 @@ impl InstructionViewMut for &mut Function {
   }
 }
 
+#[allow(dead_code)]
 pub fn replace_variable(view: impl InstructionViewMut, from: Variable, to: Variable) {
   transform_variables(view, |v| {
     if *v == from {

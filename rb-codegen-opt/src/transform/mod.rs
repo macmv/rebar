@@ -27,6 +27,7 @@ pub trait TransformPassImpl {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[allow(unused)]
 pub enum Phase {
   Early,
   Normal,
