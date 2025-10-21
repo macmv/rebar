@@ -18,7 +18,11 @@ pub fn generate(filename: &Path, object: &Object) {
   writer.reserve_file_header();
 
   let start = writer.add_string(b"_start");
-  let foo = writer.add_string(b"foo");
+  let symbol_names = object
+    .data_symbols
+    .iter()
+    .map(|s| (s, writer.add_string(s.name.as_bytes())))
+    .collect::<Vec<_>>();
   let relocation_name = writer.add_section_name(b".rela.text");
   let text_name = writer.add_section_name(b".text");
   let ro_data_name = writer.add_section_name(b".rodata");
@@ -61,7 +65,7 @@ pub fn generate(filename: &Path, object: &Object) {
     })
     .unwrap();
 
-  let non_local_symbol_start = 2;
+  let non_local_symbol_start = object.data_symbols.len() as u32 + 1;
 
   writer.write_null_section_header();
   writer.write_strtab_section_header();
@@ -107,15 +111,17 @@ pub fn generate(filename: &Path, object: &Object) {
 
   // 2 local symbols
   writer.write_null_symbol();
-  writer.write_symbol(&Sym {
-    name:     Some(foo),
-    section:  Some(ro_data_section),
-    st_info:  ((elf::STB_LOCAL as u8) << 4) | (elf::STT_OBJECT as u8),
-    st_other: 0,
-    st_shndx: 0,
-    st_value: 0,
-    st_size:  object.ro_data.len() as u64,
-  });
+  for (symbol, id) in symbol_names {
+    writer.write_symbol(&Sym {
+      name:     Some(id),
+      section:  Some(ro_data_section),
+      st_info:  ((elf::STB_LOCAL as u8) << 4) | (elf::STT_OBJECT as u8),
+      st_other: 0,
+      st_shndx: 0,
+      st_value: symbol.offset as u64,
+      st_size:  object.ro_data.len() as u64,
+    });
+  }
 
   // all non-local symbols must be defined after.
   writer.write_symbol(&Sym {

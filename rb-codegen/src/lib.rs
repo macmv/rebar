@@ -14,12 +14,13 @@ pub struct Signature {
 }
 
 pub struct Function {
-  pub sig:     Signature,
-  pub blocks:  Vec<Block>,
-  pub data:    Vec<u8>,
-  pub symbols: Vec<SymbolDef>,
+  pub sig:          Signature,
+  pub blocks:       Vec<Block>,
+  pub data:         Vec<u8>,
+  pub data_symbols: Vec<SymbolDef>,
 }
 
+#[derive(Debug)]
 pub struct SymbolDef {
   pub name:   String,
   pub offset: u32,

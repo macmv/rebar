@@ -31,7 +31,7 @@ impl FunctionBuilder {
         sig,
         blocks: vec![Block::default()],
         data: vec![],
-        symbols: vec![],
+        data_symbols: vec![],
       },
       block:         BlockId(0),
     }
@@ -41,8 +41,8 @@ impl FunctionBuilder {
     let offset = self.function.data.len() as u32;
     self.function.data.extend_from_slice(data);
 
-    let symbol = Symbol { index: self.function.symbols.len() as u32 };
-    self.function.symbols.push(SymbolDef { name: "foooooo".to_string(), offset });
+    let symbol = Symbol { index: self.function.data_symbols.len() as u32 + 1 };
+    self.function.data_symbols.push(SymbolDef { name: "foooooo".to_string(), offset });
     symbol
   }
 

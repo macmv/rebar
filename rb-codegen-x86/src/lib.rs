@@ -21,12 +21,12 @@ mod regalloc;
 
 #[derive(Default)]
 pub struct ObjectBuilder {
-  relocs:    Vec<Rel>,
-  functions: Vec<u64>,
-  text:      Vec<u8>,
-  calls:     Vec<Call>,
-  ro_data:   Vec<u8>,
-  symbols:   Vec<SymbolDef>,
+  relocs:       Vec<Rel>,
+  functions:    Vec<u64>,
+  text:         Vec<u8>,
+  calls:        Vec<Call>,
+  ro_data:      Vec<u8>,
+  data_symbols: Vec<SymbolDef>,
 }
 
 struct Call {
@@ -36,10 +36,10 @@ struct Call {
 
 #[derive(Default)]
 pub struct Object {
-  text:    Vec<u8>,
-  ro_data: Vec<u8>,
-  relocs:  Vec<Rel>,
-  symbols: Vec<SymbolDef>,
+  text:         Vec<u8>,
+  ro_data:      Vec<u8>,
+  relocs:       Vec<Rel>,
+  data_symbols: Vec<SymbolDef>,
 }
 
 #[derive(Default)]
@@ -49,7 +49,6 @@ pub struct Builder {
   jumps:         Vec<Jump>,
   block_offsets: Vec<u64>,
   text:          Vec<u8>,
-  symbols:       Vec<SymbolDef>,
 }
 
 pub struct Jump {
@@ -59,8 +58,9 @@ pub struct Jump {
 }
 
 impl ObjectBuilder {
-  pub fn add_function(&mut self, function: rb_codegen::Function) {
+  pub fn add_function(&mut self, mut function: rb_codegen::Function) {
     self.ro_data.extend_from_slice(&function.data);
+    self.data_symbols.extend(function.data_symbols.drain(..));
 
     let lowered = lower(function);
 
@@ -72,7 +72,6 @@ impl ObjectBuilder {
     self
       .calls
       .extend(lowered.calls.into_iter().map(|call| Call { offset: call.offset + offset, ..call }));
-    self.symbols.extend(lowered.symbols);
     self.functions.push(offset);
   }
 
@@ -88,10 +87,10 @@ impl ObjectBuilder {
     }
 
     Object {
-      text:    self.text,
-      ro_data: self.ro_data,
-      relocs:  self.relocs,
-      symbols: self.symbols,
+      text:         self.text,
+      ro_data:      self.ro_data,
+      relocs:       self.relocs,
+      data_symbols: self.data_symbols,
     }
   }
 }
@@ -771,8 +770,8 @@ mod tests {
   #[test]
   fn mov_small_variables() {
     let function = rb_codegen::Function {
-      sig:     Signature { args: vec![], rets: vec![] },
-      blocks:  vec![rb_codegen::Block {
+      sig:          Signature { args: vec![], rets: vec![] },
+      blocks:       vec![rb_codegen::Block {
         phis:         vec![],
         instructions: vec![
           rb_codegen::Instruction {
@@ -803,8 +802,8 @@ mod tests {
         ],
         terminator:   rb_codegen::TerminatorInstruction::Trap,
       }],
-      data:    vec![],
-      symbols: vec![],
+      data:         vec![],
+      data_symbols: vec![],
     };
 
     let builder = lower(function);
@@ -835,8 +834,8 @@ mod tests {
     let v5 = Variable::new(5, VariableSize::Bit64);
 
     let function = rb_codegen::Function {
-      sig:     Signature { args: vec![], rets: vec![] },
-      blocks:  vec![rb_codegen::Block {
+      sig:          Signature { args: vec![], rets: vec![] },
+      blocks:       vec![rb_codegen::Block {
         phis:         vec![],
         instructions: vec![
           // write 1 reloc.foo 14
@@ -884,8 +883,8 @@ mod tests {
         ],
         terminator:   rb_codegen::TerminatorInstruction::Trap,
       }],
-      data:    vec![],
-      symbols: vec![],
+      data:         vec![],
+      data_symbols: vec![],
     };
 
     let data = b"Hello, world!\n";
