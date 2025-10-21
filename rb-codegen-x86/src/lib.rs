@@ -150,7 +150,7 @@ impl Builder {
 
   fn reloc(&mut self, symbol: Symbol, offset: u64, addend: i64) {
     self.relocs.push(Rel {
-      r_offset: offset,
+      r_offset: self.text.len() as u64 + offset,
       r_sym:    symbol.index,
       r_type:   object::elf::R_X86_64_PC32,
       r_addend: addend,
