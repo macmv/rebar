@@ -66,7 +66,8 @@ fn expr_bp(p: &mut Parser, min_bp: u8, cond: bool) {
   }
 }
 
-pub fn path(p: &mut Parser, m: Marker) -> CompletedMarker {
+pub fn path(p: &mut Parser) -> CompletedMarker {
+  let m = p.start();
   p.expect(T![ident]);
 
   while p.at(T![::]) {
@@ -90,7 +91,8 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
     // test ok
     // hello
     T![ident] => {
-      let lhs = path(p, m);
+      path(p);
+      let lhs = m.complete(p, PATH_EXPR);
 
       // Special case for struct literals.
       match p.current() {
@@ -337,8 +339,9 @@ mod tests {
           WHITESPACE '        '
           EXPR_STMT
             CALL_EXPR
-              PATH
-                IDENT 'print'
+              PATH_EXPR
+                PATH
+                  IDENT 'print'
               ARG_LIST
                 OPEN_PAREN '('
                 STRING
@@ -353,8 +356,9 @@ mod tests {
           WHITESPACE '        '
           EXPR_STMT
             CALL_EXPR
-              PATH
-                IDENT 'print'
+              PATH_EXPR
+                PATH
+                  IDENT 'print'
               ARG_LIST
                 OPEN_PAREN '('
                 BINARY_EXPR
@@ -434,8 +438,9 @@ mod tests {
               INTERPOLATION
                 POUND '#'
                 OPEN_CURLY '{'
-                PATH
-                  IDENT 'world'
+                PATH_EXPR
+                  PATH
+                    IDENT 'world'
                 CLOSE_CURLY '}'
               DOUBLE_QUOTE '"'
           NL_KW '\n'

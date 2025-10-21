@@ -42,8 +42,7 @@ pub fn stmt(p: &mut Parser) {
 
     p.eat(T![#]);
     p.expect(T!['[']);
-    let path = p.start();
-    super::expr::path(p, path);
+    super::expr::path(p);
     p.expect(T![']']);
 
     m.complete(p, ATTR);
