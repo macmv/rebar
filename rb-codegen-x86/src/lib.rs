@@ -31,9 +31,11 @@ struct Call {
   target: FunctionId,
 }
 
+#[derive(Default)]
 pub struct Object {
-  pub relocs: Vec<Rel>,
-  pub text:   Vec<u8>,
+  pub text:    Vec<u8>,
+  pub ro_data: Vec<u8>,
+  pub relocs:  Vec<Rel>,
 }
 
 #[derive(Default)]
@@ -77,12 +79,12 @@ impl ObjectBuilder {
       }
     }
 
-    Object { relocs: self.relocs, text: self.text }
+    Object { text: self.text, ro_data: vec![], relocs: self.relocs }
   }
 }
 
 impl Object {
-  pub fn save(&self, path: &Path) { elf::generate(path, &self.text, b"", &self.relocs); }
+  pub fn save(&self, path: &Path) { elf::generate(path, self); }
 }
 
 impl Builder {
@@ -794,7 +796,7 @@ mod tests {
 
     let dir = temp_dir!();
     let object_path = dir.path().join("foo.o");
-    elf::generate(&object_path, &builder.text, b"", &builder.relocs);
+    Object { text: builder.text, ro_data: vec![], relocs: builder.relocs }.save(&object_path);
     disass(
       &object_path,
       expect![@r#"
@@ -875,7 +877,8 @@ mod tests {
     let dir = temp_dir!();
     let object_path = dir.path().join("foo.o");
     let binary_path = dir.path().join("a.out");
-    elf::generate(&object_path, &builder.text, data, &builder.relocs);
+    Object { text: builder.text, ro_data: data.to_vec(), relocs: builder.relocs }
+      .save(&object_path);
     link(&[object_path], &binary_path);
     let output = std::process::Command::new(binary_path).output().expect("failed to execute a.out");
     assert!(output.status.success());
@@ -922,12 +925,17 @@ mod tests {
     }
 
     let dir = temp_dir!();
-    elf::generate(
-      &dir.path().join("foo.o"),
-      &text,
-      data,
-      &[Rel { r_offset: 17, r_sym: 1, r_type: object::elf::R_X86_64_PC32, r_addend: -4 }],
-    );
+    Object {
+      text,
+      ro_data: data.to_vec(),
+      relocs: vec![Rel {
+        r_offset: 17,
+        r_sym:    1,
+        r_type:   object::elf::R_X86_64_PC32,
+        r_addend: -4,
+      }],
+    }
+    .save(&dir.path().join("foo.o"));
   }
 
   #[test]
@@ -974,7 +982,7 @@ mod tests {
     }
 
     let dir = temp_dir!();
-    elf::generate(&dir.path().join("foo.o"), &text, data, &[]);
+    Object { text, ..Default::default() }.save(&dir.path().join("foo.o"));
     disass(
       &dir.path().join("foo.o"),
       expect![@r#"

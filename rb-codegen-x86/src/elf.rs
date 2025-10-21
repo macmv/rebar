@@ -4,11 +4,13 @@ use object::{
   Endianness, elf,
   write::{
     StreamingBuffer,
-    elf::{FileHeader, Rel, SectionHeader, Sym, Writer},
+    elf::{FileHeader, SectionHeader, Sym, Writer},
   },
 };
 
-pub fn generate(filename: &Path, text: &[u8], ro_data: &[u8], relocs: &[Rel]) {
+use crate::Object;
+
+pub fn generate(filename: &Path, object: &Object) {
   let file = File::create(filename).unwrap();
   let mut buffer = StreamingBuffer::new(BufWriter::new(file));
   let mut writer = Writer::new(Endianness::Little, true, &mut buffer);
@@ -25,7 +27,7 @@ pub fn generate(filename: &Path, text: &[u8], ro_data: &[u8], relocs: &[Rel]) {
   writer.reserve_strtab_section_index();
   writer.reserve_shstrtab_section_index();
   let symtab_section = writer.reserve_symtab_section_index();
-  if !relocs.is_empty() {
+  if !object.relocs.is_empty() {
     writer.reserve_section_index();
   }
   let text_section = writer.reserve_section_index();
@@ -40,10 +42,13 @@ pub fn generate(filename: &Path, text: &[u8], ro_data: &[u8], relocs: &[Rel]) {
   writer.reserve_strtab();
   writer.reserve_shstrtab();
   writer.reserve_symtab();
-  let relocations_offset =
-    if relocs.is_empty() { None } else { Some(writer.reserve_relocations(relocs.len(), true)) };
-  let text_offset = writer.reserve(text.len(), 16);
-  let ro_data_offset = writer.reserve(ro_data.len(), 1);
+  let relocations_offset = if object.relocs.is_empty() {
+    None
+  } else {
+    Some(writer.reserve_relocations(object.relocs.len(), true))
+  };
+  let text_offset = writer.reserve(object.text.len(), 16);
+  let ro_data_offset = writer.reserve(object.ro_data.len(), 1);
 
   writer
     .write_file_header(&FileHeader {
@@ -78,7 +83,7 @@ pub fn generate(filename: &Path, text: &[u8], ro_data: &[u8], relocs: &[Rel]) {
     sh_flags:     u64::from(elf::SHF_ALLOC | elf::SHF_EXECINSTR),
     sh_addr:      0,
     sh_offset:    text_offset as u64,
-    sh_size:      text.len() as u64,
+    sh_size:      object.text.len() as u64,
     sh_link:      0,
     sh_info:      0,
     sh_addralign: 16,
@@ -90,7 +95,7 @@ pub fn generate(filename: &Path, text: &[u8], ro_data: &[u8], relocs: &[Rel]) {
     sh_flags:     u64::from(elf::SHF_ALLOC),
     sh_addr:      0x2000,
     sh_offset:    ro_data_offset as u64,
-    sh_size:      ro_data.len() as u64,
+    sh_size:      object.ro_data.len() as u64,
     sh_link:      0,
     sh_info:      0,
     sh_addralign: 16,
@@ -109,7 +114,7 @@ pub fn generate(filename: &Path, text: &[u8], ro_data: &[u8], relocs: &[Rel]) {
     st_other: 0,
     st_shndx: 0,
     st_value: 0,
-    st_size:  ro_data.len() as u64,
+    st_size:  object.ro_data.len() as u64,
   });
 
   // all non-local symbols must be defined after.
@@ -120,15 +125,15 @@ pub fn generate(filename: &Path, text: &[u8], ro_data: &[u8], relocs: &[Rel]) {
     st_other: 0,
     st_shndx: 0,
     st_value: 0,
-    st_size:  text.len() as u64,
+    st_size:  object.text.len() as u64,
   });
 
-  for reloc in relocs {
-    writer.write_relocation(true, &reloc);
+  for reloc in &object.relocs {
+    writer.write_relocation(true, reloc);
   }
   writer.write_align(16);
-  writer.write(text);
-  writer.write(ro_data);
+  writer.write(&object.text);
+  writer.write(&object.ro_data);
 
   debug_assert_eq!(writer.reserved_len(), writer.len());
 }
