@@ -109,6 +109,8 @@ impl Highlight {
     }
     */
 
+    hl.tokens.sort_unstable_by_key(|t| t.range.start());
+
     hl
   }
 }
@@ -116,17 +118,15 @@ impl Highlight {
 impl Highlighter<'_> {
   fn visit_stmt(&mut self, stmt: hir::StmtId) {
     match self.func.stmts[stmt] {
-      hir::Stmt::Expr(expr) => self.visit_expr(expr),
-      hir::Stmt::Let(_, expr) => {
+      hir::Stmt::Let(_, _) => {
         let span = self.span_map.let_stmts[&stmt];
         self.hl.tokens.push(HighlightToken {
           range:      span.range,
           kind:       HighlightKind::Keyword,
           modifierst: 0,
         });
-
-        self.visit_expr(expr)
       }
+
       _ => {}
     }
   }
@@ -136,84 +136,37 @@ impl Highlighter<'_> {
       hir::Expr::Literal(hir::Literal::Nil) => self.token(expr, HighlightKind::Number),
       hir::Expr::Literal(hir::Literal::Int(_)) => self.token(expr, HighlightKind::Number),
       hir::Expr::Literal(hir::Literal::Bool(_)) => self.token(expr, HighlightKind::Number),
-
-      hir::Expr::String(ref segments) => {
-        self.token(expr, HighlightKind::String);
-
-        for s in segments {
-          match s {
-            hir::StringInterp::Literal(_) => {}
-            hir::StringInterp::Expr(expr) => self.visit_expr(*expr),
-          }
-        }
-      }
+      hir::Expr::String(_) => self.token(expr, HighlightKind::String),
 
       // TODO: Name resolution.
       hir::Expr::Name(_) => self.token(expr, HighlightKind::Variable),
 
-      hir::Expr::Array(ref items) => {
-        for i in items {
-          self.visit_expr(*i);
-        }
-      }
-      hir::Expr::Block(ref stmts) => {
-        for stmt in stmts {
-          self.visit_stmt(*stmt);
-        }
-      }
-      hir::Expr::Assign { lhs, rhs } => {
-        self.visit_expr(lhs);
-        self.visit_expr(rhs);
-      }
+      hir::Expr::Call(lhs, _) => self.token(lhs, HighlightKind::Function),
 
-      hir::Expr::Call(lhs, ref args) => {
-        self.token(lhs, HighlightKind::Function);
-
-        for &arg in args {
-          self.visit_expr(arg);
-        }
-      }
-
-      hir::Expr::BinaryOp(lhs, _, rhs) => {
-        self.visit_expr(lhs);
-
+      hir::Expr::BinaryOp(_, _, _) => {
         let span = self.span_map.binary_ops[&expr];
         self.hl.tokens.push(HighlightToken {
           range:      span.range,
           kind:       HighlightKind::Operator,
           modifierst: 0,
         });
-
-        self.visit_expr(rhs);
       }
-      hir::Expr::UnaryOp(inner, _) => {
-        // TODO: Figure out if this is a prefix or postfix operator.
+      hir::Expr::UnaryOp(_, _) => {
         let span = self.span_map.unary_ops[&expr];
         self.hl.tokens.push(HighlightToken {
           range:      span.range,
           kind:       HighlightKind::Operator,
           modifierst: 0,
         });
-
-        self.visit_expr(inner);
-      }
-      hir::Expr::Paren(expr) => self.visit_expr(expr),
-
-      hir::Expr::Index(lhs, rhs) => {
-        self.visit_expr(lhs);
-        self.visit_expr(rhs);
       }
 
-      hir::Expr::If { cond, then, els } => {
+      hir::Expr::If { .. } => {
         let (if_span, els_span) = self.span_map.if_exprs[&expr];
         self.hl.tokens.push(HighlightToken {
           range:      if_span.range,
           kind:       HighlightKind::Keyword,
           modifierst: 0,
         });
-
-        self.visit_expr(cond);
-        self.visit_expr(then);
 
         if let Some(els) = els_span {
           self.hl.tokens.push(HighlightToken {
@@ -222,17 +175,9 @@ impl Highlighter<'_> {
             modifierst: 0,
           });
         }
-
-        if let Some(els) = els {
-          self.visit_expr(els);
-        }
       }
 
-      hir::Expr::StructInit(_, ref fields) => {
-        for (_, expr) in fields {
-          self.visit_expr(*expr);
-        }
-      }
+      _ => {}
     }
   }
 
