@@ -70,7 +70,7 @@ pub fn parse(asm: &str) -> Function {
         function.blocks.last_mut().unwrap().instructions.push(Instruction {
           opcode: Opcode::Syscall,
           input,
-          output: smallvec![InstructionOutput::Syscall],
+          output: smallvec![], // TODO: Syscall outputs
         });
         continue;
       }
