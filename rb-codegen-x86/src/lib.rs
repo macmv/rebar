@@ -7,7 +7,7 @@ pub use elf::generate;
 
 pub use instruction::{Immediate, Instruction, ModReg, Opcode, Prefix};
 use object::write::elf::Rel;
-use rb_codegen::{BlockId, InstructionInput, InstructionOutput, Math, VariableSize};
+use rb_codegen::{BlockId, InstructionInput, InstructionOutput, Math, VariableSize, immediate};
 
 use crate::{
   instruction::RegisterIndex,
@@ -120,17 +120,72 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
             debug_assert_eq!(reg.get(v), reg.get(a), "math must be in-place");
 
-            builder.instr(
-              encode_binary_reg_imm(reg.get(v), b, Opcode::MATH_IMM8, Opcode::MATH_IMM32)
-                .with_digit(match math {
-                  Math::Add => 0,
-                  Math::Sub => 5,
-                  Math::And => 4,
-                  Math::Or => 1,
-                  Math::Xor => 6,
-                  _ => unreachable!(),
-                }),
-            );
+            fn opcode_8_for_math(math: Math) -> Opcode {
+              match math {
+                Math::Add => Opcode::ADD_A_IMM8,
+                Math::Sub => Opcode::SUB_A_IMM8,
+                Math::And => Opcode::AND_A_IMM8,
+                Math::Or => Opcode::OR_A_IMM8,
+                Math::Xor => Opcode::XOR_A_IMM8,
+                _ => unreachable!(),
+              }
+            }
+
+            fn digit_for_math(math: Math) -> u8 {
+              match math {
+                Math::Add => 0,
+                Math::Sub => 5,
+                Math::And => 4,
+                Math::Or => 1,
+                Math::Xor => 6,
+                _ => unreachable!(),
+              }
+            }
+
+            // First, prefer the accumulator-specific instructions, as those are shortest.
+            if reg.get(v) == Register::AL {
+              debug_assert_eq!(reg.get(v).size, reg.get(a).size, "math must be in-place");
+              debug_assert_eq!(
+                reg.get(v).size,
+                var_to_reg_size(b.size()).unwrap(),
+                "AL must have 8 bit operand"
+              );
+              builder.instr(
+                Instruction::new(opcode_8_for_math(math)).with_immediate(Immediate::from(b)),
+              );
+            } else {
+              match imm_to_i8(b) {
+                // Next, try to fit in an imm8
+                Some(imm8) => builder.instr(
+                  encode_sized(reg.get(v).size, Opcode::MATH_IMM8, Opcode::MATH_EXT_IMM8)
+                    .with_mod(0b11, reg.get(v).index)
+                    .with_immediate(Immediate::i8(imm8 as u8))
+                    .with_digit(digit_for_math(math)),
+                ),
+                // Doesn't fit in an imm8, use the accumulator-specific form if possible
+                None if reg.get(v).index == RegisterIndex::Eax => builder.instr(
+                  encode_binary_reg_imm(
+                    reg.get(v),
+                    b,
+                    opcode_8_for_math(math),
+                    match math {
+                      Math::Add => Opcode::ADD_A_IMM32,
+                      Math::Sub => Opcode::SUB_A_IMM32,
+                      Math::And => Opcode::AND_A_IMM32,
+                      Math::Or => Opcode::OR_A_IMM32,
+                      Math::Xor => Opcode::XOR_A_IMM32,
+                      _ => unreachable!(),
+                    },
+                  )
+                  .with_digit(digit_for_math(math)),
+                ),
+                // Doesn't fit in an imm8, use the normal immediate form
+                None => builder.instr(
+                  encode_binary_reg_imm(reg.get(v), b, Opcode::MATH_IMM8, Opcode::MATH_IMM32)
+                    .with_digit(digit_for_math(math)),
+                ),
+              }
+            }
           }
           (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
             encode_binary_reg_reg(
@@ -496,6 +551,8 @@ impl From<rb_codegen::Immediate> for Immediate {
     }
   }
 }
+
+fn imm_to_i8(imm: rb_codegen::Immediate) -> Option<i8> { immediate!(imm, |v| i8::try_from(v).ok()) }
 
 fn encode_binary_reg_imm(
   reg: Register,

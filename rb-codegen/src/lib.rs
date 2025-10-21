@@ -273,16 +273,29 @@ impl Immediate {
 
 #[macro_export]
 macro_rules! immediate {
+  ($a:ident, $op:expr) => {
+    match $a {
+      $crate::Immediate::I8(a) => $op(a),
+      $crate::Immediate::I16(a) => $op(a),
+      $crate::Immediate::I32(a) => $op(a),
+      $crate::Immediate::I64(a) => $op(a),
+      $crate::Immediate::U8(a) => $op(a),
+      $crate::Immediate::U16(a) => $op(a),
+      $crate::Immediate::U32(a) => $op(a),
+      $crate::Immediate::U64(a) => $op(a),
+    }
+  };
+
   ($a:ident, $b:ident, $bin:expr) => {
     match ($a, $b) {
-      (Immediate::I8(a), Immediate::I8(b)) => Some($bin(a, b)),
-      (Immediate::I16(a), Immediate::I16(b)) => Some($bin(a, b)),
-      (Immediate::I32(a), Immediate::I32(b)) => Some($bin(a, b)),
-      (Immediate::I64(a), Immediate::I64(b)) => Some($bin(a, b)),
-      (Immediate::U8(a), Immediate::U8(b)) => Some($bin(a, b)),
-      (Immediate::U16(a), Immediate::U16(b)) => Some($bin(a, b)),
-      (Immediate::U32(a), Immediate::U32(b)) => Some($bin(a, b)),
-      (Immediate::U64(a), Immediate::U64(b)) => Some($bin(a, b)),
+      ($crate::Immediate::I8(a), $crate::Immediate::I8(b)) => Some($bin(a, b)),
+      ($crate::Immediate::I16(a), $crate::Immediate::I16(b)) => Some($bin(a, b)),
+      ($crate::Immediate::I32(a), $crate::Immediate::I32(b)) => Some($bin(a, b)),
+      ($crate::Immediate::I64(a), $crate::Immediate::I64(b)) => Some($bin(a, b)),
+      ($crate::Immediate::U8(a), $crate::Immediate::U8(b)) => Some($bin(a, b)),
+      ($crate::Immediate::U16(a), $crate::Immediate::U16(b)) => Some($bin(a, b)),
+      ($crate::Immediate::U32(a), $crate::Immediate::U32(b)) => Some($bin(a, b)),
+      ($crate::Immediate::U64(a), $crate::Immediate::U64(b)) => Some($bin(a, b)),
       _ => None,
     }
   };

@@ -211,8 +211,12 @@ impl Instruction {
 }
 
 impl Opcode {
+  pub const ADD_A_IMM32: Opcode = Opcode::new([0x05]);
+  pub const ADD_A_IMM8: Opcode = Opcode::new([0x04]);
   pub const ADD_RM32: Opcode = Opcode::new([0x03]);
   pub const ADD_RM8: Opcode = Opcode::new([0x02]);
+  pub const SUB_A_IMM32: Opcode = Opcode::new([0x2d]);
+  pub const SUB_A_IMM8: Opcode = Opcode::new([0x2c]);
   pub const SUB_RM32: Opcode = Opcode::new([0x2b]);
   pub const SUB_RM8: Opcode = Opcode::new([0x2a]);
   pub const CMP_A_IMM32: Opcode = Opcode::new([0x3d]);
@@ -223,12 +227,12 @@ impl Opcode {
   pub const TEST_MR8: Opcode = Opcode::new([0x84]);
   pub const TEST_IMM32: Opcode = Opcode::new([0xa9]);
   pub const TEST_IMM8: Opcode = Opcode::new([0xa8]);
-  pub const AND_IMM32: Opcode = Opcode::new([0x25]);
-  pub const AND_IMM8: Opcode = Opcode::new([0x24]);
+  pub const AND_A_IMM32: Opcode = Opcode::new([0x25]);
+  pub const AND_A_IMM8: Opcode = Opcode::new([0x24]);
   pub const AND_RM32: Opcode = Opcode::new([0x23]);
   pub const AND_RM8: Opcode = Opcode::new([0x22]);
-  pub const OR_IMM32: Opcode = Opcode::new([0x0d]);
-  pub const OR_IMM8: Opcode = Opcode::new([0x0c]);
+  pub const OR_A_IMM32: Opcode = Opcode::new([0x0d]);
+  pub const OR_A_IMM8: Opcode = Opcode::new([0x0c]);
   pub const OR_RM32: Opcode = Opcode::new([0x0b]);
   pub const OR_RM8: Opcode = Opcode::new([0x0a]);
   pub const INT3: Opcode = Opcode::new([0xcc]);
@@ -253,6 +257,7 @@ impl Opcode {
   pub const MOV_MR_32: Opcode = Opcode::new([0x89]);
   pub const MATH_IMM32: Opcode = Opcode::new([0x81]);
   pub const MATH_IMM8: Opcode = Opcode::new([0x80]);
+  pub const MATH_EXT_IMM8: Opcode = Opcode::new([0x83]);
   pub const MATH_EAX_RM32: Opcode = Opcode::new([0xf7]);
   pub const MATH_EAX_RM8: Opcode = Opcode::new([0xf6]);
   pub const SHIFT_IMM_8: Opcode = Opcode::new([0xc0]);
@@ -263,8 +268,8 @@ impl Opcode {
   pub const SHIFT_1_32: Opcode = Opcode::new([0xd1]);
   pub const RET: Opcode = Opcode::new([0xc3]);
   pub const SYSCALL: Opcode = Opcode::new([0x0f, 0x05]);
-  pub const XOR_IMM32: Opcode = Opcode::new([0x35]);
-  pub const XOR_IMM8: Opcode = Opcode::new([0x34]);
+  pub const XOR_A_IMM32: Opcode = Opcode::new([0x35]);
+  pub const XOR_A_IMM8: Opcode = Opcode::new([0x34]);
   pub const XOR_RM32: Opcode = Opcode::new([0x33]);
   pub const XOR_RM8: Opcode = Opcode::new([0x32]);
 
