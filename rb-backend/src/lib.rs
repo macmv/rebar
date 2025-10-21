@@ -1,14 +1,15 @@
 use std::collections::HashMap;
 
 use rb_codegen::{
-  Condition, Function, FunctionBuilder, Math, Signature, TerminatorInstruction, Variable,
-  VariableSize::*,
+  Condition, Function, FunctionBuilder, FunctionId, Math, Signature, TerminatorInstruction,
+  Variable, VariableSize::*,
 };
 use rb_mir::{ast as mir, MirContext};
 
 mod r_value;
 // mod slot;
 
+use rb_typer::Type;
 use rb_value::ValueType;
 use smallvec::smallvec;
 
@@ -161,12 +162,11 @@ impl FuncBuilder<'_> {
         return_value
       }
 
-      /*
       mir::Expr::Call(lhs, ref sig_ty, ref args) => {
         let lhs = self.compile_expr(lhs);
 
         match lhs.const_ty() {
-          Some(ValueType::Function) => {
+          Some(ValueType::UserFunction) => {
             let arg_types = match sig_ty {
               Type::Function(ref args, _) => args,
               _ => unreachable!(),
@@ -174,24 +174,25 @@ impl FuncBuilder<'_> {
 
             // Argument length in 8 byte increments.
             let mut arg_values = vec![];
-            for (&arg, arg_ty) in args.iter().zip(arg_types.iter()) {
+            for (&arg, _arg_ty) in args.iter().zip(arg_types.iter()) {
               let arg = self.compile_expr(arg);
 
-              let v =
-                arg.to_ir(DynamicValueType::for_type(self.ctx, &arg_ty).param_kind(self.ctx), self);
+              let v = arg.to_ir(self);
               arg_values.push(v);
             }
 
-            let native = lhs.unwrap_single(self);
+            let _native = lhs.unwrap_single(self);
 
-            let ret_ty = match *sig_ty {
+            let _ret_ty = match *sig_ty {
               Type::Function(_, ref ret) => ret,
               _ => unreachable!(),
             };
 
-            self.call_native(native, &arg_values, arg_types, &**ret_ty)
+            let output = self.builder.instr().call(FunctionId::new(1), Bit64, 0);
+            RValue::int(output)
           }
 
+          /*
           Some(ValueType::UserFunction) => {
             let id = match lhs {
               RValue::TypedConst(_, v) => UserFunctionId(v[0] as u64),
@@ -243,11 +244,11 @@ impl FuncBuilder<'_> {
               _ => unreachable!(),
             }
           }
-
-          _ => unreachable!(),
+          */
+          v => todo!("call function {v:?}"),
         }
       }
-      */
+
       mir::Expr::Unary(lhs, ref op, _) => {
         let lhs = self.compile_expr(lhs);
         let lhs = lhs.unwrap_single(self);

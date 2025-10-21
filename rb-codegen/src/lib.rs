@@ -153,12 +153,15 @@ pub struct Symbol {
   pub index: u32,
 }
 
+impl FunctionId {
+  pub const fn new(id: u32) -> Self { FunctionId(id) }
+  pub const fn as_u32(&self) -> u32 { self.0 }
+}
 impl BlockId {
   pub const BEFORE: BlockId = BlockId(u32::MAX);
   pub const ENTRY: BlockId = BlockId(0);
 
   pub const fn new(id: u32) -> Self { BlockId(id) }
-
   pub const fn as_u32(&self) -> u32 { self.0 }
 }
 impl Variable {
