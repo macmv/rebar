@@ -66,6 +66,17 @@ fn expr_bp(p: &mut Parser, min_bp: u8, cond: bool) {
   }
 }
 
+pub fn path(p: &mut Parser, m: Marker) -> CompletedMarker {
+  p.expect(T![ident]);
+
+  while p.at(T![::]) {
+    p.eat(T![::]);
+    p.expect(T![ident]);
+  }
+
+  m.complete(p, PATH)
+}
+
 fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
   match p.current() {
     // test ok
@@ -79,16 +90,7 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
     // test ok
     // hello
     T![ident] => {
-      p.eat(T![ident]);
-
-      // test ok
-      // foo::bar::Baz
-      while p.at(T![::]) {
-        p.eat(T![::]);
-        p.expect(T![ident]);
-      }
-
-      let lhs = m.complete(p, PATH);
+      let lhs = path(p, m);
 
       // Special case for struct literals.
       match p.current() {

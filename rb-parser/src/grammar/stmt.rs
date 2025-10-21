@@ -31,12 +31,33 @@ pub fn stmt(p: &mut Parser) {
     return;
   }
 
+  let m = p.start();
+
+  // test ok
+  // #[foo]
+  // #[bar::baz]
+  // let bar = 3
+  while p.at(T![#]) {
+    let m = p.start();
+
+    p.eat(T![#]);
+    p.expect(T!['[']);
+    let path = p.start();
+    super::expr::path(p, path);
+    p.expect(T![']']);
+
+    m.complete(p, ATTR);
+
+    while p.at(T![nl]) {
+      p.eat(T![nl]);
+    }
+  }
+
   match p.current() {
     // test ok
     // let foo = 2 + 3
     // let bar: int = 4
     T![let] => {
-      let m = p.start();
       p.eat(T![let]);
       p.expect(T![ident]);
 
@@ -56,8 +77,6 @@ pub fn stmt(p: &mut Parser) {
     //   bar + baz
     // }
     T![extern] | T![fn] => {
-      let m = p.start();
-
       // test ok
       // extern fn foo()
       // extern "syscall" fn foo()
@@ -88,7 +107,6 @@ pub fn stmt(p: &mut Parser) {
     //   b: int
     // }
     T![struct] => {
-      let m = p.start();
       p.eat(T![struct]);
       p.expect(T![ident]);
 
@@ -98,7 +116,6 @@ pub fn stmt(p: &mut Parser) {
     }
 
     _ => {
-      let m = p.start();
       super::expr::expr(p);
       m.complete(p, EXPR_STMT);
     }
