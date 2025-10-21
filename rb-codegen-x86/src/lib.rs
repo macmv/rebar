@@ -7,7 +7,9 @@ pub use elf::generate;
 
 pub use instruction::{Immediate, Instruction, ModReg, Opcode, Prefix};
 use object::write::elf::Rel;
-use rb_codegen::{BlockId, InstructionInput, InstructionOutput, Math, VariableSize, immediate};
+use rb_codegen::{
+  BlockId, FunctionId, InstructionInput, InstructionOutput, Math, VariableSize, immediate,
+};
 
 use crate::{
   instruction::RegisterIndex,
@@ -21,6 +23,12 @@ pub struct ObjectBuilder {
   pub relocs:    Vec<Rel>,
   pub functions: Vec<u64>,
   pub text:      Vec<u8>,
+  calls:         Vec<Call>,
+}
+
+struct Call {
+  offset: u64,
+  target: FunctionId,
 }
 
 pub struct Object {
@@ -54,7 +62,19 @@ impl ObjectBuilder {
     self.functions.push(offset);
   }
 
-  pub fn finish(self) -> Object { Object { relocs: self.relocs, text: self.text } }
+  pub fn finish(mut self) -> Object {
+    for call in self.calls {
+      let target = self.functions[call.target.as_u32() as usize] as i64 - (call.offset as i64 + 4);
+      if let Ok(offset) = i32::try_from(target) {
+        self.text[call.offset as usize..call.offset as usize + 4]
+          .copy_from_slice(&offset.to_le_bytes());
+      } else {
+        panic!("call target too far away");
+      }
+    }
+
+    Object { relocs: self.relocs, text: self.text }
+  }
 }
 
 impl Object {
