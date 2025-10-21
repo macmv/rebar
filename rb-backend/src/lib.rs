@@ -59,7 +59,7 @@ impl Compiler {
     // TODO: I think the compiler needs the signature?
     let _sig = Signature { args, rets: vec![] };
     let func_id = FunctionId::new(self.function_ids.len() as u32);
-    self.function_ids.insert(mir::UserFunctionId(mir.id.0), func_id);
+    self.function_ids.insert(mir.id, func_id);
   }
 
   pub fn finish_function(&mut self, func: Function) { self.functions.push(func); }
