@@ -46,6 +46,21 @@ impl Compiler {
     ThreadCtx { mir_ctx: &self.mir_ctx, function_ids: &self.function_ids }
   }
 
+  pub fn declare_function(&mut self, mir: &mir::Function) {
+    let mut args = vec![];
+
+    for arg in mir.params.iter() {
+      let dvt = ValueType::for_type(&self.mir_ctx, &arg);
+      for _ in 0..dvt.len(&self.mir_ctx) {
+        args.push(Bit64);
+      }
+    }
+
+    let sig = Signature { args, rets: vec![] };
+    let func_id = FunctionId::new(self.function_ids.len() as u32);
+    self.function_ids.insert(mir::UserFunctionId(mir.id.0), func_id);
+  }
+
   pub fn finish_function(&mut self, func: Function) { self.functions.push(func); }
 
   pub fn finish(self) {
@@ -188,14 +203,18 @@ impl FuncBuilder<'_> {
               arg_values.push(v);
             }
 
-            let _native = lhs.unwrap_single(self);
+            let function = lhs.unwrap_const()[0];
 
             let _ret_ty = match *sig_ty {
               Type::Function(_, ref ret) => ret,
               _ => unreachable!(),
             };
 
-            let output = self.builder.instr().call(FunctionId::new(0), Bit64, 0);
+            let output = self.builder.instr().call(
+              self.ctx.function_ids[&mir::UserFunctionId(function)],
+              Bit64,
+              0,
+            );
             RValue::int(output)
           }
 
