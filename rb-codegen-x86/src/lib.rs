@@ -25,6 +25,7 @@ pub struct ObjectBuilder {
   pub text:      Vec<u8>,
   calls:         Vec<Call>,
   ro_data:       Vec<u8>,
+  symbols:       Vec<SymbolDef>,
 }
 
 struct Call {
@@ -37,6 +38,11 @@ pub struct Object {
   pub text:    Vec<u8>,
   pub ro_data: Vec<u8>,
   pub relocs:  Vec<Rel>,
+  pub symbols: Vec<SymbolDef>,
+}
+
+pub struct SymbolDef {
+  pub name: String,
 }
 
 #[derive(Default)]
@@ -82,7 +88,12 @@ impl ObjectBuilder {
       }
     }
 
-    Object { text: self.text, ro_data: self.ro_data, relocs: self.relocs }
+    Object {
+      text:    self.text,
+      ro_data: self.ro_data,
+      relocs:  self.relocs,
+      symbols: self.symbols,
+    }
   }
 }
 
@@ -800,7 +811,7 @@ mod tests {
 
     let dir = temp_dir!();
     let object_path = dir.path().join("foo.o");
-    Object { text: builder.text, ro_data: vec![], relocs: builder.relocs }.save(&object_path);
+    Object { text: builder.text, relocs: builder.relocs, ..Default::default() }.save(&object_path);
     disass(
       &object_path,
       expect![@r#"
@@ -882,8 +893,13 @@ mod tests {
     let dir = temp_dir!();
     let object_path = dir.path().join("foo.o");
     let binary_path = dir.path().join("a.out");
-    Object { text: builder.text, ro_data: data.to_vec(), relocs: builder.relocs }
-      .save(&object_path);
+    Object {
+      text: builder.text,
+      ro_data: data.to_vec(),
+      relocs: builder.relocs,
+      ..Default::default()
+    }
+    .save(&object_path);
     link(&[object_path], &binary_path);
     let output = std::process::Command::new(binary_path).output().expect("failed to execute a.out");
     assert!(output.status.success());
@@ -939,6 +955,7 @@ mod tests {
         r_type:   object::elf::R_X86_64_PC32,
         r_addend: -4,
       }],
+      ..Default::default()
     }
     .save(&dir.path().join("foo.o"));
   }
