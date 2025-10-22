@@ -79,7 +79,7 @@ pub fn generate(filename: &Path, object: &Object) {
       text_section,
       symtab_section,
       relocations_offset,
-      1,
+      object.relocs.len(),
       true,
     );
   }
