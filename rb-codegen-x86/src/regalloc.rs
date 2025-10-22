@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use rb_codegen::{
-  BlockId, Function, Instruction, InstructionInput, InstructionOutput, TVec, Variable,
+  Block, BlockId, Function, Instruction, InstructionInput, InstructionOutput, TVec, Variable,
 };
 use rb_codegen_opt::analysis::{
   Analysis, control_flow_graph::ControlFlowGraph, dominator_tree::DominatorTree,
@@ -70,8 +70,12 @@ impl Regalloc<'_> {
       self.expire_intervals(&live_ins, &live_outs);
       self.start_intervals(&live_ins, &live_outs);
 
-      for instr in &function.block(block).instructions {
-        self.expire_instr_intervals(&mut live_outs, instr);
+      for (i, instr) in function.block(block).instructions.iter().enumerate() {
+        self.expire_instr_intervals(
+          &mut live_outs,
+          &function.block(block).instructions[i..],
+          instr,
+        );
 
         let &[InstructionOutput::Var(out)] = instr.output.as_slice() else { continue };
         self.allocate(out);
@@ -82,26 +86,51 @@ impl Regalloc<'_> {
     }
   }
 
-  fn pre_allocation(&mut self) {}
+  fn pre_allocation(&mut self) {
+    // TODO: Pin variables to registers based on constraints.
+    self
+      .future_active
+      .insert(Variable::new(0, rb_codegen::VariableSize::Bit64), RegisterIndex::Eax);
+    self
+      .future_active
+      .insert(Variable::new(1, rb_codegen::VariableSize::Bit64), RegisterIndex::Edx);
+    self
+      .future_active
+      .insert(Variable::new(2, rb_codegen::VariableSize::Bit64), RegisterIndex::Edx);
+  }
+
   fn expire_intervals(&mut self, live_ins: &HashSet<Variable>, live_outs: &HashSet<Variable>) {
     for &var in live_outs.iter().filter(|&&v| !live_ins.contains(&v)) {
       self.free(var);
     }
   }
+
   fn start_intervals(&mut self, live_ins: &HashSet<Variable>, live_outs: &HashSet<Variable>) {
     for &var in live_ins.iter().filter(|&&v| !live_outs.contains(&v)) {
       self.allocate(var);
     }
   }
-  fn expire_instr_intervals(&mut self, live_outs: &mut HashSet<Variable>, instr: &Instruction) {
+
+  fn expire_instr_intervals(
+    &mut self,
+    live_outs: &mut HashSet<Variable>,
+    block_after_instr: &[Instruction],
+    instr: &Instruction,
+  ) {
     for input in &instr.input {
-      let InstructionInput::Var(var) = input else { continue };
+      let &InstructionInput::Var(var) = input else { continue };
 
       live_outs.remove(&var);
-      self.free(*var);
+      if is_used_later_in_block(block_after_instr, var) {
+        self.pause(var);
+      } else {
+        self.free(var);
+      }
     }
   }
+
   fn allocate(&mut self, var: Variable) {
+    println!("allocating {var}");
     let reg = self.future_active.remove(&var).unwrap_or_else(|| self.pick_register(var));
     self.active.insert(reg, var);
     self
@@ -110,11 +139,25 @@ impl Regalloc<'_> {
       .set(var, Register { size: var_to_reg_size(var.size()).unwrap(), index: reg });
   }
 
+  fn pause(&mut self, var: Variable) {
+    println!("pausing {var}");
+    match self.active.iter().find(|&(_, &v)| v == var) {
+      Some((&reg, _)) => {
+        self.active.remove(&reg);
+        self.future_active.insert(var, reg);
+      }
+      None => {}
+    }
+  }
+
   fn free(&mut self, var: Variable) {
-    let (&reg, _) = self.active.iter().find(|&(_, &v)| v == var).unwrap_or_else(|| {
-      panic!("variable {var:?} is not active and cannot be freed");
-    });
-    self.active.remove(&reg);
+    println!("freeing {var}");
+    match self.active.iter().find(|&(_, &v)| v == var) {
+      Some((&reg, _)) => {
+        self.active.remove(&reg);
+      }
+      None => {}
+    }
   }
 
   fn pick_register(&self, var: Variable) -> RegisterIndex {
@@ -128,6 +171,20 @@ impl Regalloc<'_> {
 
     panic!("no registers available for variable {var:?}");
   }
+}
+
+fn is_used_later_in_block(block: &[Instruction], var: Variable) -> bool {
+  for instr in block.iter().skip(1) {
+    for input in &instr.input {
+      if let InstructionInput::Var(v) = input {
+        if *v == var {
+          return true;
+        }
+      }
+    }
+  }
+
+  false
 }
 
 #[cfg(test)]
@@ -179,7 +236,7 @@ mod tests {
     ]);
 
     assert_eq!(regs.get(v!(r 0)), Register::RAX);
-    assert_eq!(regs.get(v!(r 1)), Register::RCX);
+    assert_eq!(regs.get(v!(r 1)), Register::RDX);
     assert_eq!(regs.get(v!(r 2)), Register::RDX);
 
     panic!();
