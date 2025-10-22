@@ -29,7 +29,7 @@ impl<'a> TransformPass<'a> for ConstantFold<'a> {
           InstrChange::Remove => false,
           InstrChange::ReplaceWithJump { target } => {
             to_jump = Some(target);
-            true
+            false
           }
         }
       });
