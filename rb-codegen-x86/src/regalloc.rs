@@ -1,13 +1,28 @@
-use rb_codegen::{Function, TVec, Variable};
+use std::collections::{HashMap, HashSet};
+
+use rb_codegen::{
+  BlockId, Function, Instruction, InstructionInput, InstructionOutput, TVec, Variable,
+};
 use rb_codegen_opt::analysis::{
   Analysis, control_flow_graph::ControlFlowGraph, dominator_tree::DominatorTree,
 };
 
-use crate::Register;
+use crate::{Register, RegisterIndex, var_to_reg_size};
 
 #[derive(Default)]
 pub struct VariableRegisters {
   registers: TVec<Variable, Register>,
+}
+
+struct Regalloc<'a> {
+  cfg:   &'a ControlFlowGraph,
+  dom:   &'a DominatorTree,
+  alloc: &'a mut VariableRegisters,
+
+  active:        HashMap<RegisterIndex, Variable>,
+  future_active: HashMap<Variable, RegisterIndex>,
+  visited:       HashSet<BlockId>,
+  live_outs:     HashSet<Variable>,
 }
 
 impl VariableRegisters {
@@ -17,10 +32,22 @@ impl VariableRegisters {
     let mut analysis = Analysis::default();
     analysis.load(ControlFlowGraph::ID, function);
     analysis.load(DominatorTree::ID, function);
-    let _cfg = analysis.get::<ControlFlowGraph>();
     let _dom = analysis.get::<DominatorTree>();
 
-    todo!();
+    let mut regs = VariableRegisters::default();
+    let mut regalloc = Regalloc {
+      cfg:   analysis.get(),
+      dom:   analysis.get(),
+      alloc: &mut regs,
+
+      active:        HashMap::new(),
+      future_active: HashMap::new(),
+      visited:       HashSet::new(),
+      live_outs:     HashSet::new(),
+    };
+    regalloc.pass(function);
+
+    regs
   }
 
   #[track_caller]
@@ -30,6 +57,83 @@ impl VariableRegisters {
 
       _ => panic!("variable {var:?} is not in a register"),
     }
+  }
+}
+
+impl Regalloc<'_> {
+  pub fn pass(&mut self, function: &Function) {
+    self.pre_allocation();
+
+    for block in self.dom.preorder() {
+      let live_ins = HashSet::new(); // "set of instructions live into `block`"
+
+      self.expire_intervals(&live_ins);
+      self.start_intervals(&live_ins);
+
+      for instr in &function.block(block).instructions {
+        let &[InstructionOutput::Var(out)] = instr.output.as_slice() else { continue };
+
+        self.expire_instr_intervals(instr);
+        self.allocate_register(out);
+        self.live_outs.insert(out);
+      }
+
+      self.visited.insert(block);
+    }
+  }
+
+  fn pre_allocation(&mut self) {}
+  fn expire_intervals(&mut self, live_ins: &HashSet<Variable>) {
+    for &var in self.live_outs.iter().filter(|&&v| !live_ins.contains(&v)) {
+      // self.free(var);
+      let reg = self.alloc.registers.get(var).unwrap();
+      self.active.remove(&reg.index);
+    }
+  }
+  fn start_intervals(&mut self, live_ins: &HashSet<Variable>) {
+    for &var in live_ins.iter().filter(|&&v| !self.live_outs.contains(&v)) {
+      // self.allocate_register(var);
+      let reg = self.future_active.remove(&var).unwrap_or_else(|| self.pick_register(var));
+      self.active.insert(reg, var);
+      self
+        .alloc
+        .registers
+        .set(var, Register { size: var_to_reg_size(var.size()).unwrap(), index: reg });
+    }
+  }
+  fn expire_instr_intervals(&mut self, instr: &Instruction) {
+    for input in &instr.input {
+      let InstructionInput::Var(var) = input else { continue };
+
+      self.live_outs.remove(&var);
+      self.free(*var);
+    }
+  }
+  fn allocate_register(&mut self, var: Variable) {
+    let reg = self.future_active.remove(&var).unwrap_or_else(|| self.pick_register(var));
+    self.active.insert(reg, var);
+    self
+      .alloc
+      .registers
+      .set(var, Register { size: var_to_reg_size(var.size()).unwrap(), index: reg });
+  }
+
+  fn free(&mut self, var: Variable) {
+    let reg =
+      self.alloc.registers.get(var).unwrap_or_else(|| panic!("variable {var:?} has no register"));
+    self.active.remove(&reg.index);
+  }
+
+  fn pick_register(&self, var: Variable) -> RegisterIndex {
+    for reg_index in 0..16 {
+      let reg_index = RegisterIndex::from_usize(reg_index);
+
+      if !self.active.contains_key(&reg_index) {
+        return reg_index;
+      }
+    }
+
+    panic!("no registers available for variable {var:?}");
   }
 }
 
@@ -73,27 +177,17 @@ mod tests {
       block 0:
         mov r0 = 0x01
         mov r1 = 0x00
-        mov r5 = r1
-        mov r4 = r0
-        mov r8 = r2
-        mov r10 = r1
-        mov r9 = r0
-        mov r7 = r9
-        mov r6 = r8
-        mov r3 = r4
-        syscall r3, r5
+        syscall r0, r1
         mov r2 = 0x02
-        syscall r3, r6
-        syscall r3, r5
+        syscall r0, r2
+        syscall r0, r1
         trap
     "#
     ]);
 
     assert_eq!(regs.get(v!(r 0)), Register::RAX);
-    assert_eq!(regs.get(v!(r 1)), Register::RDI);
-    assert_eq!(regs.get(v!(r 2)), Register::RDI);
-
-    panic!();
+    assert_eq!(regs.get(v!(r 1)), Register::RCX);
+    assert_eq!(regs.get(v!(r 2)), Register::RDX);
   }
 
   #[ignore]

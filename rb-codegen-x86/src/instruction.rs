@@ -19,7 +19,7 @@ bitflags! {
 
 const _INSTR_SIZE: () = assert!(std::mem::size_of::<Instruction>() == 16);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u8)]
 pub enum RegisterIndex {
   Eax,
