@@ -42,7 +42,7 @@ impl FunctionBuilder {
     self.function.data.extend_from_slice(data);
 
     let symbol = Symbol { index: self.function.data_symbols.len() as u32 };
-    self.function.data_symbols.push(SymbolDef { name: "foooooo".to_string(), offset });
+    self.function.data_symbols.push(SymbolDef { name: format!("str{offset}"), offset });
     symbol
   }
 
