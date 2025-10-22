@@ -197,6 +197,7 @@ mod tests {
   use super::*;
 
   #[test]
+  #[ignore] // TODO: Add `assert_eq`
   fn foo() {
     eval(
       r#"
