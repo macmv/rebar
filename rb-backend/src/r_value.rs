@@ -168,24 +168,12 @@ impl RValue {
   /// values can change depending on the type (so this works for function
   /// arguments, but not for block arguments).
   #[track_caller]
-  fn to_compact_ir(&self, func: &mut FuncBuilder) -> Variable {
+  fn to_compact_ir(&self, func: &mut FuncBuilder) -> Vec<Variable> {
     match self.kind {
       RValueKind::Const(ref items) => {
-        if items.is_empty() {
-          panic!("cannot encode empty items");
-        } else if items.len() == 1 {
-          func.builder.instr().mov(Bit64, items[0])
-        } else {
-          panic!();
-        }
+        items.into_iter().map(|it| func.builder.instr().mov(Bit64, *it)).collect()
       }
-      RValueKind::Dyn(ref v) => {
-        if v.len() != 1 {
-          panic!("expected single value, got {v:?}");
-        }
-
-        v[0]
-      }
+      RValueKind::Dyn(ref v) => v.clone(),
     }
   }
 
@@ -194,5 +182,5 @@ impl RValue {
   /// call). For block arguments, which must have a consistent size, use
   /// `to_sized_ir`.
   #[track_caller]
-  pub fn to_ir(&self, func: &mut FuncBuilder) -> Variable { self.to_compact_ir(func) }
+  pub fn to_ir(&self, func: &mut FuncBuilder) -> Vec<Variable> { self.to_compact_ir(func) }
 }

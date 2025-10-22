@@ -11,7 +11,6 @@ mod r_value;
 
 use rb_typer::Type;
 use rb_value::ValueType;
-use smallvec::smallvec;
 
 use crate::r_value::RValue;
 
@@ -123,7 +122,10 @@ impl FuncBuilder<'_> {
 
     if let Some(res) = res {
       let ir = res.to_ir(&mut self);
-      self.builder.current_block().terminate(TerminatorInstruction::Return(smallvec![ir.into()]));
+      self
+        .builder
+        .current_block()
+        .terminate(TerminatorInstruction::Return(ir.into_iter().map(|v| v.into()).collect()));
     }
 
     self.builder.build()
@@ -488,11 +490,20 @@ impl FuncBuilder<'_> {
         } else {
           let then_res = then_res.to_ir(self);
           let else_res = else_res.to_ir(self);
-          let res = self.builder.current_block().phi(
-            [(then_block, Some(then_res)), (else_block, Some(else_res))].into_iter().collect(),
-          );
 
-          RValue::int(res)
+          assert_eq!(then_res.len(), else_res.len(), "mismatched branches in if expression");
+
+          let mut res = vec![];
+          for (t, e) in then_res.into_iter().zip(else_res.into_iter()) {
+            res.push(
+              self
+                .builder
+                .current_block()
+                .phi([(then_block, Some(t)), (else_block, Some(e))].into_iter().collect()),
+            );
+          }
+
+          RValue::new(vt, res)
         }
 
         /*
