@@ -176,8 +176,7 @@ impl Builder {
 pub fn lower(mut function: rb_codegen::Function) -> Builder {
   let mut builder = Builder::default();
 
-  let mut reg = VariableRegisters::new();
-  reg.pass(&mut function);
+  let reg = VariableRegisters::pass(&mut function);
 
   for id in function.blocks() {
     let block = function.block(id);

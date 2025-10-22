@@ -11,9 +11,7 @@ pub struct VariableRegisters {
 }
 
 impl VariableRegisters {
-  pub fn new() -> Self { VariableRegisters { registers: TVec::new() } }
-
-  pub fn pass(&mut self, function: &mut Function) {
+  pub fn pass(function: &mut Function) -> Self {
     println!("{function}");
 
     let mut analysis = Analysis::default();
@@ -69,8 +67,7 @@ mod tests {
       ",
     );
 
-    let mut regs = VariableRegisters::new();
-    regs.pass(&mut function.function);
+    let regs = VariableRegisters::pass(&mut function.function);
 
     function.check(expect![@r#"
       block 0:
