@@ -1,0 +1,17 @@
+#[rebar::intrinsic]
+fn string_ptr(str: str) -> int
+
+#[rebar::intrinsic]
+fn string_len(str: str) -> int
+
+#[rebar::intrinsic]
+fn syscall5(id: int, a1: int, a2: int, a3: int, a4: int) -> int
+
+#[rebar::intrinsic]
+fn syscall4(id: int, a1: int, a2: int, a3: int) -> int
+
+#[rebar::intrinsic]
+fn syscall3(id: int, a1: int, a2: int) -> int
+
+#[rebar::intrinsic]
+fn syscall2(id: int, a1: int) -> int
