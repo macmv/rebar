@@ -5,12 +5,12 @@ use rb_value::ValueType;
 
 #[derive(Debug, Clone)]
 pub struct RValue {
-  ty:   ValueType,
-  kind: RValueKind,
+  pub ty:   ValueType,
+  pub kind: RValueKind,
 }
 
 #[derive(Debug, Clone)]
-enum RValueKind {
+pub enum RValueKind {
   Const(Vec<u64>),
   Dyn(Vec<Variable>),
 }

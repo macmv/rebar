@@ -239,6 +239,20 @@ impl FuncBuilder<'_> {
         RValue::int(output)
       }
 
+      mir::Expr::CallIntrinsic(mir::Intrinsic::StringPtr, ref args) => {
+        match self.compile_expr(args[0]).kind {
+          r_value::RValueKind::Dyn(ref v) => RValue::int(v[0]),
+          _ => unreachable!(),
+        }
+      }
+
+      mir::Expr::CallIntrinsic(mir::Intrinsic::StringLen, ref args) => {
+        match self.compile_expr(args[0]).kind {
+          r_value::RValueKind::Dyn(ref v) => RValue::int(v[1]),
+          _ => unreachable!(),
+        }
+      }
+
       /*
       Some(ValueType::UserFunction) => {
         let id = match lhs {
