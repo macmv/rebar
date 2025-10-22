@@ -410,7 +410,7 @@ fn check(src: &str) -> Vec<Diagnostic> {
       rb_hir_lower::lower_source(res.tree(), id)
     } else {
       for error in res.errors() {
-        emit!(error.message(), Span { file: id, range: error.span() });
+        emit!(Span { file: id, range: error.span() } => error.message());
       }
 
       Default::default()

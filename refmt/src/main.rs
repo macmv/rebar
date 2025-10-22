@@ -84,7 +84,7 @@ fn format_str(source: String) -> Result<String, io::Error> {
 
   rb_diagnostic::run_or_exit(Arc::new(sources), || {
     for error in cst.errors() {
-      emit!(error.message(), Span { file, range: error.span() });
+      emit!(Span { file, range: error.span() } => error.message());
     }
   });
 
