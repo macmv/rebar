@@ -32,7 +32,14 @@ impl Env<'_> {
 
     for attr in &function.attrs {
       if attr.path == "rebar::intrinsic" {
-        func.intrinsic = Some(mir::Intrinsic::Syscall);
+        let syscall = match function.name.as_str() {
+          "syscall2" | "syscall3" | "syscall4" | "syscall5" | "syscall6" => mir::Intrinsic::Syscall,
+          "string_ptr" => mir::Intrinsic::StringPtr,
+          "string_len" => mir::Intrinsic::StringLen,
+          _ => panic!("unknown intrinsic function {}", function.name),
+        };
+
+        func.intrinsic = Some(syscall);
       }
     }
 
