@@ -70,28 +70,28 @@ pub fn run(
 ) -> Result<(), Vec<Diagnostic>> {
   let src = sources.get(id);
 
-  let hir = rb_diagnostic::run(sources.clone(), || {
+  rb_diagnostic::run(sources.clone(), || {
     let res = cst::SourceFile::parse(&src.source);
 
-    if res.errors().is_empty() {
+    let (hir, span_maps, _) = if res.errors().is_empty() {
       rb_hir_lower::lower_source(res.tree(), id)
     } else {
       for error in res.errors() {
         emit!(Span { file: id, range: error.span() } => error.message());
       }
 
-      Default::default()
-    }
-  })?;
+      return Err(());
+    };
 
-  // TODO: This is where we join all the threads, collect all the functions up,
-  // and then split out to a thread pool to typecheck and lower each function.
-  let mut functions = vec![];
+    rb_diagnostic::check()?;
 
-  let (typer_env, mir_env) = rb_diagnostic::run(sources.clone(), || env.build(&hir.0, &hir.1))?;
+    // TODO: This is where we join all the threads, collect all the functions up,
+    // and then split out to a thread pool to typecheck and lower each function.
+    let mut functions = vec![];
 
-  rb_diagnostic::run(sources, || {
-    let (hir, span_maps, _) = hir;
+    let (typer_env, mir_env) = env.build(&hir, &span_maps);
+
+    rb_diagnostic::check()?;
 
     for (idx, function) in hir.functions {
       let span_map = &span_maps[idx.into_raw().into_u32() as usize];
@@ -105,16 +105,18 @@ pub fn run(
         }
       }
     }
-  })?;
 
-  // If we get to this point, all checks have passed, and we can compile to
-  // cranelift IR. Collect all the functions, split them into chunks, and compile
-  // them on a thread pool.
+    rb_diagnostic::check()?;
 
-  compile_mir(env, functions);
-  // eval_mir(env, functions);
+    // If we get to this point, all checks have passed, and we can compile to
+    // cranelift IR. Collect all the functions, split them into chunks, and compile
+    // them on a thread pool.
 
-  Ok(())
+    compile_mir(env, functions);
+
+    Ok(())
+  })
+  .map(|_| ())
 }
 
 fn compile_mir(env: RuntimeEnvironment, functions: Vec<rb_mir::ast::Function>) {

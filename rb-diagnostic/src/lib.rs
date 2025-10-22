@@ -55,6 +55,13 @@ pub fn emit(diagnostic: Diagnostic) {
   });
 }
 
+pub fn check() -> Result<(), ()> {
+  if is_ok() {
+    Ok(())
+  } else {
+    Err(())
+  }
+}
 pub fn is_ok() -> bool { Context::run(|ctx| ctx.is_ok()) }
 
 #[macro_export]
