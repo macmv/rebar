@@ -56,10 +56,10 @@ impl Typer<'_> {
     for (e, ctx) in constrain.errors {
       for (ctx, span) in &ctx {
         if let Some(sp) = span {
-          emit!(format!("{ctx:?}"), *sp);
+          emit!(*sp => "{ctx:?}");
         }
       }
-      emit!(render_err(&e, &ctx), span);
+      emit!(span => render_err(&e, &ctx));
     }
   }
 }

@@ -59,7 +59,11 @@ pub fn is_ok() -> bool { Context::run(|ctx| ctx.is_ok()) }
 
 #[macro_export]
 macro_rules! emit {
-  ($message:expr, $span:expr) => {
+  ($span:expr => $msg_str:literal $($msg_args:tt)*) => {
+    $crate::emit($crate::Diagnostic::error(format!($msg_str $($msg_args)*), $span))
+  };
+
+  ($span:expr => $message:expr) => {
     $crate::emit($crate::Diagnostic::error($message, $span))
   };
 }

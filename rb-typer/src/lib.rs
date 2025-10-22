@@ -208,7 +208,7 @@ impl<'a> Typer<'a> {
           None => match self.env.names.get(name) {
             Some(ty) => VType::from(ty.clone()),
             None => {
-              emit!(format!("undeclared name {name:?}"), self.span(expr));
+              emit!(self.span(expr) => "undeclared name {name:?}");
 
               VType::Var(self.fresh_var(self.span(expr), format!("")))
             }
@@ -359,7 +359,7 @@ impl<'a> Typer<'a> {
         for &(ref k, v) in fields {
           let ty = self.type_expr(v);
           let Some(field) = strct.iter().find(|(n, _)| n == k) else {
-            emit!(format!("field {k:?} not found in struct {path:?}"), self.span(v));
+            emit!(self.span(v) => "field {k} not found in struct {path}");
             continue;
           };
 

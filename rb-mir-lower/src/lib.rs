@@ -38,7 +38,7 @@ impl Env<'_> {
           "string_ptr" => mir::Intrinsic::StringPtr,
           "string_len" => mir::Intrinsic::StringLen,
           _ => {
-            emit!(format!("unknown intrinsic {}", function.name), span.name_span.unwrap());
+            emit!(span.name_span.unwrap() => "unknown intrinsic {}", function.name);
             continue;
           }
         };

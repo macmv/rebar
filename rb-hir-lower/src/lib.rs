@@ -414,8 +414,8 @@ fn type_expr(source: SourceId, cst: &cst::Type) -> hir::TypeExpr {
           "str" => hir::TypeExpr::Str,
           _ => {
             emit!(
-              format!("unknown type {name}"),
-              Span { file: source, range: cst.ident_token().unwrap().text_range() }
+              Span { file: source, range: cst.ident_token().unwrap().text_range() } =>
+              "unknown type {name}"
             );
             hir::TypeExpr::Nil
           }
