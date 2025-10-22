@@ -29,6 +29,14 @@ where
   K: TIndex<T>,
 {
   pub fn get(&self, index: K) -> Option<&T> { self.0.get(index.to_index()) }
+  pub fn set(&mut self, index: K, value: T) {
+    let idx = index.to_index();
+    if self.0.len() == idx {
+      self.0.push(value);
+    } else {
+      self.0[idx] = value;
+    }
+  }
 
   pub fn enumerate(&self) -> impl Iterator<Item = (K, &T)> {
     self.0.iter().enumerate().map(|(i, v)| (K::from_index(i), v))
