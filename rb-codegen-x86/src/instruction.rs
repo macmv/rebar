@@ -1,6 +1,6 @@
 use bitflags::bitflags;
 
-use crate::regalloc::RegisterSize;
+use crate::RegisterSize;
 
 pub struct Instruction {
   pub prefix:    Prefix,

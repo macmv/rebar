@@ -1,6 +1,3 @@
-mod elf;
-mod instruction;
-
 use std::path::Path;
 
 pub use elf::generate;
@@ -12,12 +9,15 @@ use rb_codegen::{
   immediate,
 };
 
-use crate::{
-  instruction::RegisterIndex,
-  regalloc::{Register, RegisterSize, VariableRegisters},
-};
+use crate::regalloc::VariableRegisters;
 
+mod elf;
+mod instruction;
 mod regalloc;
+mod register;
+
+pub use instruction::RegisterIndex;
+pub use register::{Register, RegisterSize};
 
 #[derive(Default)]
 pub struct ObjectBuilder {
@@ -719,8 +719,6 @@ mod tests {
 
   use rb_codegen::{Signature, Symbol, Variable, VariableSize};
   use rb_test::{Expect, expect, temp_dir};
-
-  use crate::instruction::RegisterIndex;
 
   use super::*;
 
