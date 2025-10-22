@@ -9,8 +9,8 @@ mod diff;
 mod parse_ir;
 
 pub struct TestFunction {
-  analysis: Analysis,
-  function: Function,
+  pub analysis: Analysis,
+  pub function: Function,
 }
 
 pub fn parse(asm: &str) -> TestFunction {

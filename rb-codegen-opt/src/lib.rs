@@ -5,8 +5,11 @@ use crate::analysis::Analysis;
 pub mod analysis;
 mod transform;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test"))]
 mod tests;
+
+#[cfg(feature = "test")]
+pub use tests::*;
 
 #[cfg(test)]
 #[macro_use]
@@ -45,7 +48,7 @@ impl<'a> Transformer<'a> {
     }
   }
 
-  #[cfg(test)]
+  #[cfg(any(test, feature = "test"))]
   #[track_caller]
   pub fn single_pass(&mut self, name: &str) {
     let pass = transform::TRANSFORM_PASSES.iter().find(|p| p.name() == name).expect("no such pass");

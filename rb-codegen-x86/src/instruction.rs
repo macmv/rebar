@@ -210,6 +210,16 @@ impl Instruction {
   pub fn immediate(&self) -> Immediate { self.immediate }
 }
 
+impl RegisterIndex {
+  pub fn from_usize(value: usize) -> Self {
+    if value >= 8 {
+      panic!("invalid register index: {}", value);
+    }
+
+    unsafe { std::mem::transmute::<u8, RegisterIndex>(value as u8) }
+  }
+}
+
 impl Opcode {
   pub const ADD_A_IMM32: Opcode = Opcode::new([0x05]);
   pub const ADD_A_IMM8: Opcode = Opcode::new([0x04]);
