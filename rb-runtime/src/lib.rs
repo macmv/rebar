@@ -12,111 +12,75 @@ pub struct RuntimeEnvironment {
 }
 
 pub fn eval(src: &str) {
-  let mut env = RuntimeEnvironment::new(Environment::std());
+  let env = RuntimeEnvironment::new(Environment::std());
 
   let mut sources = Sources::new();
   let id = sources.add(Source::new("inline.rbr".into(), src.into()));
   let sources = Arc::new(sources);
 
-  let hir = rb_diagnostic::run_or_exit(sources.clone(), || {
-    let res = cst::SourceFile::parse(src);
+  rb_diagnostic::run_or_exit(sources.clone(), || compile_diagnostics(env, sources, id))
+    .expect("error with no diagnostics emitted");
+}
 
-    if res.errors().is_empty() {
-      rb_hir_lower::lower_source(res.tree(), id)
-    } else {
-      for error in res.errors() {
-        emit!(Span { file: id, range: error.span() } => error.message());
-      }
+pub fn run(
+  env: RuntimeEnvironment,
+  sources: Arc<Sources>,
+  id: SourceId,
+) -> Result<(), Vec<Diagnostic>> {
+  rb_diagnostic::run(sources.clone(), || compile_diagnostics(env, sources, id)).map(|_| ())
+}
 
-      Default::default()
+fn compile_diagnostics(
+  mut env: RuntimeEnvironment,
+  sources: Arc<Sources>,
+  id: SourceId,
+) -> Result<(), ()> {
+  let src = sources.get(id);
+
+  let res = cst::SourceFile::parse(&src.source);
+
+  let (hir, span_maps, _) = if res.errors().is_empty() {
+    rb_hir_lower::lower_source(res.tree(), id)
+  } else {
+    for error in res.errors() {
+      emit!(Span { file: id, range: error.span() } => error.message());
     }
-  });
+
+    return Err(());
+  };
+
+  rb_diagnostic::check()?;
 
   // TODO: This is where we join all the threads, collect all the functions up,
   // and then split out to a thread pool to typecheck and lower each function.
   let mut functions = vec![];
 
-  let (typer_env, mir_env) =
-    rb_diagnostic::run_or_exit(sources.clone(), || env.build(&hir.0, &hir.1));
+  let (typer_env, mir_env) = env.build(&hir, &span_maps);
 
-  rb_diagnostic::run_or_exit(sources, || {
-    let (hir, span_maps, _) = hir;
+  rb_diagnostic::check()?;
 
-    for (idx, function) in hir.functions {
-      let span_map = &span_maps[idx.into_raw().into_u32() as usize];
+  for (idx, function) in hir.functions {
+    let span_map = &span_maps[idx.into_raw().into_u32() as usize];
 
-      let typer = rb_typer::Typer::check(&typer_env, &function, &span_map);
-      if rb_diagnostic::is_ok() {
-        if let Some(mut func) = rb_mir_lower::lower_function(&mir_env, &typer, &function) {
-          func.id = rb_mir::ast::UserFunctionId(idx.into_raw().into_u32() as u64);
+    let typer = rb_typer::Typer::check(&typer_env, &function, &span_map);
+    if rb_diagnostic::is_ok() {
+      if let Some(mut func) = rb_mir_lower::lower_function(&mir_env, &typer, &function) {
+        func.id = rb_mir::ast::UserFunctionId(idx.into_raw().into_u32() as u64);
 
-          functions.push(func);
-        }
+        functions.push(func);
       }
     }
-  });
+  }
+
+  rb_diagnostic::check()?;
 
   // If we get to this point, all checks have passed, and we can compile to
   // cranelift IR. Collect all the functions, split them into chunks, and compile
   // them on a thread pool.
 
   compile_mir(env, functions);
-}
 
-pub fn run(
-  mut env: RuntimeEnvironment,
-  sources: Arc<Sources>,
-  id: SourceId,
-) -> Result<(), Vec<Diagnostic>> {
-  let src = sources.get(id);
-
-  rb_diagnostic::run(sources.clone(), || {
-    let res = cst::SourceFile::parse(&src.source);
-
-    let (hir, span_maps, _) = if res.errors().is_empty() {
-      rb_hir_lower::lower_source(res.tree(), id)
-    } else {
-      for error in res.errors() {
-        emit!(Span { file: id, range: error.span() } => error.message());
-      }
-
-      return Err(());
-    };
-
-    rb_diagnostic::check()?;
-
-    // TODO: This is where we join all the threads, collect all the functions up,
-    // and then split out to a thread pool to typecheck and lower each function.
-    let mut functions = vec![];
-
-    let (typer_env, mir_env) = env.build(&hir, &span_maps);
-
-    rb_diagnostic::check()?;
-
-    for (idx, function) in hir.functions {
-      let span_map = &span_maps[idx.into_raw().into_u32() as usize];
-
-      let typer = rb_typer::Typer::check(&typer_env, &function, &span_map);
-      if rb_diagnostic::is_ok() {
-        if let Some(mut func) = rb_mir_lower::lower_function(&mir_env, &typer, &function) {
-          func.id = rb_mir::ast::UserFunctionId(idx.into_raw().into_u32() as u64);
-
-          functions.push(func);
-        }
-      }
-    }
-
-    rb_diagnostic::check()?;
-
-    // If we get to this point, all checks have passed, and we can compile to
-    // cranelift IR. Collect all the functions, split them into chunks, and compile
-    // them on a thread pool.
-
-    compile_mir(env, functions);
-
-    Ok(())
-  })
-  .map(|_| ())
+  Ok(())
 }
 
 fn compile_mir(env: RuntimeEnvironment, functions: Vec<rb_mir::ast::Function>) {
