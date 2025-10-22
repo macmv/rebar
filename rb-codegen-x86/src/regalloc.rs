@@ -1,7 +1,8 @@
 use std::fmt;
 
 use rb_codegen::{
-  Function, Immediate, InstructionInput, InstructionOutput, Math, Opcode, Variable, VariableSize,
+  BlockId, Function, Immediate, InstructionInput, InstructionOutput, Math, Opcode, Variable,
+  VariableSize,
 };
 use smallvec::smallvec;
 
@@ -40,7 +41,7 @@ struct Lifetime {
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct InstructionLocation {
-  pub block:       u32,
+  pub block:       BlockId,
   pub instruction: u32,
 }
 
@@ -70,9 +71,9 @@ impl VariableRegisters {
     let lifetimes = Lifetimes::solve(function);
     let mut used = [Option::<Variable>::None; 16];
 
-    for (b, block) in function.blocks.iter().enumerate() {
-      for (i, inst) in block.instructions.iter().enumerate() {
-        let loc = InstructionLocation { block: b as u32, instruction: i as u32 };
+    for block in function.blocks() {
+      for (i, inst) in function.block(block).instructions.iter().enumerate() {
+        let loc = InstructionLocation { block: block, instruction: i as u32 };
 
         for output in &inst.output {
           let InstructionOutput::Var(v) = *output;
@@ -124,9 +125,9 @@ impl Lifetimes {
   fn solve(function: &Function) -> Self {
     let mut l = Lifetimes { lifetimes: vec![] };
 
-    for (b, block) in function.blocks.iter().enumerate() {
-      for (i, inst) in block.instructions.iter().enumerate() {
-        let loc = InstructionLocation { block: b as u32, instruction: i as u32 };
+    for block in function.blocks() {
+      for (i, inst) in function.block(block).instructions.iter().enumerate() {
+        let loc = InstructionLocation { block, instruction: i as u32 };
 
         for input in &inst.input {
           if let InstructionInput::Var(v) = input {
@@ -222,7 +223,7 @@ impl PinnedVariables {
               from.size(),
             );
 
-            function.blocks[loc.block as usize].instructions.insert(
+            function.blocks[loc.block.as_u32() as usize].instructions.insert(
               loc.instruction as usize,
               rb_codegen::Instruction {
                 opcode: Opcode::Move,
@@ -235,7 +236,7 @@ impl PinnedVariables {
           }
 
           Change::AddVariable { loc, value, new } => {
-            function.blocks[loc.block as usize].instructions.insert(
+            function.blocks[loc.block.as_u32() as usize].instructions.insert(
               loc.instruction as usize,
               rb_codegen::Instruction {
                 opcode: Opcode::Move,
@@ -271,9 +272,9 @@ impl PinnedVariables {
       .max()
       .map_or(0, |id| id + 1);
 
-    for (b, block) in function.blocks.iter_mut().enumerate() {
-      for (i, inst) in block.instructions.iter_mut().enumerate() {
-        p.current = InstructionLocation { block: b as u32, instruction: i as u32 };
+    for block in function.blocks() {
+      for (i, inst) in function.block_mut(block).instructions.iter_mut().enumerate() {
+        p.current = InstructionLocation { block, instruction: i as u32 };
 
         match inst.opcode {
           Opcode::Math(
@@ -349,8 +350,9 @@ impl PinnedVariables {
 }
 
 fn replace_after(function: &mut Function, loc: InstructionLocation, from: Variable, to: Variable) {
-  for instr in
-    function.blocks[loc.block as usize].instructions[(loc.instruction + 1) as usize..].iter_mut()
+  for instr in function.blocks[loc.block.as_u32() as usize].instructions
+    [(loc.instruction + 1) as usize..]
+    .iter_mut()
   {
     for input in instr.input.iter_mut() {
       if let InstructionInput::Var(v) = input
@@ -361,7 +363,7 @@ fn replace_after(function: &mut Function, loc: InstructionLocation, from: Variab
     }
   }
 
-  for block in &mut function.blocks[loc.block as usize + 1..] {
+  for block in &mut function.blocks[loc.block.as_u32() as usize + 1..] {
     for instr in block.instructions.iter_mut() {
       for input in instr.input.iter_mut() {
         if let InstructionInput::Var(v) = input

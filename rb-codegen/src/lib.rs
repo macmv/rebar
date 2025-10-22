@@ -195,7 +195,7 @@ impl Variable {
 impl Function {
   pub fn entry(&self) -> BlockId { BlockId::new(0) }
 
-  pub fn blocks(&self) -> impl Iterator<Item = BlockId> {
+  pub fn blocks(&self) -> impl Iterator<Item = BlockId> + use<> {
     (0..self.blocks.len() as u32).map(BlockId::new)
   }
 
