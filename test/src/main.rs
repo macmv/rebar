@@ -30,9 +30,11 @@ fn main() -> ExitCode {
             let stringified = path.display().to_string();
             if stringified.contains(f) {
               let src = std::fs::read_to_string(&path).unwrap();
+              let std = std::fs::read_to_string("lib/std/intrinsics.rbr").unwrap();
 
               let mut sources = Sources::new();
               let id = sources.add(Source::new(stringified.clone(), src.clone()));
+              sources.add(Source::new("lib/std/intrinsics.rbr".into(), std));
               let sources = Arc::new(sources);
 
               let res = catch_unwind(|| {

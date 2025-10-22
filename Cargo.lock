@@ -791,6 +791,7 @@ dependencies = [
 name = "rb-mir-lower"
 version = "0.1.0"
 dependencies = [
+ "rb-diagnostic",
  "rb-hir",
  "rb-mir",
  "rb-typer",

@@ -8,6 +8,7 @@ edition = "2021"
 [lib]
 
 [dependencies]
+rb-diagnostic.workspace = true
 rb-hir.workspace = true
 rb-typer.workspace = true
 rb-mir.workspace = true

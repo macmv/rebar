@@ -74,6 +74,8 @@ impl SourceLower<'_> {
       ast_id_map: &mut ast_id_map,
     };
 
+    lower.span_map.name_span =
+      Some(Span { file: lower.source.source, range: cst.ident_token().unwrap().text_range() });
     lower.f.name = cst.ident_token().unwrap().to_string();
 
     for attr in cst.attrs() {

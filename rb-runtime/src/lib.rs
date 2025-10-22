@@ -36,7 +36,8 @@ pub fn eval(src: &str) {
   // and then split out to a thread pool to typecheck and lower each function.
   let mut functions = vec![];
 
-  let (typer_env, mir_env) = env.build(&hir.0);
+  let (typer_env, mir_env) =
+    rb_diagnostic::run_or_exit(sources.clone(), || env.build(&hir.0, &hir.1));
 
   rb_diagnostic::run_or_exit(sources, || {
     let (hir, span_maps, _) = hir;
@@ -87,7 +88,7 @@ pub fn run(
   // and then split out to a thread pool to typecheck and lower each function.
   let mut functions = vec![];
 
-  let (typer_env, mir_env) = env.build(&hir.0);
+  let (typer_env, mir_env) = rb_diagnostic::run(sources.clone(), || env.build(&hir.0, &hir.1))?;
 
   rb_diagnostic::run(sources, || {
     let (hir, span_maps, _) = hir;
@@ -139,6 +140,7 @@ impl RuntimeEnvironment {
   fn build(
     &mut self,
     hir: &rb_hir::ast::SourceFile,
+    spans: &[rb_hir::SpanMap],
   ) -> (rb_typer::Environment, rb_mir_lower::Env<'_>) {
     let mut typer_env = self.env.typer_env();
 
@@ -164,7 +166,7 @@ impl RuntimeEnvironment {
 
     let mut mir_env = self.mir_env();
     for (id, f) in hir.functions.values().enumerate() {
-      mir_env.declare_user_function(id as u64, f);
+      mir_env.declare_user_function(id as u64, f, &spans[id]);
     }
 
     (typer_env, mir_env)
