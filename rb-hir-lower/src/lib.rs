@@ -243,24 +243,25 @@ impl FunctionLower<'_, '_> {
       cst::Expr::String(ref lit) => {
         let start = lit.syntax().text_range().start();
         let text = lit.syntax().text().to_string();
+        let span = Span { file: self.source.source, range: lit.syntax().text_range() };
 
         let mut segments = vec![];
         let mut prev = 1;
 
-        for escape in lit.interpolations() {
-          let left = u32::from(escape.syntax().text_range().start() - start) as usize;
+        for interp in lit.interpolations() {
+          let left = u32::from(interp.syntax().text_range().start() - start) as usize;
 
           if left != prev {
-            segments.push(StringInterp::Literal(text[prev..left].to_string()));
+            segments.push(StringInterp::Literal(parse_escapes(span, &text[prev..left])));
           }
 
-          let expr = self.expr(escape.expr().unwrap());
+          let expr = self.expr(interp.expr().unwrap());
           segments.push(StringInterp::Expr(expr));
 
-          prev = u32::from(escape.syntax().text_range().end() - start) as usize;
+          prev = u32::from(interp.syntax().text_range().end() - start) as usize;
         }
 
-        segments.push(StringInterp::Literal(text[prev..text.len() - 1].to_string()));
+        segments.push(StringInterp::Literal(parse_escapes(span, &text[prev..text.len() - 1])));
 
         hir::Expr::String(segments)
       }
@@ -397,6 +398,54 @@ impl FunctionLower<'_, '_> {
 
     id
   }
+}
+
+fn parse_escapes(span: Span, lit: &str) -> String {
+  let mut out = String::new();
+  let mut prev = '\n';
+  let mut i = 0;
+  let mut iter = lit.chars();
+
+  while let Some(c) = iter.next() {
+    if prev == '\\' {
+      let c = match c {
+        'n' => '\n',
+        't' => '\t',
+        'r' => '\r',
+        '\\' => '\\',
+        '"' => '"',
+        'x' => {
+          let c1 = iter.next();
+          let c2 = iter.next();
+
+          match [c1, c2] {
+            [Some(c1 @ ('0'..='9' | 'a'..='f')), Some(c2 @ ('0'..='9' | 'a'..='f'))] => {
+              char::from(c2.to_digit(16).unwrap() as u8 + (c1.to_digit(16).unwrap() as u8 * 16))
+            }
+
+            _ => {
+              emit!(span.at_offset(i, 4) => "invalid escape sequence");
+              continue;
+            }
+          }
+        }
+        _ => {
+          emit!(span.at_offset(i, 2) => "unknown escape sequence");
+          continue;
+        }
+      };
+
+      out.pop();
+      out.push(c);
+    } else {
+      out.push(c);
+    }
+
+    i += c.len_utf8() as u32;
+    prev = c;
+  }
+
+  out
 }
 
 fn type_expr(source: SourceId, cst: &cst::Type) -> hir::TypeExpr {

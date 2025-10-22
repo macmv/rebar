@@ -1,5 +1,5 @@
 use line_index::LineCol;
-use rb_syntax::TextRange;
+use rb_syntax::{TextRange, TextSize};
 use std::fmt::{Display, Write};
 
 use crate::{sources::SourceId, Sources};
@@ -13,6 +13,13 @@ pub struct Diagnostic {
 pub struct Span {
   pub file:  SourceId,
   pub range: TextRange,
+}
+
+impl Span {
+  pub fn at_offset(&self, offset: u32, len: u32) -> Self {
+    let offset = self.range.start() + TextSize::new(offset);
+    Span { file: self.file, range: TextRange::at(offset, TextSize::new(len)) }
+  }
 }
 
 impl Diagnostic {
