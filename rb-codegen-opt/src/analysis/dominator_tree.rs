@@ -85,6 +85,20 @@ impl DominatorTree {
     false
   }
 
+  pub fn preorder(&self) -> Vec<BlockId> {
+    let mut out = Vec::new();
+    fn walk(u: BlockId, dom: &TVec<BlockId, Vec<BlockId>>, out: &mut Vec<BlockId>) {
+      out.push(u);
+      if let Some(children) = dom.get(u) {
+        for &v in children {
+          walk(v, dom, out);
+        }
+      }
+    }
+    walk(BlockId::ENTRY, &self.dom, &mut out);
+    out
+  }
+
   #[allow(unused)]
   pub fn show_graph(&self) {
     use std::{io::Write, process::Command};

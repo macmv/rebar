@@ -4,6 +4,9 @@ use rb_codegen::{
   BlockId, Function, Immediate, InstructionInput, InstructionOutput, Math, Opcode, Variable,
   VariableSize,
 };
+use rb_codegen_opt::analysis::{
+  Analysis, control_flow_graph::ControlFlowGraph, dominator_tree::DominatorTree,
+};
 use smallvec::smallvec;
 
 use crate::{instruction::RegisterIndex, var_to_reg_size};
@@ -67,11 +70,17 @@ impl VariableRegisters {
   pub fn new() -> Self { VariableRegisters { registers: vec![] } }
 
   pub fn pass(&mut self, function: &mut Function) {
+    let mut analysis = Analysis::default();
+    analysis.load(ControlFlowGraph::ID, function);
+    analysis.load(DominatorTree::ID, function);
+    let _cfg = analysis.get::<ControlFlowGraph>();
+    let dom = analysis.get::<DominatorTree>();
+
     let pinned = PinnedVariables::solve(function);
     let lifetimes = Lifetimes::solve(function);
     let mut used = [Option::<Variable>::None; 16];
 
-    for block in function.blocks() {
+    for block in dom.preorder() {
       for (i, inst) in function.block(block).instructions.iter().enumerate() {
         let loc = InstructionLocation { block: block, instruction: i as u32 };
 

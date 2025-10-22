@@ -739,6 +739,7 @@ dependencies = [
  "indexmap 2.11.4",
  "object",
  "rb-codegen",
+ "rb-codegen-opt",
  "rb-test",
  "smallvec",
 ]

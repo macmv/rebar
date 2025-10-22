@@ -6,6 +6,7 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 rb-codegen.workspace = true
+rb-codegen-opt.workspace = true
 
 indexmap = "2.11.4"
 object = { version = "0.37.3", default-features = false, features = ["elf", "std", "write_core"] }

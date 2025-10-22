@@ -2,7 +2,7 @@ use rb_codegen::Function;
 
 use crate::analysis::Analysis;
 
-mod analysis;
+pub mod analysis;
 mod transform;
 
 #[cfg(test)]
