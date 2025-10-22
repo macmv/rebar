@@ -22,7 +22,6 @@ struct Regalloc<'a> {
   active:        HashMap<RegisterIndex, Variable>,
   future_active: HashMap<Variable, RegisterIndex>,
   visited:       HashSet<BlockId>,
-  live_outs:     HashSet<Variable>,
 }
 
 impl VariableRegisters {
@@ -43,7 +42,6 @@ impl VariableRegisters {
       active:        HashMap::new(),
       future_active: HashMap::new(),
       visited:       HashSet::new(),
-      live_outs:     HashSet::new(),
     };
     regalloc.pass(function);
 
@@ -64,18 +62,20 @@ impl Regalloc<'_> {
   pub fn pass(&mut self, function: &Function) {
     self.pre_allocation();
 
+    let mut live_outs = HashSet::new();
+
     for block in self.dom.preorder() {
       let live_ins = HashSet::new(); // "set of instructions live into `block`"
 
-      self.expire_intervals(&live_ins);
-      self.start_intervals(&live_ins);
+      self.expire_intervals(&live_ins, &live_outs);
+      self.start_intervals(&live_ins, &live_outs);
 
       for instr in &function.block(block).instructions {
         let &[InstructionOutput::Var(out)] = instr.output.as_slice() else { continue };
 
-        self.expire_instr_intervals(instr);
+        self.expire_instr_intervals(&mut live_outs, instr);
         self.allocate_register(out);
-        self.live_outs.insert(out);
+        live_outs.insert(out);
       }
 
       self.visited.insert(block);
@@ -83,29 +83,21 @@ impl Regalloc<'_> {
   }
 
   fn pre_allocation(&mut self) {}
-  fn expire_intervals(&mut self, live_ins: &HashSet<Variable>) {
-    for &var in self.live_outs.iter().filter(|&&v| !live_ins.contains(&v)) {
-      // self.free(var);
-      let reg = self.alloc.registers.get(var).unwrap();
-      self.active.remove(&reg.index);
+  fn expire_intervals(&mut self, live_ins: &HashSet<Variable>, live_outs: &HashSet<Variable>) {
+    for &var in live_outs.iter().filter(|&&v| !live_ins.contains(&v)) {
+      self.free(var);
     }
   }
-  fn start_intervals(&mut self, live_ins: &HashSet<Variable>) {
-    for &var in live_ins.iter().filter(|&&v| !self.live_outs.contains(&v)) {
-      // self.allocate_register(var);
-      let reg = self.future_active.remove(&var).unwrap_or_else(|| self.pick_register(var));
-      self.active.insert(reg, var);
-      self
-        .alloc
-        .registers
-        .set(var, Register { size: var_to_reg_size(var.size()).unwrap(), index: reg });
+  fn start_intervals(&mut self, live_ins: &HashSet<Variable>, live_outs: &HashSet<Variable>) {
+    for &var in live_ins.iter().filter(|&&v| !live_outs.contains(&v)) {
+      self.allocate_register(var);
     }
   }
-  fn expire_instr_intervals(&mut self, instr: &Instruction) {
+  fn expire_instr_intervals(&mut self, live_outs: &mut HashSet<Variable>, instr: &Instruction) {
     for input in &instr.input {
       let InstructionInput::Var(var) = input else { continue };
 
-      self.live_outs.remove(&var);
+      live_outs.remove(&var);
       self.free(*var);
     }
   }
