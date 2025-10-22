@@ -18,7 +18,7 @@ impl Context {
 
   pub fn is_ok(&self) -> bool { !self.error }
 
-  pub fn collect_errors(&mut self) { self.diagnostics = Some(vec![]); }
+  pub fn enable_error_collection(&mut self) { self.diagnostics = Some(vec![]); }
   pub fn take_errors(&mut self) -> Vec<Diagnostic> {
     match self.diagnostics {
       Some(ref mut diagnostics) => std::mem::take(diagnostics),

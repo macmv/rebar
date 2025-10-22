@@ -12,18 +12,14 @@ use context::Context;
 pub fn run_or_exit<T>(sources: Arc<Sources>, f: impl FnOnce() -> T) -> T {
   Context::init(sources);
   let res = f();
-  Context::run(|ctx| {
-    ctx.exit_if_error();
-  });
+  Context::run(|ctx| ctx.exit_if_error());
   Context::cleanup();
   res
 }
 
 pub fn run<T>(sources: Arc<Sources>, f: impl FnOnce() -> T) -> Result<T, Vec<Diagnostic>> {
   Context::init(sources);
-  Context::run(|ctx| {
-    ctx.collect_errors();
-  });
+  Context::run(|ctx| ctx.enable_error_collection());
 
   let res = f();
   let errors = Context::run(|ctx| ctx.take_errors());
@@ -38,9 +34,7 @@ pub fn run<T>(sources: Arc<Sources>, f: impl FnOnce() -> T) -> Result<T, Vec<Dia
 
 pub fn run_both<T>(sources: Arc<Sources>, f: impl FnOnce() -> T) -> (T, Vec<Diagnostic>) {
   Context::init(sources);
-  Context::run(|ctx| {
-    ctx.collect_errors();
-  });
+  Context::run(|ctx| ctx.enable_error_collection());
 
   let res = f();
   let errors = Context::run(|ctx| ctx.take_errors());
