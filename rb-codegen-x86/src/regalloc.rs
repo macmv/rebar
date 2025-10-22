@@ -71,10 +71,10 @@ impl Regalloc<'_> {
       self.start_intervals(&live_ins, &live_outs);
 
       for instr in &function.block(block).instructions {
-        let &[InstructionOutput::Var(out)] = instr.output.as_slice() else { continue };
-
         self.expire_instr_intervals(&mut live_outs, instr);
-        self.allocate_register(out);
+
+        let &[InstructionOutput::Var(out)] = instr.output.as_slice() else { continue };
+        self.allocate(out);
         live_outs.insert(out);
       }
 
@@ -90,7 +90,7 @@ impl Regalloc<'_> {
   }
   fn start_intervals(&mut self, live_ins: &HashSet<Variable>, live_outs: &HashSet<Variable>) {
     for &var in live_ins.iter().filter(|&&v| !live_outs.contains(&v)) {
-      self.allocate_register(var);
+      self.allocate(var);
     }
   }
   fn expire_instr_intervals(&mut self, live_outs: &mut HashSet<Variable>, instr: &Instruction) {
@@ -101,7 +101,7 @@ impl Regalloc<'_> {
       self.free(*var);
     }
   }
-  fn allocate_register(&mut self, var: Variable) {
+  fn allocate(&mut self, var: Variable) {
     let reg = self.future_active.remove(&var).unwrap_or_else(|| self.pick_register(var));
     self.active.insert(reg, var);
     self
@@ -111,9 +111,10 @@ impl Regalloc<'_> {
   }
 
   fn free(&mut self, var: Variable) {
-    let reg =
-      self.alloc.registers.get(var).unwrap_or_else(|| panic!("variable {var:?} has no register"));
-    self.active.remove(&reg.index);
+    let (&reg, _) = self.active.iter().find(|&(_, &v)| v == var).unwrap_or_else(|| {
+      panic!("variable {var:?} is not active and cannot be freed");
+    });
+    self.active.remove(&reg);
   }
 
   fn pick_register(&self, var: Variable) -> RegisterIndex {
@@ -180,6 +181,8 @@ mod tests {
     assert_eq!(regs.get(v!(r 0)), Register::RAX);
     assert_eq!(regs.get(v!(r 1)), Register::RCX);
     assert_eq!(regs.get(v!(r 2)), Register::RDX);
+
+    panic!();
   }
 
   #[ignore]
