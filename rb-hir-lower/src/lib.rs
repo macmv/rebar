@@ -182,7 +182,13 @@ impl FunctionLower<'_, '_> {
           })
           .collect();
 
-        hir::Stmt::FunctionDef(hir::FunctionDef { name, args, ret: None })
+        let ret = def
+          .params()
+          .unwrap()
+          .return_type()
+          .map(|ret| type_expr(self.source.source, &ret.ty().unwrap()));
+
+        hir::Stmt::FunctionDef(hir::FunctionDef { name, args, ret })
       }
 
       cst::Stmt::Struct(ref strct) => {

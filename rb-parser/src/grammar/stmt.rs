@@ -167,8 +167,10 @@ fn params(p: &mut Parser) {
   p.expect(T![')']);
 
   if p.at(T![->]) {
+    let m = p.start();
     p.eat(T![->]);
     super::types::ty(p);
+    m.complete(p, RETURN_TYPE);
   }
 
   m.complete(p, PARAMS);
