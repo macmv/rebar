@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use rb_codegen::{
-  Block, BlockId, Function, Instruction, InstructionInput, InstructionOutput, TVec, Variable,
+  Block, BlockId, Function, Instruction, InstructionInput, InstructionOutput, Opcode, TVec,
+  Variable,
 };
 use rb_codegen_opt::analysis::{
   Analysis, control_flow_graph::ControlFlowGraph, dominator_tree::DominatorTree,
@@ -22,6 +23,8 @@ struct Regalloc<'a> {
   active:        HashMap<RegisterIndex, Variable>,
   future_active: HashMap<Variable, RegisterIndex>,
   visited:       HashSet<BlockId>,
+
+  preference: HashMap<Variable, RegisterIndex>,
 }
 
 impl VariableRegisters {
@@ -42,6 +45,7 @@ impl VariableRegisters {
       active:        HashMap::new(),
       future_active: HashMap::new(),
       visited:       HashSet::new(),
+      preference:    HashMap::new(),
     };
     regalloc.pass(function);
 
@@ -60,7 +64,7 @@ impl VariableRegisters {
 
 impl Regalloc<'_> {
   pub fn pass(&mut self, function: &Function) {
-    self.pre_allocation();
+    self.pre_allocation(function);
 
     let mut live_outs = HashSet::new();
 
@@ -86,17 +90,30 @@ impl Regalloc<'_> {
     }
   }
 
-  fn pre_allocation(&mut self) {
-    // TODO: Pin variables to registers based on constraints.
-    self
-      .future_active
-      .insert(Variable::new(0, rb_codegen::VariableSize::Bit64), RegisterIndex::Eax);
-    self
-      .future_active
-      .insert(Variable::new(1, rb_codegen::VariableSize::Bit64), RegisterIndex::Edx);
-    self
-      .future_active
-      .insert(Variable::new(2, rb_codegen::VariableSize::Bit64), RegisterIndex::Edx);
+  fn pre_allocation(&mut self, function: &Function) {
+    for block in function.blocks() {
+      for instr in &function.block(block).instructions {
+        if instr.opcode != Opcode::Syscall {
+          continue;
+        }
+
+        for (i, &input) in instr.input.iter().enumerate() {
+          let InstructionInput::Var(var) = input else { continue };
+
+          let reg_index = match i {
+            0 => RegisterIndex::Eax,
+            1 => RegisterIndex::Edx,
+            2 => RegisterIndex::Ecx,
+            3 => RegisterIndex::Ebx,
+            4 => RegisterIndex::Esi,
+            5 => RegisterIndex::Edi,
+            _ => unreachable!(),
+          };
+
+          self.preference.insert(var, reg_index);
+        }
+      }
+    }
   }
 
   fn expire_intervals(&mut self, live_ins: &HashSet<Variable>, live_outs: &HashSet<Variable>) {
@@ -130,8 +147,8 @@ impl Regalloc<'_> {
   }
 
   fn allocate(&mut self, var: Variable) {
-    println!("allocating {var}");
     let reg = self.future_active.remove(&var).unwrap_or_else(|| self.pick_register(var));
+    println!("allocating {var} = {reg:?}");
     self.active.insert(reg, var);
     self
       .alloc
@@ -140,27 +157,37 @@ impl Regalloc<'_> {
   }
 
   fn pause(&mut self, var: Variable) {
-    println!("pausing {var}");
     match self.active.iter().find(|&(_, &v)| v == var) {
       Some((&reg, _)) => {
+        println!("pausing {var} in {reg:?}");
         self.active.remove(&reg);
         self.future_active.insert(var, reg);
       }
-      None => {}
+      None => {
+        println!("pausing {var} (none)");
+      }
     }
   }
 
   fn free(&mut self, var: Variable) {
-    println!("freeing {var}");
     match self.active.iter().find(|&(_, &v)| v == var) {
       Some((&reg, _)) => {
+        println!("freeing {var} in {reg:?}");
         self.active.remove(&reg);
       }
-      None => {}
+      None => {
+        println!("freeing {var} (none)");
+      }
     }
   }
 
   fn pick_register(&self, var: Variable) -> RegisterIndex {
+    if let Some(pref) = self.preference.get(&var) {
+      if !self.active.contains_key(pref) {
+        return *pref;
+      }
+    }
+
     for reg_index in 0..16 {
       let reg_index = RegisterIndex::from_usize(reg_index);
 
