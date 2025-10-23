@@ -21,9 +21,8 @@ struct Regalloc<'a> {
   dom:   &'a DominatorTree,
   alloc: &'a mut VariableRegisters,
 
-  active:        HashMap<RegisterIndex, Variable>,
-  future_active: HashMap<Variable, RegisterIndex>,
-  visited:       HashSet<BlockId>,
+  active:  HashMap<RegisterIndex, Variable>,
+  visited: HashSet<BlockId>,
 
   preference: HashMap<Variable, RegisterIndex>,
 
@@ -76,7 +75,6 @@ impl VariableRegisters {
       alloc: &mut regs,
 
       active:        HashMap::new(),
-      future_active: HashMap::new(),
       visited:       HashSet::new(),
       preference:    HashMap::new(),
       next_variable: last_variable.map(|v| v + 1).unwrap_or(0),
@@ -225,11 +223,7 @@ impl Regalloc<'_> {
       let &InstructionInput::Var(var) = input else { continue };
 
       live_outs.remove(&var);
-      if is_used_later_in_block(block_after_instr, var) {
-        // TODO: Need to figure out if I want pausing or not.
-        //
-        // self.pause(var);
-      } else {
+      if !is_used_later_in_block(block_after_instr, var) {
         self.free(var);
       }
     }
@@ -344,7 +338,7 @@ impl Regalloc<'_> {
   }
 
   fn allocate(&mut self, var: Variable) {
-    let reg = self.future_active.remove(&var).unwrap_or_else(|| self.pick_register(var));
+    let reg = self.pick_register(var);
     println!("allocating {var} = {reg:?}");
     self.active.insert(reg, var);
     self
@@ -353,39 +347,21 @@ impl Regalloc<'_> {
       .set(var, Register { size: var_to_reg_size(var.size()).unwrap(), index: reg });
   }
 
-  fn pause(&mut self, var: Variable) {
-    match self.active.iter().find(|&(_, &v)| v == var) {
-      Some((&reg, _)) => {
-        println!("pausing {var} in {reg:?}");
-        self.active.remove(&reg);
-        self.future_active.insert(var, reg);
-      }
-      None => {
-        println!("pausing {var} (none)");
-      }
-    }
-  }
-
   fn free(&mut self, var: Variable) {
     match self.active.iter().find(|&(_, &v)| v == var) {
       Some((&reg, _)) => {
         println!("freeing {var} in {reg:?}");
         self.active.remove(&reg);
       }
-      None => match self.future_active.remove(&var) {
-        Some(reg) => {
-          println!("freeing {var} in {reg:?} (future)");
-        }
-        None => {
-          println!("freeing {var} (none)");
-        }
-      },
+      None => {
+        println!("freeing {var} (none)");
+      }
     }
   }
 
   fn pick_register(&self, var: Variable) -> RegisterIndex {
     if let Some(pref) = self.preference.get(&var) {
-      if !self.active.contains_key(pref) && !self.future_active.values().any(|&v| v == *pref) {
+      if !self.active.contains_key(pref) {
         return *pref;
       }
     }
@@ -393,9 +369,7 @@ impl Regalloc<'_> {
     for reg_index in 0..16 {
       let reg_index = RegisterIndex::from_usize(reg_index);
 
-      if !self.active.contains_key(&reg_index)
-        && !self.future_active.values().any(|&v| v == reg_index)
-      {
+      if !self.active.contains_key(&reg_index) {
         return reg_index;
       }
     }
