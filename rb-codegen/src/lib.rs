@@ -384,15 +384,13 @@ impl fmt::Display for Phi {
 impl fmt::Display for Instruction {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "{}", self.opcode)?;
-    if self.opcode != Opcode::Syscall {
-      for (i, output) in self.output.iter().enumerate() {
-        if i != 0 {
-          write!(f, ",")?;
-        }
-        write!(f, " {}", output)?;
+    for (i, output) in self.output.iter().enumerate() {
+      if i != 0 {
+        write!(f, ",")?;
       }
-      write!(f, " =")?;
+      write!(f, " {}", output)?;
     }
+    write!(f, " =")?;
     for (i, input) in self.input.iter().enumerate() {
       if i != 0 {
         write!(f, ",")?;
