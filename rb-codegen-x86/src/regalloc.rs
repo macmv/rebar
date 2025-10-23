@@ -151,18 +151,15 @@ impl Regalloc<'_> {
       self.start_intervals(&live_ins, &live_outs);
 
       for i in 0..function.block(block).instructions.len() {
+        println!("= {}", function.block(block).instructions[i]);
+
         self.visit_instr(
+          &mut live_outs,
           InstructionLocation { block, index: i },
-          &mut function.block_mut(block).instructions[i],
+          &mut function.block_mut(block).instructions[i..],
         );
 
         let instr = &function.block(block).instructions[i];
-
-        self.expire_instr_intervals(
-          &mut live_outs,
-          &function.block(block).instructions[i..],
-          instr,
-        );
 
         let &[InstructionOutput::Var(out)] = instr.output.as_slice() else { continue };
         self.allocate(out);
@@ -209,30 +206,20 @@ impl Regalloc<'_> {
     }
   }
 
-  fn expire_instr_intervals(
-    &mut self,
-    live_outs: &mut HashSet<Variable>,
-    block_after_instr: &[Instruction],
-    instr: &Instruction,
-  ) {
-    for input in &instr.input {
-      let &InstructionInput::Var(var) = input else { continue };
-
-      live_outs.remove(&var);
-      if !is_used_later_in_block(block_after_instr, var) {
-        self.free(var);
-      }
-    }
-  }
-
   /// Visiting an instructtion does two things:
   /// - Satisfies register requirements. Some registers may be prefered, but
   ///   variables won't always be allocated to their preference. So, this is
   ///   where we add moves to fix that.
   /// - Move registers we still need that get clobbered.
-  fn visit_instr(&mut self, loc: InstructionLocation, instr: &mut Instruction) {
+  fn visit_instr(
+    &mut self,
+    live_outs: &mut HashSet<Variable>,
+    loc: InstructionLocation,
+    block_after_instr: &mut [Instruction],
+  ) {
     let mut moves = vec![];
 
+    let (instr, block_after_instr) = block_after_instr.split_first_mut().unwrap();
     for (i, input) in instr.input.iter_mut().enumerate() {
       let requirement = match instr.opcode {
         Opcode::Syscall => match i {
@@ -245,57 +232,71 @@ impl Regalloc<'_> {
         _ => None,
       };
 
-      let Some(requirement) = requirement else { continue };
+      if let Some(requirement) = requirement {
+        match input {
+          InstructionInput::Var(v) => match self.active.get(&requirement) {
+            Some(active) if active == v => {}
+            Some(other) => {
+              if is_used_later_in_block(block_after_instr, *other) {
+                println!("saving {other}");
+                moves.push(Move::VarReg { from: *other, to: RegisterIndex::Ebx });
+              }
 
-      match input {
-        InstructionInput::Var(v) => match self.active.get(&requirement) {
-          Some(active) if active == v => {}
-          Some(other) => {
-            println!("saving {other}");
-            moves.push(Move::VarReg { from: *other, to: RegisterIndex::Ebx });
+              println!("moving {v} -> {requirement:?}");
+              let new_var = self.fresh_var(v.size());
+              moves.push(Move::VarVar { from: *v, to: new_var });
+              self.alloc.registers.set_with(
+                new_var,
+                Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
+                || Register::RAX,
+              );
+              *v = new_var;
+            }
+            None => {
+              println!("moving {v} -> {requirement:?}");
+              moves.push(Move::VarReg { from: *v, to: requirement });
+            }
+          },
+          InstructionInput::Imm(imm) => match self.active.get(&requirement) {
+            Some(other) => {
+              if is_used_later_in_block(block_after_instr, *other) {
+                println!("saving {other}");
+                moves.push(Move::VarReg { from: *other, to: RegisterIndex::Ebx });
+              }
 
-            println!("moving {v} -> {requirement:?}");
-            let new_var = self.fresh_var(v.size());
-            moves.push(Move::VarVar { from: *v, to: new_var });
-            self.alloc.registers.set_with(
-              new_var,
-              Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
-              || Register::RAX,
-            );
-            *v = new_var;
-          }
-          None => {
-            println!("moving {v} -> {requirement:?}");
-            moves.push(Move::VarReg { from: *v, to: requirement });
-          }
-        },
-        InstructionInput::Imm(imm) => match self.active.get(&requirement) {
-          Some(other) => {
-            println!("saving {other}");
-            moves.push(Move::VarReg { from: *other, to: RegisterIndex::Ebx });
+              let new_var = self.fresh_var(imm.size());
+              println!("moving {new_var} (new) -> {requirement:?}");
+              moves.push(Move::ImmVar { from: *imm, to: new_var });
+              self.alloc.registers.set_with(
+                new_var,
+                Register { size: var_to_reg_size(imm.size()).unwrap(), index: requirement },
+                || Register::RAX,
+              );
+              *input = InstructionInput::Var(new_var);
+            }
+            None => {
+              let new_var = self.fresh_var(imm.size());
+              println!("moving {new_var} (new) -> {requirement:?}");
+              moves.push(Move::ImmVar { from: *imm, to: new_var });
+              self.alloc.registers.set_with(
+                new_var,
+                Register { size: var_to_reg_size(imm.size()).unwrap(), index: requirement },
+                || Register::RAX,
+              );
+              *input = InstructionInput::Var(new_var);
+            }
+          },
+        }
+      }
 
-            println!("moving new -> {requirement:?}");
-            let new_var = self.fresh_var(imm.size());
-            moves.push(Move::ImmVar { from: *imm, to: new_var });
-            self.alloc.registers.set_with(
-              new_var,
-              Register { size: var_to_reg_size(imm.size()).unwrap(), index: requirement },
-              || Register::RAX,
-            );
-            *input = InstructionInput::Var(new_var);
+      match *input {
+        InstructionInput::Var(v) => {
+          live_outs.remove(&v);
+          if !is_used_later_in_block(block_after_instr, v) {
+            self.free(v);
           }
-          None => {
-            println!("moving new -> {requirement:?}");
-            let new_var = self.fresh_var(imm.size());
-            moves.push(Move::ImmVar { from: *imm, to: new_var });
-            self.alloc.registers.set_with(
-              new_var,
-              Register { size: var_to_reg_size(imm.size()).unwrap(), index: requirement },
-              || Register::RAX,
-            );
-            *input = InstructionInput::Var(new_var);
-          }
-        },
+        }
+        _ => {}
       }
     }
 
@@ -372,8 +373,8 @@ impl Regalloc<'_> {
   }
 }
 
-fn is_used_later_in_block(block: &[Instruction], var: Variable) -> bool {
-  for instr in block.iter().skip(1) {
+fn is_used_later_in_block(after: &[Instruction], var: Variable) -> bool {
+  for instr in after.iter() {
     for input in &instr.input {
       if let InstructionInput::Var(v) = input {
         if *v == var {
