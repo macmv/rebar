@@ -185,11 +185,9 @@ impl Regalloc<'_> {
 
           let reg_index = match i {
             0 => RegisterIndex::Eax,
-            1 => RegisterIndex::Edx,
-            2 => RegisterIndex::Ecx,
-            3 => RegisterIndex::Ebx,
-            4 => RegisterIndex::Esi,
-            5 => RegisterIndex::Edi,
+            1 => RegisterIndex::Edi,
+            2 => RegisterIndex::Esi,
+            3 => RegisterIndex::Edx,
             _ => unreachable!(),
           };
 
@@ -239,11 +237,9 @@ impl Regalloc<'_> {
       let requirement = match instr.opcode {
         Opcode::Syscall => match i {
           0 => Some(RegisterIndex::Eax),
-          1 => Some(RegisterIndex::Edx),
-          2 => Some(RegisterIndex::Ecx),
-          3 => Some(RegisterIndex::Ebx),
-          4 => Some(RegisterIndex::Esi),
-          5 => Some(RegisterIndex::Edi),
+          1 => Some(RegisterIndex::Edi),
+          2 => Some(RegisterIndex::Esi),
+          3 => Some(RegisterIndex::Edx),
           _ => unreachable!(),
         },
         _ => None,
@@ -256,7 +252,7 @@ impl Regalloc<'_> {
           Some(active) if active == v => {}
           Some(other) => {
             println!("saving {other}");
-            moves.push(Move::VarReg { from: *other, to: RegisterIndex::Edi });
+            moves.push(Move::VarReg { from: *other, to: RegisterIndex::Ebx });
 
             println!("moving {v} -> {requirement:?}");
             let new_var = self.fresh_var(v.size());
@@ -276,7 +272,7 @@ impl Regalloc<'_> {
         InstructionInput::Imm(imm) => match self.active.get(&requirement) {
           Some(other) => {
             println!("saving {other}");
-            moves.push(Move::VarReg { from: *other, to: RegisterIndex::Edi });
+            moves.push(Move::VarReg { from: *other, to: RegisterIndex::Ebx });
 
             println!("moving new -> {requirement:?}");
             let new_var = self.fresh_var(imm.size());
@@ -443,11 +439,11 @@ mod tests {
     ]);
 
     assert_eq!(regs.get(v!(r 0)), Register::RAX);
-    assert_eq!(regs.get(v!(r 1)), Register::RDX);
+    assert_eq!(regs.get(v!(r 1)), Register::RDI);
     assert_eq!(regs.get(v!(r 2)), Register::RCX);
     assert_eq!(regs.get(v!(r 3)), Register::RAX);
-    assert_eq!(regs.get(v!(r 4)), Register::RDX);
-    assert_eq!(regs.get(v!(r 5)), Register::RDI);
+    assert_eq!(regs.get(v!(r 4)), Register::RDI);
+    assert_eq!(regs.get(v!(r 5)), Register::RBX);
   }
 
   #[test]
@@ -479,11 +475,11 @@ mod tests {
     ]);
 
     assert_eq!(regs.get(v!(r 0)), Register::RAX);
-    assert_eq!(regs.get(v!(r 1)), Register::RDX);
+    assert_eq!(regs.get(v!(r 1)), Register::RDI);
     assert_eq!(regs.get(v!(r 2)), Register::RAX);
-    assert_eq!(regs.get(v!(r 3)), Register::RDX);
+    assert_eq!(regs.get(v!(r 3)), Register::RDI);
     assert_eq!(regs.get(v!(r 4)), Register::RAX);
-    assert_eq!(regs.get(v!(r 5)), Register::RDX);
+    assert_eq!(regs.get(v!(r 5)), Register::RDI);
   }
 
   #[ignore]
