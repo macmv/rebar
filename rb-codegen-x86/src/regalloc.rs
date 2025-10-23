@@ -75,6 +75,8 @@ impl Regalloc<'_> {
       self.start_intervals(&live_ins, &live_outs);
 
       for (i, instr) in function.block(block).instructions.iter().enumerate() {
+        self.visit_instr(instr);
+
         self.expire_instr_intervals(
           &mut live_outs,
           &function.block(block).instructions[i..],
@@ -139,11 +141,80 @@ impl Regalloc<'_> {
 
       live_outs.remove(&var);
       if is_used_later_in_block(block_after_instr, var) {
-        self.pause(var);
+        // TODO: Need to figure out if I want pausing or not.
+        //
+        // self.pause(var);
       } else {
         self.free(var);
       }
     }
+  }
+
+  /// Visiting an instructtion does two things:
+  /// - Satisfies register requirements. Some registers may be prefered, but
+  ///   variables won't always be allocated to their preference. So, this is
+  ///   where we add moves to fix that.
+  /// - Move registers we still need that get clobbered.
+  fn visit_instr(&mut self, instr: &Instruction) {
+    for (i, input) in instr.input.iter().enumerate() {
+      let requirement = match instr.opcode {
+        Opcode::Syscall => match i {
+          0 => Some(RegisterIndex::Eax),
+          1 => Some(RegisterIndex::Edx),
+          2 => Some(RegisterIndex::Ecx),
+          3 => Some(RegisterIndex::Ebx),
+          4 => Some(RegisterIndex::Esi),
+          5 => Some(RegisterIndex::Edi),
+          _ => unreachable!(),
+        },
+        _ => None,
+      };
+
+      let Some(requirement) = requirement else { continue };
+
+      match input {
+        InstructionInput::Var(v) => match self.active.get(&requirement) {
+          Some(active) if active == v => {}
+          Some(other) => {
+            println!("saving {other}");
+            println!("moving {v} -> {requirement:?}");
+          }
+          None => {
+            println!("moving {v} -> {requirement:?}");
+          }
+        },
+        InstructionInput::Imm(imm) => match self.active.get(&requirement) {
+          Some(other) => {
+            println!("saving {other}");
+            println!("moving new -> {requirement:?}");
+          }
+          None => {
+            println!("moving new -> {requirement:?}");
+          }
+        },
+      }
+    }
+
+    // TODO
+    /*
+    let clobbers: &[RegisterIndex] = match instr.opcode {
+      Opcode::Syscall => &[
+        RegisterIndex::Eax,
+        RegisterIndex::Ecx,
+        RegisterIndex::Edx,
+        RegisterIndex::Ebx,
+        RegisterIndex::Esi,
+        RegisterIndex::Edi,
+      ],
+      _ => &[],
+    };
+
+    for clobber in clobbers {
+      if let Some(&var) = self.active.get(clobber) {
+        println!("clobbering {var} in {clobber:?}");
+      }
+    }
+    */
   }
 
   fn allocate(&mut self, var: Variable) {
@@ -275,6 +346,8 @@ mod tests {
     assert_eq!(regs.get(v!(r 1)), Register::RDX);
     assert_eq!(regs.get(v!(r 2)), Register::RCX);
     assert_eq!(regs.get(v!(r 3)), Register::RAX);
+
+    panic!();
   }
 
   #[ignore]
