@@ -217,7 +217,8 @@ mod tests {
         syscall r0, r1
         mov r2 = 0x02
         syscall r0, r2
-        syscall r0, r1
+        mov r3 = 0x03
+        syscall r3, r1
       ",
     );
 
@@ -230,7 +231,8 @@ mod tests {
         syscall r0, r1
         mov r2 = 0x02
         syscall r0, r2
-        syscall r0, r1
+        mov r3 = 0x03
+        syscall r3, r1
         trap
     "#
     ]);
@@ -238,6 +240,7 @@ mod tests {
     assert_eq!(regs.get(v!(r 0)), Register::RAX);
     assert_eq!(regs.get(v!(r 1)), Register::RDX);
     assert_eq!(regs.get(v!(r 2)), Register::RDX);
+    assert_eq!(regs.get(v!(r 3)), Register::RAX);
 
     panic!();
   }
