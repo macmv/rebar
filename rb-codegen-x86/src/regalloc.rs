@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use rb_codegen::{
-  BlockId, Function, Instruction, InstructionInput, InstructionOutput, Opcode, TVec, Variable,
-  VariableSize,
+  BlockId, Function, Immediate, Instruction, InstructionInput, InstructionOutput, Opcode, TVec,
+  Variable, VariableSize,
 };
 use rb_codegen_opt::analysis::{
   Analysis, control_flow_graph::ControlFlowGraph, dominator_tree::DominatorTree,
@@ -27,7 +27,7 @@ struct Regalloc<'a> {
 
   preference: HashMap<Variable, RegisterIndex>,
 
-  last_variable: u32,
+  next_variable: u32,
   copies:        BTreeMap<InstructionLocation, Vec<Move>>,
 }
 
@@ -40,6 +40,7 @@ struct InstructionLocation {
 enum Move {
   VarReg { from: Variable, to: RegisterIndex },
   VarVar { from: Variable, to: Variable },
+  ImmVar { from: Immediate, to: Variable },
 }
 
 impl VariableRegisters {
@@ -66,21 +67,20 @@ impl VariableRegisters {
             InstructionOutput::Var(v) => Some(v.id()),
           }))
       })
-      .max()
-      .unwrap_or(0);
+      .max();
 
     let mut regs = VariableRegisters::default();
     let mut regalloc = Regalloc {
-      cfg: analysis.get(),
-      dom: analysis.get(),
+      cfg:   analysis.get(),
+      dom:   analysis.get(),
       alloc: &mut regs,
 
-      active: HashMap::new(),
+      active:        HashMap::new(),
       future_active: HashMap::new(),
-      visited: HashSet::new(),
-      preference: HashMap::new(),
-      last_variable,
-      copies: BTreeMap::new(),
+      visited:       HashSet::new(),
+      preference:    HashMap::new(),
+      next_variable: last_variable.map(|v| v + 1).unwrap_or(0),
+      copies:        BTreeMap::new(),
     };
     regalloc.pass(function);
 
@@ -89,8 +89,8 @@ impl VariableRegisters {
       for m in moves.iter().rev() {
         match m {
           Move::VarReg { from, to } => {
-            regalloc.last_variable += 1;
-            let new_var = Variable::new(regalloc.last_variable, from.size());
+            let new_var = Variable::new(regalloc.next_variable, from.size());
+            regalloc.next_variable += 1;
 
             block.instructions.insert(
               loc.index,
@@ -106,6 +106,16 @@ impl VariableRegisters {
             );
           }
           Move::VarVar { from, to } => {
+            block.instructions.insert(
+              loc.index,
+              Instruction {
+                opcode: Opcode::Move,
+                input:  smallvec![(*from).into()],
+                output: smallvec![(*to).into()],
+              },
+            );
+          }
+          Move::ImmVar { from, to } => {
             block.instructions.insert(
               loc.index,
               Instruction {
@@ -247,13 +257,6 @@ impl Regalloc<'_> {
         _ => None,
       };
 
-      match input {
-        InstructionInput::Var(v) => {
-          self.last_variable = self.last_variable.max(v.id());
-        }
-        _ => {}
-      }
-
       let Some(requirement) = requirement else { continue };
 
       match input {
@@ -278,13 +281,31 @@ impl Regalloc<'_> {
             moves.push(Move::VarReg { from: *v, to: requirement });
           }
         },
-        InstructionInput::Imm(_imm) => match self.active.get(&requirement) {
+        InstructionInput::Imm(imm) => match self.active.get(&requirement) {
           Some(other) => {
             println!("saving {other}");
+            moves.push(Move::VarReg { from: *other, to: RegisterIndex::Edi });
+
             println!("moving new -> {requirement:?}");
+            let new_var = self.fresh_var(imm.size());
+            moves.push(Move::ImmVar { from: *imm, to: new_var });
+            self.alloc.registers.set_with(
+              new_var,
+              Register { size: var_to_reg_size(imm.size()).unwrap(), index: requirement },
+              || Register::RAX,
+            );
+            *input = InstructionInput::Var(new_var);
           }
           None => {
             println!("moving new -> {requirement:?}");
+            let new_var = self.fresh_var(imm.size());
+            moves.push(Move::ImmVar { from: *imm, to: new_var });
+            self.alloc.registers.set_with(
+              new_var,
+              Register { size: var_to_reg_size(imm.size()).unwrap(), index: requirement },
+              || Register::RAX,
+            );
+            *input = InstructionInput::Var(new_var);
           }
         },
       }
@@ -317,8 +338,9 @@ impl Regalloc<'_> {
   }
 
   fn fresh_var(&mut self, size: VariableSize) -> Variable {
-    self.last_variable += 1;
-    Variable::new(self.last_variable, size)
+    let v = Variable::new(self.next_variable, size);
+    self.next_variable += 1;
+    v
   }
 
   fn allocate(&mut self, var: Variable) {
@@ -454,6 +476,42 @@ mod tests {
     assert_eq!(regs.get(v!(r 3)), Register::RAX);
     assert_eq!(regs.get(v!(r 4)), Register::RDX);
     assert_eq!(regs.get(v!(r 5)), Register::RDI);
+  }
+
+  #[test]
+  fn syscall_with_imm() {
+    let mut function = parse(
+      "
+      block 0:
+        syscall 0x00, 0x01
+        syscall 0x00, 0x02
+        syscall 0x00, 0x03
+      ",
+    );
+
+    let regs = VariableRegisters::pass(&mut function.function);
+
+    function.check(expect![@r#"
+      block 0:
+        mov r0 = 0x00
+        mov r1 = 0x01
+        syscall r0, r1
+        mov r2 = 0x00
+        mov r3 = 0x02
+        syscall r2, r3
+        mov r4 = 0x00
+        mov r5 = 0x03
+        syscall r4, r5
+        trap
+    "#
+    ]);
+
+    assert_eq!(regs.get(v!(r 0)), Register::RAX);
+    assert_eq!(regs.get(v!(r 1)), Register::RDX);
+    assert_eq!(regs.get(v!(r 2)), Register::RAX);
+    assert_eq!(regs.get(v!(r 3)), Register::RDX);
+    assert_eq!(regs.get(v!(r 4)), Register::RAX);
+    assert_eq!(regs.get(v!(r 5)), Register::RDX);
   }
 
   #[ignore]
