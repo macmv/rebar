@@ -554,12 +554,10 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
                     .with_reg(i.index),
                 ),
                 RegisterSize::Bit32 => builder.instr(
-                  Instruction::new(Opcode::MOV_MR_32.with_rd(o.index))
-                    .with_mod(0b11, o.index)
-                    .with_reg(i.index),
+                  Instruction::new(Opcode::MOV_MR_32).with_mod(0b11, o.index).with_reg(i.index),
                 ),
                 RegisterSize::Bit64 => builder.instr(
-                  Instruction::new(Opcode::MOV_MR_32.with_rd(o.index))
+                  Instruction::new(Opcode::MOV_MR_32)
                     .with_prefix(Prefix::RexW)
                     .with_mod(0b11, o.index)
                     .with_reg(i.index),
