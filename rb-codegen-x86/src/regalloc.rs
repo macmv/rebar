@@ -17,7 +17,6 @@ pub struct VariableRegisters {
 }
 
 struct Regalloc<'a> {
-  cfg:   &'a ControlFlowGraph,
   dom:   &'a DominatorTree,
   alloc: &'a mut VariableRegisters,
 
@@ -70,7 +69,6 @@ impl VariableRegisters {
 
     let mut regs = VariableRegisters::default();
     let mut regalloc = Regalloc {
-      cfg:   analysis.get(),
       dom:   analysis.get(),
       alloc: &mut regs,
 
