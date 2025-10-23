@@ -1,12 +1,13 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use rb_codegen::{
-  Block, BlockId, Function, Instruction, InstructionInput, InstructionOutput, Opcode, TVec,
-  Variable,
+  BlockId, Function, Instruction, InstructionInput, InstructionOutput, Opcode, TVec, Variable,
+  VariableSize,
 };
 use rb_codegen_opt::analysis::{
   Analysis, control_flow_graph::ControlFlowGraph, dominator_tree::DominatorTree,
 };
+use smallvec::smallvec;
 
 use crate::{Register, RegisterIndex, var_to_reg_size};
 
@@ -25,6 +26,20 @@ struct Regalloc<'a> {
   visited:       HashSet<BlockId>,
 
   preference: HashMap<Variable, RegisterIndex>,
+
+  last_variable: u32,
+  copies:        BTreeMap<InstructionLocation, Vec<Move>>,
+}
+
+#[derive(Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct InstructionLocation {
+  block: BlockId,
+  index: usize,
+}
+
+enum Move {
+  VarReg { from: Variable, to: RegisterIndex },
+  VarVar { from: Variable, to: Variable },
 }
 
 impl VariableRegisters {
@@ -36,18 +51,73 @@ impl VariableRegisters {
     analysis.load(DominatorTree::ID, function);
     let _dom = analysis.get::<DominatorTree>();
 
+    let last_variable = function
+      .blocks()
+      .flat_map(|b| function.block(b).instructions.iter())
+      .flat_map(|instr| {
+        instr
+          .input
+          .iter()
+          .filter_map(|input| match input {
+            InstructionInput::Var(v) => Some(v.id()),
+            _ => None,
+          })
+          .chain(instr.output.iter().filter_map(|output| match output {
+            InstructionOutput::Var(v) => Some(v.id()),
+          }))
+      })
+      .max()
+      .unwrap_or(0);
+
     let mut regs = VariableRegisters::default();
     let mut regalloc = Regalloc {
-      cfg:   analysis.get(),
-      dom:   analysis.get(),
+      cfg: analysis.get(),
+      dom: analysis.get(),
       alloc: &mut regs,
 
-      active:        HashMap::new(),
+      active: HashMap::new(),
       future_active: HashMap::new(),
-      visited:       HashSet::new(),
-      preference:    HashMap::new(),
+      visited: HashSet::new(),
+      preference: HashMap::new(),
+      last_variable,
+      copies: BTreeMap::new(),
     };
     regalloc.pass(function);
+
+    for (loc, moves) in regalloc.copies.iter().rev() {
+      let block = function.block_mut(loc.block);
+      for m in moves.iter().rev() {
+        match m {
+          Move::VarReg { from, to } => {
+            regalloc.last_variable += 1;
+            let new_var = Variable::new(regalloc.last_variable, from.size());
+
+            block.instructions.insert(
+              loc.index,
+              Instruction {
+                opcode: Opcode::Move,
+                input:  smallvec![(*from).into()],
+                output: smallvec![new_var.into()],
+              },
+            );
+            regalloc.alloc.registers.set(
+              new_var,
+              Register { size: var_to_reg_size(new_var.size()).unwrap(), index: *to },
+            );
+          }
+          Move::VarVar { from, to } => {
+            block.instructions.insert(
+              loc.index,
+              Instruction {
+                opcode: Opcode::Move,
+                input:  smallvec![(*from).into()],
+                output: smallvec![(*to).into()],
+              },
+            );
+          }
+        }
+      }
+    }
 
     regs
   }
@@ -63,7 +133,7 @@ impl VariableRegisters {
 }
 
 impl Regalloc<'_> {
-  pub fn pass(&mut self, function: &Function) {
+  pub fn pass(&mut self, function: &mut Function) {
     self.pre_allocation(function);
 
     let mut live_outs = HashSet::new();
@@ -74,8 +144,13 @@ impl Regalloc<'_> {
       self.expire_intervals(&live_ins, &live_outs);
       self.start_intervals(&live_ins, &live_outs);
 
-      for (i, instr) in function.block(block).instructions.iter().enumerate() {
-        self.visit_instr(instr);
+      for i in 0..function.block(block).instructions.len() {
+        self.visit_instr(
+          InstructionLocation { block, index: i },
+          &mut function.block_mut(block).instructions[i],
+        );
+
+        let instr = &function.block(block).instructions[i];
 
         self.expire_instr_intervals(
           &mut live_outs,
@@ -155,8 +230,10 @@ impl Regalloc<'_> {
   ///   variables won't always be allocated to their preference. So, this is
   ///   where we add moves to fix that.
   /// - Move registers we still need that get clobbered.
-  fn visit_instr(&mut self, instr: &Instruction) {
-    for (i, input) in instr.input.iter().enumerate() {
+  fn visit_instr(&mut self, loc: InstructionLocation, instr: &mut Instruction) {
+    let mut moves = vec![];
+
+    for (i, input) in instr.input.iter_mut().enumerate() {
       let requirement = match instr.opcode {
         Opcode::Syscall => match i {
           0 => Some(RegisterIndex::Eax),
@@ -170,6 +247,13 @@ impl Regalloc<'_> {
         _ => None,
       };
 
+      match input {
+        InstructionInput::Var(v) => {
+          self.last_variable = self.last_variable.max(v.id());
+        }
+        _ => {}
+      }
+
       let Some(requirement) = requirement else { continue };
 
       match input {
@@ -177,13 +261,24 @@ impl Regalloc<'_> {
           Some(active) if active == v => {}
           Some(other) => {
             println!("saving {other}");
+            moves.push(Move::VarReg { from: *other, to: RegisterIndex::Edi });
+
             println!("moving {v} -> {requirement:?}");
+            let new_var = self.fresh_var(v.size());
+            moves.push(Move::VarVar { from: *v, to: new_var });
+            self.alloc.registers.set_with(
+              new_var,
+              Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
+              || Register::RAX,
+            );
+            *v = new_var;
           }
           None => {
             println!("moving {v} -> {requirement:?}");
+            moves.push(Move::VarReg { from: *v, to: requirement });
           }
         },
-        InstructionInput::Imm(imm) => match self.active.get(&requirement) {
+        InstructionInput::Imm(_imm) => match self.active.get(&requirement) {
           Some(other) => {
             println!("saving {other}");
             println!("moving new -> {requirement:?}");
@@ -193,6 +288,10 @@ impl Regalloc<'_> {
           }
         },
       }
+    }
+
+    if !moves.is_empty() {
+      self.copies.insert(loc, moves);
     }
 
     // TODO
@@ -215,6 +314,11 @@ impl Regalloc<'_> {
       }
     }
     */
+  }
+
+  fn fresh_var(&mut self, size: VariableSize) -> Variable {
+    self.last_variable += 1;
+    Variable::new(self.last_variable, size)
   }
 
   fn allocate(&mut self, var: Variable) {
@@ -335,7 +439,9 @@ mod tests {
         mov r1 = 0x00
         syscall r0, r1
         mov r2 = 0x02
-        syscall r0, r2
+        mov r5 = r1
+        mov r4 = r2
+        syscall r0, r4
         mov r3 = 0x03
         syscall r3, r1
         trap
@@ -346,8 +452,8 @@ mod tests {
     assert_eq!(regs.get(v!(r 1)), Register::RDX);
     assert_eq!(regs.get(v!(r 2)), Register::RCX);
     assert_eq!(regs.get(v!(r 3)), Register::RAX);
-
-    panic!();
+    assert_eq!(regs.get(v!(r 4)), Register::RDX);
+    assert_eq!(regs.get(v!(r 5)), Register::RDI);
   }
 
   #[ignore]
