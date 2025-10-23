@@ -175,15 +175,20 @@ impl Regalloc<'_> {
         println!("freeing {var} in {reg:?}");
         self.active.remove(&reg);
       }
-      None => {
-        println!("freeing {var} (none)");
-      }
+      None => match self.future_active.remove(&var) {
+        Some(reg) => {
+          println!("freeing {var} in {reg:?} (future)");
+        }
+        None => {
+          println!("freeing {var} (none)");
+        }
+      },
     }
   }
 
   fn pick_register(&self, var: Variable) -> RegisterIndex {
     if let Some(pref) = self.preference.get(&var) {
-      if !self.active.contains_key(pref) {
+      if !self.active.contains_key(pref) && !self.future_active.values().any(|&v| v == *pref) {
         return *pref;
       }
     }
@@ -191,7 +196,9 @@ impl Regalloc<'_> {
     for reg_index in 0..16 {
       let reg_index = RegisterIndex::from_usize(reg_index);
 
-      if !self.active.contains_key(&reg_index) {
+      if !self.active.contains_key(&reg_index)
+        && !self.future_active.values().any(|&v| v == reg_index)
+      {
         return reg_index;
       }
     }
@@ -266,10 +273,8 @@ mod tests {
 
     assert_eq!(regs.get(v!(r 0)), Register::RAX);
     assert_eq!(regs.get(v!(r 1)), Register::RDX);
-    assert_eq!(regs.get(v!(r 2)), Register::RDX);
+    assert_eq!(regs.get(v!(r 2)), Register::RCX);
     assert_eq!(regs.get(v!(r 3)), Register::RAX);
-
-    panic!();
   }
 
   #[ignore]
