@@ -164,8 +164,10 @@ impl Regalloc<'_> {
         let instr = &function.block(block).instructions[i];
 
         let &[InstructionOutput::Var(out)] = instr.output.as_slice() else { continue };
-        self.allocate(out);
-        live_outs.insert(out);
+        if is_used_later_in_block(&function.block(block).instructions[i + 1..], out) {
+          self.allocate(out);
+          live_outs.insert(out);
+        }
       }
 
       self.visited.insert(block);
