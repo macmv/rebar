@@ -96,9 +96,10 @@ impl VariableRegisters {
                 output: smallvec![new_var.into()],
               },
             );
-            regalloc.alloc.registers.set(
+            regalloc.alloc.registers.set_with(
               new_var,
               Register { size: var_to_reg_size(new_var.size()).unwrap(), index: *to },
+              || Register::RAX,
             );
           }
           Move::VarVar { from, to } => {
@@ -338,10 +339,11 @@ impl Regalloc<'_> {
     let reg = self.pick_register(var);
     println!("allocating {var} = {reg:?}");
     self.active.insert(reg, var);
-    self
-      .alloc
-      .registers
-      .set(var, Register { size: var_to_reg_size(var.size()).unwrap(), index: reg });
+    self.alloc.registers.set_with(
+      var,
+      Register { size: var_to_reg_size(var.size()).unwrap(), index: reg },
+      || Register::RAX,
+    );
   }
 
   fn free(&mut self, var: Variable) {

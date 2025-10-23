@@ -29,6 +29,7 @@ where
   K: TIndex<T>,
 {
   pub fn get(&self, index: K) -> Option<&T> { self.0.get(index.to_index()) }
+  #[track_caller]
   pub fn set(&mut self, index: K, value: T) {
     let idx = index.to_index();
     if self.0.len() == idx {
