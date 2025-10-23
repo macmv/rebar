@@ -125,6 +125,8 @@ impl VariableRegisters {
       }
     }
 
+    println!("{function}");
+
     regs
   }
 
@@ -232,18 +234,28 @@ impl Regalloc<'_> {
         _ => None,
       };
 
+      let prev = requirement.map(|r| self.active.get(&r).copied());
+
+      match *input {
+        InstructionInput::Var(v) => {
+          live_outs.remove(&v);
+          if !is_used_later_in_block(block_after_instr, v) {
+            self.free(v);
+          }
+        }
+        _ => {}
+      }
+
       if let Some(requirement) = requirement {
         match input {
-          InstructionInput::Var(v) => match self.active.get(&requirement) {
-            Some(active) if active == v => {}
+          InstructionInput::Var(v) => match prev.unwrap() {
+            Some(active) if active == *v => {}
             Some(other) => {
-              if is_used_later_in_block(block_after_instr, *other) {
-                println!("saving {other}");
-                moves.push(Move::VarReg { from: *other, to: RegisterIndex::Ebx });
-              }
+              println!("saving {other}");
+              moves.push(Move::VarReg { from: other, to: RegisterIndex::Ebx });
 
-              println!("moving {v} -> {requirement:?}");
               let new_var = self.fresh_var(v.size());
+              println!("moving {v} -> {requirement:?} {new_var} (tmp)");
               moves.push(Move::VarVar { from: *v, to: new_var });
               self.alloc.registers.set_with(
                 new_var,
@@ -257,15 +269,13 @@ impl Regalloc<'_> {
               moves.push(Move::VarReg { from: *v, to: requirement });
             }
           },
-          InstructionInput::Imm(imm) => match self.active.get(&requirement) {
+          InstructionInput::Imm(imm) => match prev.unwrap() {
             Some(other) => {
-              if is_used_later_in_block(block_after_instr, *other) {
-                println!("saving {other}");
-                moves.push(Move::VarReg { from: *other, to: RegisterIndex::Ebx });
-              }
+              println!("saving {other}");
+              moves.push(Move::VarReg { from: other, to: RegisterIndex::Ebx });
 
               let new_var = self.fresh_var(imm.size());
-              println!("moving {new_var} (new) -> {requirement:?}");
+              println!("moving {new_var} (tmp) -> {requirement:?}");
               moves.push(Move::ImmVar { from: *imm, to: new_var });
               self.alloc.registers.set_with(
                 new_var,
@@ -276,7 +286,7 @@ impl Regalloc<'_> {
             }
             None => {
               let new_var = self.fresh_var(imm.size());
-              println!("moving {new_var} (new) -> {requirement:?}");
+              println!("moving {new_var} (tmp) -> {requirement:?}");
               moves.push(Move::ImmVar { from: *imm, to: new_var });
               self.alloc.registers.set_with(
                 new_var,
@@ -287,16 +297,6 @@ impl Regalloc<'_> {
             }
           },
         }
-      }
-
-      match *input {
-        InstructionInput::Var(v) => {
-          live_outs.remove(&v);
-          if !is_used_later_in_block(block_after_instr, v) {
-            self.free(v);
-          }
-        }
-        _ => {}
       }
     }
 
