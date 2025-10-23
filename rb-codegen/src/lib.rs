@@ -40,6 +40,11 @@ impl<T> TIndex<T> for BlockId {
   fn to_index(self) -> usize { self.0 as usize }
 }
 
+impl<T> TIndex<T> for Variable {
+  fn from_index(index: usize) -> Self { Variable::new(index as u32, VariableSize::Bit64) }
+  fn to_index(self) -> usize { self.id() as usize }
+}
+
 impl fmt::Debug for Variable {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     write!(f, "v{}:{:?}", self.id(), self.size())

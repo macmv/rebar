@@ -58,13 +58,15 @@ pub fn parse(asm: &str) -> Function {
       "syscall" => {
         let mut input = smallvec![];
         for ret in args.split(',') {
-          let ret = ret.trim();
-          if ret.is_empty() {
+          let arg = ret.trim();
+          if arg.is_empty() {
             continue;
           }
 
-          let var = parse_variable_id(ret).unwrap();
-          input.push(InstructionInput::Var(var));
+          let arg = parse_variable_id(arg)
+            .map(InstructionInput::Var)
+            .unwrap_or_else(|| parse_hex(arg).unwrap().into());
+          input.push(arg);
         }
 
         function.blocks.last_mut().unwrap().instructions.push(Instruction {

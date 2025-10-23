@@ -19,7 +19,7 @@ bitflags! {
 
 const _INSTR_SIZE: () = assert!(std::mem::size_of::<Instruction>() == 16);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u8)]
 pub enum RegisterIndex {
   Eax,
@@ -208,6 +208,16 @@ impl Instruction {
   }
 
   pub fn immediate(&self) -> Immediate { self.immediate }
+}
+
+impl RegisterIndex {
+  pub fn from_usize(value: usize) -> Self {
+    if value >= 8 {
+      panic!("invalid register index: {}", value);
+    }
+
+    unsafe { std::mem::transmute::<u8, RegisterIndex>(value as u8) }
+  }
 }
 
 impl Opcode {
