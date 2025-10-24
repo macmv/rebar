@@ -31,7 +31,7 @@ struct Regalloc<'a> {
   copies:        BTreeMap<InstructionLocation, Vec<Move>>,
 }
 
-#[derive(Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct InstructionLocation {
   block: BlockId,
   index: usize,
@@ -154,22 +154,19 @@ impl Regalloc<'_> {
       let live_ins = HashSet::new(); // "set of instructions live into `block`"
 
       self.expire_intervals(&live_ins, &live_outs);
-      self.start_intervals(&live_ins, &live_outs);
+      self.start_intervals(block, &live_ins, &live_outs);
 
       for i in 0..function.block(block).instructions.len() {
+        let loc = InstructionLocation { block, index: i };
         println!("= {}", function.block(block).instructions[i]);
 
-        self.visit_instr(
-          &mut live_outs,
-          InstructionLocation { block, index: i },
-          &mut function.block_mut(block).instructions[i..],
-        );
+        self.visit_instr(&mut live_outs, loc, &mut function.block_mut(block).instructions[i..]);
 
         let instr = &function.block(block).instructions[i];
 
         let &[InstructionOutput::Var(out)] = instr.output.as_slice() else { continue };
         if self.is_used_later(&function.block(block).instructions[i + 1..], out) {
-          self.allocate(out);
+          self.allocate(loc, out);
           live_outs.insert(out);
         }
       }
@@ -206,9 +203,15 @@ impl Regalloc<'_> {
     }
   }
 
-  fn start_intervals(&mut self, live_ins: &HashSet<Variable>, live_outs: &HashSet<Variable>) {
+  fn start_intervals(
+    &mut self,
+    block: BlockId,
+    live_ins: &HashSet<Variable>,
+    live_outs: &HashSet<Variable>,
+  ) {
+    let loc = InstructionLocation { block, index: 0 };
     for &var in live_ins.iter().filter(|&&v| !live_outs.contains(&v)) {
-      self.allocate(var);
+      self.allocate(loc, var);
     }
   }
 
@@ -336,8 +339,8 @@ impl Regalloc<'_> {
     v
   }
 
-  fn allocate(&mut self, var: Variable) {
-    let reg = self.pick_register(var);
+  fn allocate(&mut self, loc: InstructionLocation, var: Variable) {
+    let reg = self.pick_register(loc, var);
     println!("allocating {var} = {reg:?}");
     self.active.insert(reg, var);
     self.alloc.registers.set_with(
@@ -359,10 +362,20 @@ impl Regalloc<'_> {
     }
   }
 
-  fn pick_register(&self, var: Variable) -> RegisterIndex {
-    if let Some(pref) = self.preference.get(&var) {
-      if !self.active.contains_key(pref) {
-        return *pref;
+  fn pick_register(&mut self, loc: InstructionLocation, var: Variable) -> RegisterIndex {
+    if let Some(&pref) = self.preference.get(&var) {
+      match self.active.get(&pref) {
+        Some(&other) if other != var => {
+          println!("saving {other} (for pref)");
+          self
+            .copies
+            .entry(loc)
+            .or_default()
+            .push(Move::VarReg { from: other, to: RegisterIndex::Ebx });
+
+          return pref;
+        }
+        _ => return pref,
       }
     }
 
