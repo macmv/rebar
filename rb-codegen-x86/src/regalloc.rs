@@ -174,6 +174,13 @@ impl Regalloc<'_> {
         if self.is_used_later(&function.block(block).instructions[i + 1..], out) {
           self.allocate(loc, out);
           live_outs.insert(out);
+        } else {
+          let reg = self.pick_register(loc, out);
+          self.alloc.registers.set_with(
+            out,
+            Register { size: var_to_reg_size(out.size()).unwrap(), index: reg },
+            || Register::RAX,
+          );
         }
       }
     }
