@@ -759,46 +759,7 @@ mod tests {
 
   #[test]
   fn mov_small_variables() {
-    let function = rb_codegen::Function {
-      sig:          Signature { args: vec![], rets: vec![] },
-      blocks:       vec![rb_codegen::Block {
-        phis:         vec![],
-        instructions: vec![
-          rb_codegen::Instruction {
-            opcode: rb_codegen::Opcode::Move,
-            input:  smallvec::smallvec![rb_codegen::Immediate::Unsigned(3).into()],
-            output: smallvec::smallvec![Variable::new(0, VariableSize::Bit8).into()],
-          },
-          rb_codegen::Instruction {
-            opcode: rb_codegen::Opcode::Move,
-            input:  smallvec::smallvec![rb_codegen::Immediate::Unsigned(5).into()],
-            output: smallvec::smallvec![Variable::new(1, VariableSize::Bit16).into()],
-          },
-          rb_codegen::Instruction {
-            opcode: rb_codegen::Opcode::Move,
-            input:  smallvec::smallvec![rb_codegen::Immediate::Unsigned(7).into()],
-            output: smallvec::smallvec![Variable::new(2, VariableSize::Bit32).into()],
-          },
-          rb_codegen::Instruction {
-            opcode: rb_codegen::Opcode::Move,
-            input:  smallvec::smallvec![rb_codegen::Immediate::Unsigned(9).into()],
-            output: smallvec::smallvec![Variable::new(3, VariableSize::Bit64).into()],
-          },
-          rb_codegen::Instruction {
-            opcode: rb_codegen::Opcode::Move,
-            input:  smallvec::smallvec![
-              rb_codegen::Immediate::Unsigned(u32::MAX as u64 + 5).into()
-            ],
-            output: smallvec::smallvec![Variable::new(4, VariableSize::Bit64).into()],
-          },
-        ],
-        terminator:   rb_codegen::TerminatorInstruction::Trap,
-      }],
-      data:         vec![],
-      data_symbols: vec![],
-    };
-
-    let f2 = parse(
+    let function = parse(
       "
       block 0:
         mov l0 = 0x03
@@ -808,8 +769,8 @@ mod tests {
         mov r4 = 0x100000004
         trap
       ",
-    );
-    assert_eq!(function, f2.function);
+    )
+    .function;
 
     let builder = lower(function);
 
