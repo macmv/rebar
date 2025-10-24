@@ -4,10 +4,7 @@ use rb_codegen::{
   BlockId, Function, Immediate, Instruction, InstructionInput, InstructionOutput, Opcode, TVec,
   Variable, VariableSize,
 };
-use rb_codegen_opt::analysis::{
-  Analysis, control_flow_graph::ControlFlowGraph, dominator_tree::DominatorTree,
-  value_uses::ValueUses,
-};
+use rb_codegen_opt::analysis::{Analysis, dominator_tree::DominatorTree, value_uses::ValueUses};
 use smallvec::smallvec;
 
 use crate::{Register, RegisterIndex, var_to_reg_size};
@@ -27,8 +24,12 @@ struct Regalloc<'a> {
 
   preference: HashMap<Variable, RegisterIndex>,
 
-  next_variable: u32,
-  copies:        BTreeMap<InstructionLocation, Vec<Move>>,
+  first_new_variable: u32,
+  next_variable:      u32,
+  copies:             BTreeMap<InstructionLocation, Vec<Move>>,
+
+  rehomes:         HashMap<Variable, Variable>,
+  rehomes_reverse: HashMap<Variable, Variable>,
 }
 
 #[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -67,18 +68,23 @@ impl VariableRegisters {
           }))
       })
       .max();
+    let first_new_variable = last_variable.map(|v| v + 1).unwrap_or(0);
 
     let mut regs = VariableRegisters::default();
     let mut regalloc = Regalloc {
-      dom:   analysis.get(),
-      vu:    analysis.get(),
+      dom: analysis.get(),
+      vu: analysis.get(),
       alloc: &mut regs,
 
-      active:        HashMap::new(),
-      visited:       HashSet::new(),
-      preference:    HashMap::new(),
-      next_variable: last_variable.map(|v| v + 1).unwrap_or(0),
-      copies:        BTreeMap::new(),
+      active: HashMap::new(),
+      visited: HashSet::new(),
+      preference: HashMap::new(),
+      first_new_variable,
+      next_variable: first_new_variable,
+      copies: BTreeMap::new(),
+
+      rehomes: HashMap::new(),
+      rehomes_reverse: HashMap::new(),
     };
     regalloc.pass(function);
 
@@ -243,11 +249,15 @@ impl Regalloc<'_> {
 
       let prev = requirement.map(|r| self.active.get(&r).copied());
 
-      match *input {
+      match input {
         InstructionInput::Var(v) => {
-          live_outs.remove(&v);
-          if !self.is_used_later(block_after_instr, v) {
-            self.free(v);
+          while let Some(&new_v) = self.rehomes.get(v) {
+            *v = new_v;
+          }
+
+          live_outs.remove(v);
+          if !self.is_used_later(block_after_instr, *v) {
+            self.free(*v);
           }
         }
         _ => {}
@@ -273,7 +283,14 @@ impl Regalloc<'_> {
             }
             None => {
               println!("moving {v} -> {requirement:?}");
-              moves.push(Move::VarReg { from: *v, to: requirement });
+              let new_var = self.fresh_var(v.size());
+              moves.push(Move::VarVar { from: *v, to: new_var });
+              self.alloc.registers.set_with(
+                new_var,
+                Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
+                || Register::RAX,
+              );
+              *v = new_var;
             }
           },
           InstructionInput::Imm(imm) => match prev.unwrap() {
@@ -367,11 +384,8 @@ impl Regalloc<'_> {
       match self.active.get(&pref) {
         Some(&other) if other != var => {
           println!("saving {other} (for pref)");
-          self
-            .copies
-            .entry(loc)
-            .or_default()
-            .push(Move::VarReg { from: other, to: RegisterIndex::Ebx });
+          self.active.remove(&pref);
+          self.rehome(loc, other);
 
           return pref;
         }
@@ -390,7 +404,26 @@ impl Regalloc<'_> {
     panic!("no registers available for variable {var:?}");
   }
 
+  fn rehome(&mut self, loc: InstructionLocation, var: Variable) {
+    let new_var = self.fresh_var(var.size());
+    let new_reg = self.pick_register(loc, new_var);
+    self.alloc.registers.set_with(
+      new_var,
+      Register { size: var_to_reg_size(var.size()).unwrap(), index: new_reg },
+      || Register::RAX,
+    );
+    self.active.insert(new_reg, new_var);
+
+    self.copies.entry(loc).or_default().push(Move::VarVar { from: var, to: new_var });
+    self.rehomes.insert(var, new_var);
+    self.rehomes_reverse.insert(new_var, var);
+  }
+
   fn is_used_later(&self, after: &[Instruction], var: Variable) -> bool {
+    if self.is_tmp_var(var) {
+      return false;
+    }
+
     let is_used_in_later_block = self
       .vu
       .variable(var)
@@ -401,6 +434,8 @@ impl Regalloc<'_> {
 
     is_used_in_later_block || is_used_in_block
   }
+
+  fn is_tmp_var(&self, var: Variable) -> bool { var.id() >= self.first_new_variable }
 }
 
 fn is_used_later_in_block(after: &[Instruction], var: Variable) -> bool {
@@ -459,12 +494,12 @@ mod tests {
         mov r0 = 0x01
         mov r1 = 0x00
         syscall = r0, r1
-        mov r5 = r1
+        mov r4 = r1
         mov r2 = 0x02
         syscall = r0, r2
         mov r3 = 0x03
-        mov r4 = r1
-        syscall = r3, r1
+        mov r5 = r4
+        syscall = r3, r5
         trap
     "#
     ]);
@@ -473,8 +508,8 @@ mod tests {
     assert_eq!(regs.get(v!(r 1)), Register::RDI);
     assert_eq!(regs.get(v!(r 2)), Register::RDI);
     assert_eq!(regs.get(v!(r 3)), Register::RAX);
-    assert_eq!(regs.get(v!(r 4)), Register::RDI);
-    assert_eq!(regs.get(v!(r 5)), Register::RBX);
+    assert_eq!(regs.get(v!(r 4)), Register::RCX);
+    assert_eq!(regs.get(v!(r 5)), Register::RDI);
   }
 
   #[test]
