@@ -458,20 +458,20 @@ mod tests {
       block 0:
         mov r0 = 0x01
         mov r1 = 0x00
-        syscall r0, r1
-        mov r2 = 0x02
+        syscall = r0, r1
         mov r5 = r1
-        mov r4 = r2
-        syscall r0, r4
+        mov r2 = 0x02
+        syscall = r0, r2
         mov r3 = 0x03
-        syscall r3, r1
+        mov r4 = r1
+        syscall = r3, r1
         trap
     "#
     ]);
 
     assert_eq!(regs.get(v!(r 0)), Register::RAX);
     assert_eq!(regs.get(v!(r 1)), Register::RDI);
-    assert_eq!(regs.get(v!(r 2)), Register::RCX);
+    assert_eq!(regs.get(v!(r 2)), Register::RDI);
     assert_eq!(regs.get(v!(r 3)), Register::RAX);
     assert_eq!(regs.get(v!(r 4)), Register::RDI);
     assert_eq!(regs.get(v!(r 5)), Register::RBX);
