@@ -201,13 +201,7 @@ impl Function {
   pub fn entry(&self) -> BlockId { BlockId::new(0) }
 
   pub fn instructions(&self) -> impl Iterator<Item = AnyInstructionRef<'_>> {
-    self.blocks.iter().flat_map(|b| {
-      b.phis
-        .iter()
-        .map(AnyInstructionRef::Phi)
-        .chain(b.instructions.iter().map(AnyInstructionRef::Instr))
-        .chain(std::iter::once(&b.terminator).map(AnyInstructionRef::Term))
-    })
+    self.blocks.iter().flat_map(|b| b.instructions())
   }
 
   pub fn blocks(&self) -> impl Iterator<Item = BlockId> + use<> {
@@ -268,6 +262,17 @@ impl Function {
         }
       }
     }
+  }
+}
+
+impl Block {
+  fn instructions(&self) -> impl Iterator<Item = AnyInstructionRef<'_>> {
+    self
+      .phis
+      .iter()
+      .map(AnyInstructionRef::Phi)
+      .chain(self.instructions.iter().map(AnyInstructionRef::Instr))
+      .chain(std::iter::once(&self.terminator).map(AnyInstructionRef::Term))
   }
 }
 
