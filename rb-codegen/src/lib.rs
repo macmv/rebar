@@ -265,6 +265,61 @@ impl Function {
   }
 }
 
+enum InstructionInputIter<'a> {
+  Phi(std::iter::Flatten<std::collections::btree_map::Values<'a, BlockId, Option<Variable>>>),
+  Slice(std::slice::Iter<'a, InstructionInput>),
+}
+enum InstructionOutputIter<'a> {
+  Phi(std::iter::Once<InstructionOutput>),
+  Slice(std::slice::Iter<'a, InstructionOutput>),
+}
+
+impl Iterator for InstructionInputIter<'_> {
+  type Item = InstructionInput;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    match self {
+      InstructionInputIter::Phi(iter) => iter.next().map(|v| InstructionInput::Var(*v)),
+      InstructionInputIter::Slice(iter) => iter.next().copied(),
+    }
+  }
+}
+
+impl Iterator for InstructionOutputIter<'_> {
+  type Item = InstructionOutput;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    match self {
+      InstructionOutputIter::Phi(iter) => iter.next(),
+      InstructionOutputIter::Slice(iter) => iter.next().copied(),
+    }
+  }
+}
+
+impl AnyInstructionRef<'_> {
+  pub fn outputs(&self) -> impl Iterator<Item = InstructionOutput> {
+    match self {
+      AnyInstructionRef::Phi(phi) => {
+        InstructionOutputIter::Phi(std::iter::once(InstructionOutput::Var(phi.to)))
+      }
+      AnyInstructionRef::Instr(instr) => InstructionOutputIter::Slice(instr.output.iter()),
+      AnyInstructionRef::Term(_) => InstructionOutputIter::Slice([].iter()),
+    }
+  }
+
+  pub fn inputs(&self) -> impl Iterator<Item = InstructionInput> {
+    match self {
+      AnyInstructionRef::Phi(phi) => InstructionInputIter::Phi(phi.from.values().flatten()),
+      AnyInstructionRef::Instr(instr) => InstructionInputIter::Slice(instr.input.iter()),
+      AnyInstructionRef::Term(term) => InstructionInputIter::Slice(match term {
+        TerminatorInstruction::Jump(_) => [].iter(),
+        TerminatorInstruction::Return(rets) => rets.iter(),
+        TerminatorInstruction::Trap => [].iter(),
+      }),
+    }
+  }
+}
+
 impl From<Variable> for InstructionInput {
   fn from(v: Variable) -> Self { InstructionInput::Var(v) }
 }
