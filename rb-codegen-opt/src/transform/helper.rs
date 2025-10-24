@@ -1,4 +1,6 @@
-use rb_codegen::{Block, Function, Instruction, InstructionInput, InstructionOutput, Variable};
+use rb_codegen::{
+  Block, BlockId, Function, Instruction, InstructionInput, InstructionOutput, Variable,
+};
 
 #[allow(dead_code)]
 pub trait InstructionViewMut {
@@ -106,5 +108,25 @@ pub fn transform_variables(mut view: impl InstructionViewMut, transform: impl Fn
       let InstructionOutput::Var(var) = output;
       transform(var);
     }
+  }
+}
+
+pub fn redirect_jumps(block: &mut Block, from: BlockId, to: BlockId) {
+  for instr in &mut block.instructions {
+    match &mut instr.opcode {
+      rb_codegen::Opcode::Branch(_, block) if *block == from => {
+        *block = to;
+      }
+
+      _ => {}
+    }
+  }
+
+  match &mut block.terminator {
+    rb_codegen::TerminatorInstruction::Jump(block) if *block == from => {
+      *block = to;
+    }
+
+    _ => {}
   }
 }

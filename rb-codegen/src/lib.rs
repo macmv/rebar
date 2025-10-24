@@ -211,6 +211,7 @@ impl Function {
   pub fn block(&self, id: BlockId) -> &Block { &self.blocks[id.as_u32() as usize] }
   pub fn block_mut(&mut self, id: BlockId) -> &mut Block { &mut self.blocks[id.as_u32() as usize] }
 
+  #[track_caller]
   pub fn two_blocks_mut(&mut self, a: BlockId, b: BlockId) -> (&mut Block, &mut Block) {
     assert!(a != b, "cannot get two mutable references to the same block");
 

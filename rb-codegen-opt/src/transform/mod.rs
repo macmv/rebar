@@ -78,7 +78,7 @@ macro_rules! passes {
 
 passes![
   constant_fold::ConstantFold,
-  // eliminate_empty_blocks::EliminateEmptyBlocks,
+  eliminate_empty_blocks::EliminateEmptyBlocks,
   // eliminate_nop_assign::EliminateNopAssign,
   // eliminate_nop_math::EliminateNopMath,
   eliminate_unreachable_blocks::EliminateUnreachableBlocks,
