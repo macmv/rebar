@@ -30,6 +30,15 @@ pub enum RegisterIndex {
   Ebp,
   Esi,
   Edi,
+
+  R8,
+  R9,
+  R10,
+  R11,
+  R12,
+  R13,
+  R14,
+  R15,
 }
 
 #[derive(Clone, Copy)]
@@ -213,7 +222,7 @@ impl Instruction {
 impl RegisterIndex {
   #[track_caller]
   pub fn from_usize(value: usize) -> Self {
-    if value >= 8 {
+    if value >= 16 {
       panic!("invalid register index: {}", value);
     }
 
