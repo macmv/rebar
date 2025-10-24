@@ -217,6 +217,18 @@ impl Function {
   pub fn block(&self, id: BlockId) -> &Block { &self.blocks[id.as_u32() as usize] }
   pub fn block_mut(&mut self, id: BlockId) -> &mut Block { &mut self.blocks[id.as_u32() as usize] }
 
+  pub fn two_blocks_mut(&mut self, a: BlockId, b: BlockId) -> (&mut Block, &mut Block) {
+    assert!(a != b, "cannot get two mutable references to the same block");
+
+    if a.as_u32() < b.as_u32() {
+      let (left, right) = self.blocks.split_at_mut(b.as_u32() as usize);
+      (&mut left[a.as_u32() as usize], &mut right[0])
+    } else {
+      let (left, right) = self.blocks.split_at_mut(a.as_u32() as usize);
+      (&mut right[0], &mut left[b.as_u32() as usize])
+    }
+  }
+
   pub fn retain_blocks(&mut self, f: impl Fn(BlockId) -> bool) {
     let mut i = 0;
     let mut new_id = 0;
