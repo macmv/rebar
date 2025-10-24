@@ -6,6 +6,7 @@ use rb_codegen::{
 };
 use rb_codegen_opt::analysis::{
   Analysis, control_flow_graph::ControlFlowGraph, dominator_tree::DominatorTree,
+  value_uses::ValueUses,
 };
 use smallvec::smallvec;
 
@@ -18,6 +19,7 @@ pub struct VariableRegisters {
 
 struct Regalloc<'a> {
   dom:   &'a DominatorTree,
+  vu:    &'a ValueUses,
   alloc: &'a mut VariableRegisters,
 
   active:  HashMap<RegisterIndex, Variable>,
@@ -46,9 +48,8 @@ impl VariableRegisters {
     println!("{function}");
 
     let mut analysis = Analysis::default();
-    analysis.load(ControlFlowGraph::ID, function);
     analysis.load(DominatorTree::ID, function);
-    let _dom = analysis.get::<DominatorTree>();
+    analysis.load(ValueUses::ID, function);
 
     let last_variable = function
       .blocks()
@@ -70,6 +71,7 @@ impl VariableRegisters {
     let mut regs = VariableRegisters::default();
     let mut regalloc = Regalloc {
       dom:   analysis.get(),
+      vu:    analysis.get(),
       alloc: &mut regs,
 
       active:        HashMap::new(),
@@ -148,6 +150,7 @@ impl Regalloc<'_> {
     let mut live_outs = HashSet::new();
 
     for block in self.dom.preorder() {
+      self.visited.insert(block);
       let live_ins = HashSet::new(); // "set of instructions live into `block`"
 
       self.expire_intervals(&live_ins, &live_outs);
@@ -165,13 +168,11 @@ impl Regalloc<'_> {
         let instr = &function.block(block).instructions[i];
 
         let &[InstructionOutput::Var(out)] = instr.output.as_slice() else { continue };
-        if is_used_later_in_block(&function.block(block).instructions[i + 1..], out) {
+        if self.is_used_later(&function.block(block).instructions[i + 1..], out) {
           self.allocate(out);
           live_outs.insert(out);
         }
       }
-
-      self.visited.insert(block);
     }
   }
 
@@ -242,7 +243,7 @@ impl Regalloc<'_> {
       match *input {
         InstructionInput::Var(v) => {
           live_outs.remove(&v);
-          if !is_used_later_in_block(block_after_instr, v) {
+          if !self.is_used_later(block_after_instr, v) {
             self.free(v);
           }
         }
@@ -365,7 +366,7 @@ impl Regalloc<'_> {
       }
     }
 
-    for reg_index in 0..16 {
+    for reg_index in 0..8 {
       let reg_index = RegisterIndex::from_usize(reg_index);
 
       if !self.active.contains_key(&reg_index) {
@@ -374,6 +375,18 @@ impl Regalloc<'_> {
     }
 
     panic!("no registers available for variable {var:?}");
+  }
+
+  fn is_used_later(&self, after: &[Instruction], var: Variable) -> bool {
+    let is_used_in_later_block = self
+      .vu
+      .variable(var)
+      .used_by
+      .iter()
+      .any(|u| !self.visited.contains(&self.vu.variables_to_block[u]));
+    let is_used_in_block = is_used_later_in_block(after, var);
+
+    is_used_in_later_block || is_used_in_block
   }
 }
 

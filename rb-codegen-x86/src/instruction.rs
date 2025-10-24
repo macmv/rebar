@@ -211,6 +211,7 @@ impl Instruction {
 }
 
 impl RegisterIndex {
+  #[track_caller]
   pub fn from_usize(value: usize) -> Self {
     if value >= 8 {
       panic!("invalid register index: {}", value);

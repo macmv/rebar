@@ -69,7 +69,7 @@ impl<'a> Transformer<'a> {
 pub fn optimize(function: &mut Function) {
   let mut analysis = Analysis::default();
   let mut transformer = Transformer::new(&mut analysis, function);
-  transformer.full_optimize();
+  // transformer.full_optimize();
 
   // TODO: Add a flag for this? Also make it test-only.
   /*
