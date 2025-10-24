@@ -215,13 +215,9 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
             // First, prefer the accumulator-specific instructions, as those are shortest.
             if reg.get(v) == Register::AL {
               debug_assert_eq!(reg.get(v).size, reg.get(a).size, "math must be in-place");
-              debug_assert_eq!(
-                reg.get(v).size,
-                var_to_reg_size(b.size()).unwrap(),
-                "AL must have 8 bit operand"
-              );
               builder.instr(
-                Instruction::new(opcode_8_for_math(math)).with_immediate(Immediate::from(b)),
+                Instruction::new(opcode_8_for_math(math))
+                  .with_immediate(Immediate::new(reg.get(a).size, b)),
               );
             } else {
               match imm_to_i8(b) {
@@ -318,17 +314,15 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
                   .with_reg(a.index),
               );
             } else if a.index == RegisterIndex::Eax {
-              debug_assert_eq!(a.size, var_to_reg_size(b.size()).unwrap());
-
-              match b {
+              match (a.size, b) {
                 // TODO: CMP imm64 doesn't exist, need to move it to a register.
-                rb_codegen::Immediate::I64(v) => {
+                (RegisterSize::Bit64, rb_codegen::Immediate::Signed(v)) => {
                   builder.instr(
                     encode_sized(a.size, Opcode::CMP_A_IMM8, Opcode::CMP_A_IMM32)
                       .with_immediate(Immediate::i32(v.try_into().unwrap())),
                   );
                 }
-                rb_codegen::Immediate::U64(v) => {
+                (RegisterSize::Bit64, rb_codegen::Immediate::Unsigned(v)) => {
                   builder.instr(
                     encode_sized(a.size, Opcode::CMP_A_IMM8, Opcode::CMP_A_IMM32)
                       .with_immediate(Immediate::i32(v.try_into().unwrap())),
@@ -337,7 +331,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
                 _ => {
                   builder.instr(
                     encode_sized(a.size, Opcode::CMP_A_IMM8, Opcode::CMP_A_IMM32)
-                      .with_immediate(Immediate::from(b)),
+                      .with_immediate(Immediate::new(a.size, b)),
                   );
                 }
               }
@@ -459,10 +453,8 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
             }
             (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
               let b = match b {
-                rb_codegen::Immediate::I8(v) => v,
-                // TODO: Get rid of this once number typing is sane.
-                rb_codegen::Immediate::U64(v) => v as i8,
-                _ => panic!("shift immediate must be an 8-bit value"),
+                rb_codegen::Immediate::Signed(v) => i8::try_from(v).unwrap(),
+                rb_codegen::Immediate::Unsigned(v) => i8::try_from(v).unwrap(),
               };
 
               debug_assert_eq!(reg.get(v), reg.get(a), "shifts must be in place");
@@ -497,11 +489,10 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
         },
         rb_codegen::Opcode::Move => {
           match (inst.output[0], inst.input[0]) {
-            // mov reg, imm32
+            // mov reg, imm
             (InstructionOutput::Var(o), InstructionInput::Imm(i)) => {
               let reg = reg.get(o);
-              debug_assert_eq!(reg.size, var_to_reg_size(i.size()).unwrap());
-              let imm = Immediate::from(i);
+              let imm = Immediate::new(reg.size, i);
               match reg.size {
                 RegisterSize::Bit8 => builder.instr(
                   Instruction::new(Opcode::MOV_RD_IMM_8.with_rd(reg.index)).with_immediate(imm),
@@ -607,17 +598,29 @@ fn var_to_reg_size(v: VariableSize) -> Option<RegisterSize> {
   }
 }
 
-impl From<rb_codegen::Immediate> for Immediate {
-  fn from(value: rb_codegen::Immediate) -> Self {
-    match value {
-      rb_codegen::Immediate::I8(v) => Immediate::i8(v as u8),
-      rb_codegen::Immediate::I16(v) => Immediate::i16(v as u16),
-      rb_codegen::Immediate::I32(v) => Immediate::i32(v as u32),
-      rb_codegen::Immediate::I64(v) => Immediate::i64(v as u64),
-      rb_codegen::Immediate::U8(v) => Immediate::i8(v),
-      rb_codegen::Immediate::U16(v) => Immediate::i16(v),
-      rb_codegen::Immediate::U32(v) => Immediate::i32(v),
-      rb_codegen::Immediate::U64(v) => Immediate::i64(v),
+impl Immediate {
+  pub fn new(size: RegisterSize, value: rb_codegen::Immediate) -> Self {
+    match (size, value) {
+      (RegisterSize::Bit8, rb_codegen::Immediate::Signed(v)) => {
+        Immediate::i8(i8::try_from(v).unwrap() as u8)
+      }
+      (RegisterSize::Bit16, rb_codegen::Immediate::Signed(v)) => {
+        Immediate::i16(i16::try_from(v).unwrap() as u16)
+      }
+      (RegisterSize::Bit32, rb_codegen::Immediate::Signed(v)) => {
+        Immediate::i32(i32::try_from(v).unwrap() as u32)
+      }
+      (RegisterSize::Bit64, rb_codegen::Immediate::Signed(v)) => Immediate::i64(v as u64),
+      (RegisterSize::Bit8, rb_codegen::Immediate::Unsigned(v)) => {
+        Immediate::i8(u8::try_from(v).unwrap())
+      }
+      (RegisterSize::Bit16, rb_codegen::Immediate::Unsigned(v)) => {
+        Immediate::i16(u16::try_from(v).unwrap())
+      }
+      (RegisterSize::Bit32, rb_codegen::Immediate::Unsigned(v)) => {
+        Immediate::i32(u32::try_from(v).unwrap())
+      }
+      (RegisterSize::Bit64, rb_codegen::Immediate::Unsigned(v)) => Immediate::i64(v),
     }
   }
 }
@@ -630,35 +633,31 @@ fn encode_binary_reg_imm(
   opcode_8: Opcode,
   opcode_32: Opcode,
 ) -> Instruction {
-  debug_assert_eq!(
-    reg.size,
-    var_to_reg_size(input2.size()).unwrap(),
-    "binary must have the same size"
-  );
-
-  match input2 {
-    rb_codegen::Immediate::I64(v) => {
-      if let Ok(v) = i32::try_from(v) {
-        return encode_sized(reg.size, opcode_8, opcode_32)
-          .with_mod(0b11, reg.index)
-          .with_immediate(Immediate::i32(v as u32));
-      } else {
-        panic!("immediate too large for binary operation");
+  match reg.size {
+    RegisterSize::Bit64 => match input2 {
+      rb_codegen::Immediate::Signed(v) => {
+        if let Ok(v) = i32::try_from(v) {
+          return encode_sized(reg.size, opcode_8, opcode_32)
+            .with_mod(0b11, reg.index)
+            .with_immediate(Immediate::i32(v as u32));
+        } else {
+          panic!("immediate too large for binary operation");
+        }
       }
-    }
-    rb_codegen::Immediate::U64(v) => {
-      if let Ok(v) = u32::try_from(v) {
-        return encode_sized(reg.size, opcode_8, opcode_32)
-          .with_mod(0b11, reg.index)
-          .with_immediate(Immediate::i32(v));
-      } else {
-        panic!("immediate too large for binary operation");
+      rb_codegen::Immediate::Unsigned(v) => {
+        if let Ok(v) = u32::try_from(v) {
+          return encode_sized(reg.size, opcode_8, opcode_32)
+            .with_mod(0b11, reg.index)
+            .with_immediate(Immediate::i32(v));
+        } else {
+          panic!("immediate too large for binary operation");
+        }
       }
-    }
+    },
     _ => {
       return encode_sized(reg.size, opcode_8, opcode_32)
         .with_mod(0b11, reg.index)
-        .with_immediate(Immediate::from(input2));
+        .with_immediate(Immediate::new(reg.size, input2));
     }
   }
 }
@@ -767,27 +766,29 @@ mod tests {
         instructions: vec![
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Move,
-            input:  smallvec::smallvec![rb_codegen::Immediate::U8(3).into()],
+            input:  smallvec::smallvec![rb_codegen::Immediate::Unsigned(3).into()],
             output: smallvec::smallvec![Variable::new(0, VariableSize::Bit8).into()],
           },
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Move,
-            input:  smallvec::smallvec![rb_codegen::Immediate::U16(5).into()],
+            input:  smallvec::smallvec![rb_codegen::Immediate::Unsigned(5).into()],
             output: smallvec::smallvec![Variable::new(1, VariableSize::Bit16).into()],
           },
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Move,
-            input:  smallvec::smallvec![rb_codegen::Immediate::U32(7).into()],
+            input:  smallvec::smallvec![rb_codegen::Immediate::Unsigned(7).into()],
             output: smallvec::smallvec![Variable::new(2, VariableSize::Bit32).into()],
           },
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Move,
-            input:  smallvec::smallvec![rb_codegen::Immediate::U64(9).into()],
+            input:  smallvec::smallvec![rb_codegen::Immediate::Unsigned(9).into()],
             output: smallvec::smallvec![Variable::new(3, VariableSize::Bit64).into()],
           },
           rb_codegen::Instruction {
             opcode: rb_codegen::Opcode::Move,
-            input:  smallvec::smallvec![rb_codegen::Immediate::U64(u32::MAX as u64 + 5).into()],
+            input:  smallvec::smallvec![
+              rb_codegen::Immediate::Unsigned(u32::MAX as u64 + 5).into()
+            ],
             output: smallvec::smallvec![Variable::new(4, VariableSize::Bit64).into()],
           },
         ],

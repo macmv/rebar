@@ -147,14 +147,8 @@ pub enum InstructionInput {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Immediate {
-  I8(i8),
-  I16(i16),
-  I32(i32),
-  I64(i64),
-  U8(u8),
-  U16(u16),
-  U32(u32),
-  U64(u64),
+  Signed(i64),
+  Unsigned(u64),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -324,7 +318,7 @@ impl From<Variable> for InstructionInput {
   fn from(v: Variable) -> Self { InstructionInput::Var(v) }
 }
 impl From<u64> for InstructionInput {
-  fn from(v: u64) -> Self { InstructionInput::Imm(Immediate::U64(v)) }
+  fn from(v: u64) -> Self { InstructionInput::Imm(Immediate::Unsigned(v)) }
 }
 impl From<Immediate> for InstructionInput {
   fn from(v: Immediate) -> Self { InstructionInput::Imm(v) }
@@ -336,65 +330,27 @@ impl From<Variable> for InstructionOutput {
 impl Immediate {
   pub fn bits(&self) -> u64 {
     match *self {
-      Immediate::I8(v) => v as u64,
-      Immediate::I16(v) => v as u64,
-      Immediate::I32(v) => v as u64,
-      Immediate::I64(v) => v as u64,
-      Immediate::U8(v) => v as u64,
-      Immediate::U16(v) => v as u64,
-      Immediate::U32(v) => v as u64,
-      Immediate::U64(v) => v,
+      Immediate::Signed(v) => v as u64,
+      Immediate::Unsigned(v) => v,
     }
   }
 
-  pub fn size(&self) -> VariableSize {
-    match self {
-      Immediate::I8(_) | Immediate::U8(_) => VariableSize::Bit8,
-      Immediate::I16(_) | Immediate::U16(_) => VariableSize::Bit16,
-      Immediate::I32(_) | Immediate::U32(_) => VariableSize::Bit32,
-      Immediate::I64(_) | Immediate::U64(_) => VariableSize::Bit64,
-    }
-  }
-
-  pub fn is_zero(&self) -> bool {
-    match self {
-      Immediate::I8(v) => *v == 0,
-      Immediate::I16(v) => *v == 0,
-      Immediate::I32(v) => *v == 0,
-      Immediate::I64(v) => *v == 0,
-      Immediate::U8(v) => *v == 0,
-      Immediate::U16(v) => *v == 0,
-      Immediate::U32(v) => *v == 0,
-      Immediate::U64(v) => *v == 0,
-    }
-  }
+  pub fn is_zero(&self) -> bool { self.bits() == 0 }
 }
 
 #[macro_export]
 macro_rules! immediate {
   ($a:ident, $op:expr) => {
     match $a {
-      $crate::Immediate::I8(a) => $op(a),
-      $crate::Immediate::I16(a) => $op(a),
-      $crate::Immediate::I32(a) => $op(a),
-      $crate::Immediate::I64(a) => $op(a),
-      $crate::Immediate::U8(a) => $op(a),
-      $crate::Immediate::U16(a) => $op(a),
-      $crate::Immediate::U32(a) => $op(a),
-      $crate::Immediate::U64(a) => $op(a),
+      $crate::Immediate::Signed(a) => $op(a),
+      $crate::Immediate::Unsigned(a) => $op(a),
     }
   };
 
   ($a:ident, $b:ident, $bin:expr) => {
     match ($a, $b) {
-      ($crate::Immediate::I8(a), $crate::Immediate::I8(b)) => Some($bin(a, b)),
-      ($crate::Immediate::I16(a), $crate::Immediate::I16(b)) => Some($bin(a, b)),
-      ($crate::Immediate::I32(a), $crate::Immediate::I32(b)) => Some($bin(a, b)),
-      ($crate::Immediate::I64(a), $crate::Immediate::I64(b)) => Some($bin(a, b)),
-      ($crate::Immediate::U8(a), $crate::Immediate::U8(b)) => Some($bin(a, b)),
-      ($crate::Immediate::U16(a), $crate::Immediate::U16(b)) => Some($bin(a, b)),
-      ($crate::Immediate::U32(a), $crate::Immediate::U32(b)) => Some($bin(a, b)),
-      ($crate::Immediate::U64(a), $crate::Immediate::U64(b)) => Some($bin(a, b)),
+      ($crate::Immediate::Signed(a), $crate::Immediate::Signed(b)) => Some($bin(a, b)),
+      ($crate::Immediate::Unsigned(a), $crate::Immediate::Unsigned(b)) => Some($bin(a, b)),
       _ => None,
     }
   };

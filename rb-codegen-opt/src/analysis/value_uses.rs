@@ -297,14 +297,12 @@ fn const_eval(m: Math, args: &[VariableValue]) -> Option<Immediate> {
         && let (VariableValue::Immediate(a), VariableValue::Immediate(b)) = (&args[0], &args[1])
       {
         match (a, b) {
-          (Immediate::I8(a), Immediate::I8(b)) => return Some(Immediate::I8(a.$func(*b))),
-          (Immediate::I16(a), Immediate::I16(b)) => return Some(Immediate::I16(a.$func(*b))),
-          (Immediate::I32(a), Immediate::I32(b)) => return Some(Immediate::I32(a.$func(*b))),
-          (Immediate::I64(a), Immediate::I64(b)) => return Some(Immediate::I64(a.$func(*b))),
-          (Immediate::U8(a), Immediate::U8(b)) => return Some(Immediate::U8(a.$func(*b))),
-          (Immediate::U16(a), Immediate::U16(b)) => return Some(Immediate::U16(a.$func(*b))),
-          (Immediate::U32(a), Immediate::U32(b)) => return Some(Immediate::U32(a.$func(*b))),
-          (Immediate::U64(a), Immediate::U64(b)) => return Some(Immediate::U64(a.$func(*b))),
+          (Immediate::Signed(a), Immediate::Signed(b)) => {
+            return Some(Immediate::Signed(a.$func(*b)));
+          }
+          (Immediate::Unsigned(a), Immediate::Unsigned(b)) => {
+            return Some(Immediate::Unsigned(a.$func(*b)));
+          }
           _ => {}
         }
       }

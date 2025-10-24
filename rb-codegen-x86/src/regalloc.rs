@@ -305,23 +305,29 @@ impl Regalloc<'_> {
               println!("saving {other}");
               moves.push(Move::VarReg { from: other, to: RegisterIndex::Ebx });
 
-              let new_var = self.fresh_var(imm.size());
+              let new_var = self.fresh_var(VariableSize::Bit64);
               println!("moving {new_var} (tmp) -> {requirement:?}");
               moves.push(Move::ImmVar { from: *imm, to: new_var });
               self.alloc.registers.set_with(
                 new_var,
-                Register { size: var_to_reg_size(imm.size()).unwrap(), index: requirement },
+                Register {
+                  size:  var_to_reg_size(VariableSize::Bit64).unwrap(),
+                  index: requirement,
+                },
                 || Register::RAX,
               );
               *input = InstructionInput::Var(new_var);
             }
             None => {
-              let new_var = self.fresh_var(imm.size());
+              let new_var = self.fresh_var(VariableSize::Bit64);
               println!("moving {new_var} (tmp) -> {requirement:?}");
               moves.push(Move::ImmVar { from: *imm, to: new_var });
               self.alloc.registers.set_with(
                 new_var,
-                Register { size: var_to_reg_size(imm.size()).unwrap(), index: requirement },
+                Register {
+                  size:  var_to_reg_size(VariableSize::Bit64).unwrap(),
+                  index: requirement,
+                },
                 || Register::RAX,
               );
               *input = InstructionInput::Var(new_var);
