@@ -167,6 +167,12 @@ pub struct Symbol {
   pub index: u32,
 }
 
+pub enum AnyInstructionRef<'a> {
+  Phi(&'a Phi),
+  Instr(&'a Instruction),
+  Term(&'a TerminatorInstruction),
+}
+
 impl FunctionId {
   pub const fn new(id: u32) -> Self { FunctionId(id) }
   pub const fn as_u32(&self) -> u32 { self.0 }
@@ -199,6 +205,16 @@ impl Variable {
 
 impl Function {
   pub fn entry(&self) -> BlockId { BlockId::new(0) }
+
+  pub fn instructions(&self) -> impl Iterator<Item = AnyInstructionRef<'_>> {
+    self.blocks.iter().flat_map(|b| {
+      b.phis
+        .iter()
+        .map(AnyInstructionRef::Phi)
+        .chain(b.instructions.iter().map(AnyInstructionRef::Instr))
+        .chain(std::iter::once(&b.terminator).map(AnyInstructionRef::Term))
+    })
+  }
 
   pub fn blocks(&self) -> impl Iterator<Item = BlockId> + use<> {
     (0..self.blocks.len() as u32).map(BlockId::new)
