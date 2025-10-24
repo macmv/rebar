@@ -715,6 +715,7 @@ pub fn link(objects: &[std::path::PathBuf], output: &Path) {
 mod tests {
 
   use rb_codegen::{Signature, Symbol, Variable, VariableSize};
+  use rb_codegen_opt::parse;
   use rb_test::{Expect, expect, temp_dir};
 
   use super::*;
@@ -795,6 +796,19 @@ mod tests {
       data:         vec![],
       data_symbols: vec![],
     };
+
+    let f2 = parse(
+      "
+      block 0:
+        mov l0 = 0x03
+        mov x1 = 0x05
+        mov e2 = 0x07
+        mov r3 = 0x09
+        mov r4 = 0x100000004
+        trap
+      ",
+    );
+    assert_eq!(function, f2.function);
 
     let builder = lower(function);
 

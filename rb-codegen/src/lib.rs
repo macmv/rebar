@@ -8,13 +8,13 @@ mod tvec;
 pub use instr::{BlockBuilder, FunctionBuilder, InstrBuilder};
 pub use tvec::{TIndex, TVec};
 
-#[derive(Default)]
+#[derive(Default, PartialEq, Eq)]
 pub struct Signature {
   pub args: Vec<VariableSize>,
   pub rets: Vec<VariableSize>,
 }
 
-#[derive(Default)]
+#[derive(Default, PartialEq, Eq)]
 pub struct Function {
   pub sig:          Signature,
   pub blocks:       Vec<Block>,
@@ -22,7 +22,7 @@ pub struct Function {
   pub data_symbols: Vec<SymbolDef>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct SymbolDef {
   pub name:   String,
   pub offset: u32,
@@ -417,6 +417,10 @@ impl InstructionOutput {
     let InstructionOutput::Var(v) = self;
     v
   }
+}
+
+impl fmt::Debug for Function {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "Function {{\n{self}}}") }
 }
 
 impl fmt::Display for Function {
