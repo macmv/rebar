@@ -383,7 +383,6 @@ impl Regalloc<'_> {
     if let Some(&pref) = self.preference.get(&var) {
       match self.active.get(&pref) {
         Some(&other) if other != var => {
-          println!("saving {other} (for pref)");
           self.active.remove(&pref);
           self.rehome(loc, other);
 
@@ -407,6 +406,7 @@ impl Regalloc<'_> {
   fn rehome(&mut self, loc: InstructionLocation, var: Variable) {
     let new_var = self.fresh_var(var.size());
     let new_reg = self.pick_register(loc, new_var);
+    println!("rehoming {var} -> {new_var} in {new_reg:?}");
     self.alloc.registers.set_with(
       new_var,
       Register { size: var_to_reg_size(var.size()).unwrap(), index: new_reg },
