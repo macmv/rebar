@@ -189,18 +189,23 @@ impl Regalloc<'_> {
   fn pre_allocation(&mut self, function: &Function) {
     for block in function.blocks() {
       for instr in &function.block(block).instructions {
-        if instr.opcode != Opcode::Syscall {
+        if !matches!(instr.opcode, Opcode::Syscall | Opcode::Call(_)) {
           continue;
         }
 
         for (i, &input) in instr.input.iter().enumerate() {
           let InstructionInput::Var(var) = input else { continue };
 
-          let reg_index = match i {
-            0 => RegisterIndex::Eax,
-            1 => RegisterIndex::Edi,
-            2 => RegisterIndex::Esi,
-            3 => RegisterIndex::Edx,
+          let reg_index = match (instr.opcode, i) {
+            (Opcode::Syscall, 0) => RegisterIndex::Eax,
+            (Opcode::Syscall, 1) => RegisterIndex::Edi,
+            (Opcode::Syscall, 2) => RegisterIndex::Esi,
+            (Opcode::Syscall, 3) => RegisterIndex::Edx,
+
+            (Opcode::Call(_), 0) => RegisterIndex::Edi,
+            (Opcode::Call(_), 1) => RegisterIndex::Esi,
+            (Opcode::Call(_), 2) => RegisterIndex::Edx,
+
             _ => unreachable!(),
           };
 
@@ -250,6 +255,13 @@ impl Regalloc<'_> {
           2 => Some(RegisterIndex::Esi),
           3 => Some(RegisterIndex::Edx),
           _ => unreachable!(),
+        },
+        // TODO: Calling convention?
+        Opcode::Call(_) => match i {
+          0 => Some(RegisterIndex::Edi),
+          1 => Some(RegisterIndex::Esi),
+          2 => Some(RegisterIndex::Edx),
+          _ => todo!("more arguments"),
         },
         _ => None,
       };
@@ -562,6 +574,30 @@ mod tests {
     assert_eq!(regs.get(v!(r 6)), Register::RDI);
     assert_eq!(regs.get(v!(r 7)), Register::RAX);
     assert_eq!(regs.get(v!(r 8)), Register::RDI);
+  }
+
+  #[test]
+  fn call_with_imm() {
+    let mut function = parse(
+      "
+      block 0:
+        call foo r0 = 0x00, 0x01
+      ",
+    );
+
+    let regs = VariableRegisters::pass(&mut function.function);
+
+    function.check(expect![@r#"
+      block 0:
+        mov r1 = 0x00
+        mov r2 = 0x01
+        call function 0 r0 = r1, r2
+        trap
+    "#
+    ]);
+
+    assert_eq!(regs.get(v!(r 1)), Register::RDI);
+    assert_eq!(regs.get(v!(r 2)), Register::RSI);
   }
 
   #[ignore]

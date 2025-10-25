@@ -1,6 +1,6 @@
 use rb_codegen::{
-  Block, BlockId, Function, Instruction, InstructionInput, InstructionOutput, Math, Opcode, Phi,
-  Variable, VariableSize,
+  Block, BlockId, Function, FunctionId, Instruction, InstructionInput, InstructionOutput, Math,
+  Opcode, Phi, Variable, VariableSize,
 };
 use smallvec::SmallVec;
 
@@ -34,7 +34,7 @@ pub fn parse(asm: &str) -> Function {
       continue;
     }
 
-    let (first_word, args) = line.split_once(' ').unwrap_or((line, ""));
+    let (first_word, mut args) = line.split_once(' ').unwrap_or((line, ""));
     let opcode = match first_word {
       "mov" => Opcode::Move,
       "math(abs)" => Opcode::Move,
@@ -55,6 +55,12 @@ pub fn parse(asm: &str) -> Function {
       "math(not)" => Opcode::Math(Math::Not),
       "math(neg)" => Opcode::Math(Math::Neg),
       "syscall" => Opcode::Syscall,
+
+      "call" => {
+        let (_func, rest) = args.split_once(' ').unwrap();
+        args = rest;
+        Opcode::Call(FunctionId::new(0))
+      }
 
       "jump" => {
         let args = args.strip_prefix("to block ").unwrap();
