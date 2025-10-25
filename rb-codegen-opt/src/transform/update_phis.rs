@@ -96,6 +96,12 @@ impl<'a> TransformPass<'a> for UpdatePhis<'a> {
       congruence: &congruence,
       update:     self,
     };
+
+    for arg in function.args() {
+      let cong = congruence.lookup(arg);
+      renamer.stacks.entry(cong).or_default().push(arg);
+    }
+
     renamer.pass(function.entry(), function);
   }
 }
