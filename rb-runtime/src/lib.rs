@@ -33,7 +33,7 @@ pub fn run(
 fn compile_diagnostics(
   mut env: RuntimeEnvironment,
   sources: Arc<Sources>,
-  _id: SourceId,
+  main: SourceId,
 ) -> Result<(), ()> {
   let results = run_parallel(
     &sources.all().collect::<Vec<_>>(),
@@ -60,14 +60,18 @@ fn compile_diagnostics(
 
   let files = results.into_iter().map(|r| r.unwrap()).collect::<Vec<_>>();
 
-  let funcs = files
-    .iter()
-    .flat_map(|(hir, span_map)| {
-      hir.functions.iter().map(|(id, function)| (function, &span_map.functions[&id]))
-    })
-    .enumerate()
-    .map(|(i, (function, span_map))| (rb_mir::ast::UserFunctionId(i as u64), function, span_map))
-    .collect::<Vec<_>>();
+  let mut funcs = vec![];
+  let mut main_func = rb_mir::ast::UserFunctionId(0);
+  for (source_id, (hir, span_map)) in files.iter().enumerate() {
+    for (id, function) in hir.functions.iter() {
+      let span_map = &span_map.functions[&id];
+      let mir_id = rb_mir::ast::UserFunctionId(funcs.len() as u64);
+      funcs.push((mir_id, function, span_map));
+    }
+    if main.into_raw().into_u32() as usize == source_id {
+      main_func = funcs.last().unwrap().0;
+    }
+  }
 
   let (typer_env, mir_env) = env.build(&files, &funcs);
 
@@ -99,12 +103,16 @@ fn compile_diagnostics(
   // cranelift IR. Collect all the functions, split them into chunks, and compile
   // them on a thread pool.
 
-  compile_mir(env, functions);
+  compile_mir(env, functions, main_func);
 
   Ok(())
 }
 
-fn compile_mir(env: RuntimeEnvironment, functions: Vec<rb_mir::ast::Function>) {
+fn compile_mir(
+  env: RuntimeEnvironment,
+  functions: Vec<rb_mir::ast::Function>,
+  main_func: rb_mir::ast::UserFunctionId,
+) {
   let mut compiler = rb_backend::Compiler::new(env.env.mir_ctx.clone());
 
   for func in &functions {
@@ -118,8 +126,7 @@ fn compile_mir(env: RuntimeEnvironment, functions: Vec<rb_mir::ast::Function>) {
     compiler.finish_function(func);
   }
 
-  // TODO: Pick a main function in a sane way
-  compiler.finish(functions[1].id);
+  compiler.finish(main_func);
 }
 
 impl RuntimeEnvironment {
