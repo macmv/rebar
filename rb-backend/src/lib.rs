@@ -256,6 +256,11 @@ impl FuncBuilder<'_> {
         }
       }
 
+      mir::Expr::CallIntrinsic(mir::Intrinsic::Trap, _) => {
+        self.builder.current_block().terminate(TerminatorInstruction::Trap);
+        RValue::nil()
+      }
+
       /*
       Some(ValueType::UserFunction) => {
         let id = match lhs {

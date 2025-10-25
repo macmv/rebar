@@ -42,6 +42,7 @@ impl Env<'_> {
           "syscall2" | "syscall3" | "syscall4" | "syscall5" | "syscall6" => mir::Intrinsic::Syscall,
           "string_ptr" => mir::Intrinsic::StringPtr,
           "string_len" => mir::Intrinsic::StringLen,
+          "trap" => mir::Intrinsic::Trap,
           _ => {
             emit!(span.name_span.unwrap() => "unknown intrinsic {}", function.name);
             continue;

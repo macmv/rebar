@@ -75,6 +75,7 @@ pub enum Intrinsic {
   StringPtr,
   StringLen,
   Syscall,
+  Trap,
 }
 
 #[derive(Debug)]
