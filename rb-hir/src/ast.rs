@@ -71,11 +71,24 @@ pub enum StringInterp {
 
 #[derive(Clone, Debug)]
 pub enum TypeExpr {
-  Nil,
-  Bool,
-  Int,
+  Primitive(PrimitiveType),
+  Struct(String),
+  Tuple(Vec<TypeExpr>),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum PrimitiveType {
   Str,
-  Union(Vec<TypeExpr>),
+  Bool,
+
+  I8,
+  I16,
+  I32,
+  I64,
+  U8,
+  U16,
+  U32,
+  U64,
 }
 
 #[derive(Debug)]
@@ -131,4 +144,12 @@ pub enum BinaryOp {
   Lte,
   Gt,
   Gte,
+}
+
+impl TypeExpr {
+  pub fn unit() -> Self { TypeExpr::Tuple(vec![]) }
+}
+
+impl From<PrimitiveType> for TypeExpr {
+  fn from(value: PrimitiveType) -> Self { TypeExpr::Primitive(value) }
 }

@@ -5,5 +5,6 @@ edition = "2021"
 
 [dependencies]
 rb-mir.workspace = true
+rb-hir.workspace = true
 rb-typer.workspace = true
 rb-value.workspace = true

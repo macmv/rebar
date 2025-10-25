@@ -452,31 +452,39 @@ fn type_expr(source: SourceId, cst: &cst::Type) -> hir::TypeExpr {
   match cst {
     cst::Type::NameType(cst) => {
       if let Some(_) = cst.nil_token() {
-        hir::TypeExpr::Nil
+        hir::TypeExpr::unit()
       } else {
         let name = cst.ident_token().unwrap().text().to_string();
 
         match name.as_str() {
-          "nil" => hir::TypeExpr::Nil,
-          "bool" => hir::TypeExpr::Bool,
-          "int" => hir::TypeExpr::Int,
-          "str" => hir::TypeExpr::Str,
+          "nil" => hir::TypeExpr::unit(),
+          "bool" => hir::PrimitiveType::Bool.into(),
+          "str" => hir::PrimitiveType::Str.into(),
+          "i8" => hir::PrimitiveType::I8.into(),
+          "i16" => hir::PrimitiveType::I16.into(),
+          "i32" => hir::PrimitiveType::I32.into(),
+          "i64" => hir::PrimitiveType::I64.into(),
+          "u8" => hir::PrimitiveType::U8.into(),
+          "u16" => hir::PrimitiveType::U16.into(),
+          "u32" => hir::PrimitiveType::U32.into(),
+          "u64" => hir::PrimitiveType::U64.into(),
           _ => {
             emit!(
               Span { file: source, range: cst.ident_token().unwrap().text_range() } =>
               "unknown type {name}"
             );
-            hir::TypeExpr::Nil
+            hir::TypeExpr::unit()
           }
         }
       }
     }
 
     cst::Type::BinaryType(cst) => {
-      let lhs = type_expr(source, &cst.lhs().unwrap());
-      let rhs = type_expr(source, &cst.rhs().unwrap());
+      let _lhs = type_expr(source, &cst.lhs().unwrap());
+      let _rhs = type_expr(source, &cst.rhs().unwrap());
 
-      hir::TypeExpr::Union(vec![lhs, rhs])
+      todo!("unions!");
+      // hir::TypeExpr::Union(vec![lhs, rhs])
     }
   }
 }

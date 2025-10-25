@@ -1,7 +1,7 @@
 use std::num::NonZero;
 
 use rb_mir::{ast::StructId, MirContext};
-use rb_typer::{Literal, Type};
+use rb_typer::Type;
 
 mod arg;
 mod array;
@@ -109,11 +109,8 @@ impl ValueType {
 
   pub fn for_type(ctx: &MirContext, ty: &Type) -> Self {
     match ty {
-      Type::Literal(Literal::Unit) => ValueType::Nil,
-      Type::Literal(Literal::Int) => ValueType::Int,
-      Type::Literal(Literal::Bool) => ValueType::Bool,
-      Type::Literal(Literal::String) => ValueType::String,
       Type::Array(_) => ValueType::Array,
+      Type::Primitive(_) => ValueType::Int,
       Type::Union(_) => todo!("unions in backend"),
       Type::Function(..) => todo!("function types to values"),
 
@@ -122,6 +119,8 @@ impl ValueType {
         let id = ctx.struct_paths[path];
         ValueType::Struct(id)
       }
+
+      _ => todo!(),
     }
   }
 }

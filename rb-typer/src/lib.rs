@@ -11,7 +11,7 @@ use ty::{TypeVar, VType, VarId};
 mod constrain;
 mod ty;
 
-pub use ty::{Environment, Literal, Type};
+pub use ty::{Environment, Type};
 
 /// A typechecker for a function body.
 ///
@@ -40,11 +40,9 @@ pub struct Typer<'a> {
 // TODO: Need a version of this that can resolve names.
 pub fn type_of_type_expr(te: &hir::TypeExpr) -> Type {
   match te {
-    hir::TypeExpr::Nil => Type::Literal(Literal::Unit),
-    hir::TypeExpr::Bool => Type::Literal(Literal::Bool),
-    hir::TypeExpr::Int => Type::Literal(Literal::Int),
-    hir::TypeExpr::Str => Type::Literal(Literal::String),
-    hir::TypeExpr::Union(tys) => Type::Union(tys.iter().map(|ty| type_of_type_expr(&ty)).collect()),
+    hir::TypeExpr::Primitive(t) => Type::Primitive(*t),
+    hir::TypeExpr::Struct(path) => Type::Struct(path.clone()),
+    hir::TypeExpr::Tuple(tys) => Type::Tuple(tys.iter().map(type_of_type_expr).collect()),
   }
 }
 
@@ -77,7 +75,7 @@ impl<'a> Typer<'a> {
           let args = func.args.iter().map(|(_, ty)| type_of_type_expr(ty)).collect();
           let ret = match func.ret {
             Some(ref ty) => Box::new(type_of_type_expr(&ty)),
-            None => Box::new(Type::Literal(Literal::Unit)),
+            None => Box::new(Type::unit()),
           };
 
           let ty = Type::Function(args, ret);
@@ -98,8 +96,10 @@ impl<'a> Typer<'a> {
 
   fn lower_type(&self, ty: &VType) -> Type {
     match ty {
-      VType::Literal(lit) => Type::Literal(*lit),
+      VType::Primitive(lit) => Type::Primitive(*lit),
+      VType::Integer => Type::Primitive(hir::PrimitiveType::I64),
       VType::Array(ty) => Type::Array(Box::new(self.lower_type(ty))),
+      VType::Tuple(tys) => Type::Tuple(tys.iter().map(|t| self.lower_type(t)).collect()),
       VType::Function(args, ret) => Type::Function(
         args.iter().map(|t| self.lower_type(t)).collect(),
         Box::new(self.lower_type(ret)),
@@ -110,7 +110,7 @@ impl<'a> Typer<'a> {
         let var = &self.variables[*v];
 
         if var.values.is_empty() {
-          Type::Literal(Literal::Unit)
+          Type::unit()
         } else if var.values.len() == 1 {
           self.lower_type(&var.values.iter().next().unwrap())
         } else {
@@ -154,9 +154,9 @@ impl<'a> Typer<'a> {
   fn type_expr(&mut self, expr: ExprId) -> VType {
     let ty = match self.function.exprs[expr] {
       hir::Expr::Literal(ref lit) => match lit {
-        hir::Literal::Nil => VType::Literal(ty::Literal::Unit),
-        hir::Literal::Bool(_) => VType::Literal(ty::Literal::Bool),
-        hir::Literal::Int(_) => VType::Literal(ty::Literal::Int),
+        hir::Literal::Nil => VType::Tuple(vec![]),
+        hir::Literal::Bool(_) => VType::Primitive(hir::PrimitiveType::Bool),
+        hir::Literal::Int(_) => VType::Integer,
       },
 
       hir::Expr::String(ref segments) => {
@@ -171,7 +171,7 @@ impl<'a> Typer<'a> {
           }
         }
 
-        VType::Literal(ty::Literal::String)
+        VType::Primitive(hir::PrimitiveType::Str)
       }
 
       hir::Expr::Array(ref exprs) => {
@@ -225,9 +225,9 @@ impl<'a> Typer<'a> {
         match block.last() {
           Some(stmt) => match self.function.stmts[*stmt] {
             hir::Stmt::Expr(expr) => self.type_expr(expr),
-            _ => VType::Literal(ty::Literal::Unit),
+            _ => VType::Tuple(vec![]),
           },
-          None => VType::Literal(ty::Literal::Unit),
+          None => VType::Tuple(vec![]),
         }
       }
 
@@ -244,7 +244,7 @@ impl<'a> Typer<'a> {
         match op {
           hir::UnaryOp::Neg => {
             self.constrain(
-              &VType::Function(vec![ty::Literal::Int.into()], Box::new(ty::Literal::Int.into())),
+              &VType::Function(vec![VType::Integer], Box::new(VType::Integer)),
               &call_type,
               self.span(expr),
             );
@@ -252,7 +252,10 @@ impl<'a> Typer<'a> {
 
           hir::UnaryOp::Not => {
             self.constrain(
-              &VType::Function(vec![ty::Literal::Bool.into()], Box::new(ty::Literal::Bool.into())),
+              &VType::Function(
+                vec![hir::PrimitiveType::Bool.into()],
+                Box::new(hir::PrimitiveType::Bool.into()),
+              ),
               &call_type,
               self.span(expr),
             );
@@ -283,10 +286,7 @@ impl<'a> Typer<'a> {
           | hir::BinaryOp::ShiftLeft
           | hir::BinaryOp::ShiftRight => {
             self.constrain(
-              &VType::Function(
-                vec![ty::Literal::Int.into(), ty::Literal::Int.into()],
-                Box::new(ty::Literal::Int.into()),
-              ),
+              &VType::Function(vec![VType::Integer, VType::Integer], Box::new(VType::Integer)),
               &call_type,
               self.span(expr),
             );
@@ -296,7 +296,7 @@ impl<'a> Typer<'a> {
             let arg = VType::Var(self.fresh_var(self.span(expr), format!("arg for {op:?}")));
 
             self.constrain(
-              &VType::Function(vec![arg.clone(), arg], Box::new(ty::Literal::Bool.into())),
+              &VType::Function(vec![arg.clone(), arg], Box::new(hir::PrimitiveType::Bool.into())),
               &call_type,
               self.span(expr),
             );
@@ -305,8 +305,8 @@ impl<'a> Typer<'a> {
           hir::BinaryOp::Lt | hir::BinaryOp::Lte | hir::BinaryOp::Gt | hir::BinaryOp::Gte => {
             self.constrain(
               &VType::Function(
-                vec![ty::Literal::Int.into(), ty::Literal::Int.into()],
-                Box::new(ty::Literal::Bool.into()),
+                vec![VType::Integer, VType::Integer],
+                Box::new(hir::PrimitiveType::Bool.into()),
               ),
               &call_type,
               self.span(expr),
@@ -326,7 +326,7 @@ impl<'a> Typer<'a> {
         let elem = VType::Var(self.fresh_var(self.span(expr), format!("array element")));
 
         self.constrain(&lhs, &VType::Array(Box::new(elem.clone())), self.span(expr));
-        self.constrain(&rhs, &VType::Literal(Literal::Int), self.span(expr));
+        self.constrain(&rhs, &VType::Primitive(hir::PrimitiveType::U64), self.span(expr));
 
         elem
       }
@@ -334,7 +334,7 @@ impl<'a> Typer<'a> {
       hir::Expr::If { cond, then, els } => {
         let cond_ty = self.type_expr(cond);
 
-        self.constrain(&cond_ty, &VType::Literal(ty::Literal::Bool), self.span(cond));
+        self.constrain(&cond_ty, &VType::Primitive(hir::PrimitiveType::Bool), self.span(cond));
 
         let then_ty = self.type_expr(then);
         if let Some(els) = els {

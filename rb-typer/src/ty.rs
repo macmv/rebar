@@ -2,12 +2,14 @@ use std::collections::{HashMap, HashSet};
 
 use la_arena::Idx;
 use rb_diagnostic::Span;
+use rb_hir::ast as hir;
 
 /// A rendered type. This is the result of typechecking.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
-  Literal(Literal),
+  Primitive(hir::PrimitiveType),
   Array(Box<Type>),
+  Tuple(Vec<Type>),
 
   Function(Vec<Type>, Box<Type>),
   Union(Vec<Type>),
@@ -24,18 +26,11 @@ pub struct Environment {
 /// A type with variables in it. Internal to the typer.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum VType {
-  Literal(Literal),
+  Integer,
+  Primitive(hir::PrimitiveType),
 
-  // TODO: Should arrays have a length in the type?
-  //
-  // Some advantages:
-  // - Pattern matching
-  // - No need for tuples
-  //
-  // Some disadvantages:
-  // - Mutating an array changes the type (I think that's already a problem though?)
-  // - Tuples can live on the stack, and arrays can't really.
   Array(Box<VType>),
+  Tuple(Vec<VType>),
 
   Function(Vec<VType>, Box<VType>),
 
@@ -49,11 +44,16 @@ pub(crate) enum VType {
   Struct(String),
 }
 
+impl Type {
+  pub const fn unit() -> Self { Type::Tuple(vec![]) }
+}
+
 impl From<Type> for VType {
   fn from(ty: Type) -> Self {
     match ty {
-      Type::Literal(lit) => VType::Literal(lit),
+      Type::Primitive(lit) => VType::Primitive(lit),
       Type::Array(ty) => VType::Array(Box::new((*ty).into())),
+      Type::Tuple(types) => VType::Tuple(types.into_iter().map(Into::into).collect()),
       Type::Function(args, ret) => {
         VType::Function(args.into_iter().map(Into::into).collect(), Box::new((*ret).into()))
       }
@@ -63,19 +63,11 @@ impl From<Type> for VType {
   }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Literal {
-  Unit,
-  Int,
-  Bool,
-  String,
+impl From<hir::PrimitiveType> for Type {
+  fn from(literal: hir::PrimitiveType) -> Self { Type::Primitive(literal) }
 }
-
-impl From<Literal> for Type {
-  fn from(literal: Literal) -> Self { Type::Literal(literal) }
-}
-impl From<Literal> for VType {
-  fn from(literal: Literal) -> Self { VType::Literal(literal) }
+impl From<hir::PrimitiveType> for VType {
+  fn from(literal: hir::PrimitiveType) -> Self { VType::Primitive(literal) }
 }
 
 pub type VarId = Idx<TypeVar>;

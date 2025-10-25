@@ -1,5 +1,6 @@
+use rb_hir::ast as hir;
 use rb_mir::MirContext;
-use rb_typer::{Literal, Type};
+use rb_typer::Type;
 use std::collections::HashMap;
 
 use crate::{OwnedValue, Value};
@@ -88,7 +89,7 @@ impl_from_function!(A, B, C);
 impl_from_function!(A, B, C, D);
 
 impl FunctionArg for i64 {
-  fn static_type() -> Type { Type::Literal(Literal::Int) }
+  fn static_type() -> Type { hir::PrimitiveType::I64.into() }
   fn from_value(v: Value) -> Self {
     match v {
       Value::Int(i) => i,
@@ -97,12 +98,12 @@ impl FunctionArg for i64 {
   }
 }
 impl FunctionRet for i64 {
-  fn static_type() -> Type { Type::Literal(Literal::Int) }
+  fn static_type() -> Type { hir::PrimitiveType::I64.into() }
   fn into_value(self) -> OwnedValue { OwnedValue::Int(self) }
 }
 
 impl FunctionArg for bool {
-  fn static_type() -> Type { Type::Literal(Literal::Bool) }
+  fn static_type() -> Type { hir::PrimitiveType::Bool.into() }
   fn from_value(v: Value) -> Self {
     match v {
       Value::Bool(i) => i,
@@ -111,12 +112,12 @@ impl FunctionArg for bool {
   }
 }
 impl FunctionRet for bool {
-  fn static_type() -> Type { Type::Literal(Literal::Bool) }
+  fn static_type() -> Type { hir::PrimitiveType::Bool.into() }
   fn into_value(self) -> OwnedValue { OwnedValue::Bool(self) }
 }
 
 impl FunctionArg for String {
-  fn static_type() -> Type { Type::Literal(Literal::String) }
+  fn static_type() -> Type { hir::PrimitiveType::Str.into() }
   fn from_value(v: Value) -> Self {
     match v {
       Value::String(s) => s.into(),
@@ -126,12 +127,12 @@ impl FunctionArg for String {
 }
 
 impl FunctionRet for String {
-  fn static_type() -> Type { Type::Literal(Literal::String) }
+  fn static_type() -> Type { hir::PrimitiveType::Str.into() }
   fn into_value(self) -> OwnedValue { OwnedValue::String(self) }
 }
 
 impl FunctionRet for () {
-  fn static_type() -> Type { Type::Literal(Literal::Unit) }
+  fn static_type() -> Type { Type::unit() }
   fn into_value(self) -> OwnedValue { OwnedValue::Nil }
 }
 

@@ -1,4 +1,5 @@
 use rb_diagnostic::{emit, Span};
+use rb_hir::ast as hir;
 
 use crate::{ty::VType, Typer};
 
@@ -152,6 +153,8 @@ impl Constrain<'_, '_> {
           c.constrain(vr, ur, span);
         });
       }
+
+      (VType::Integer, VType::Primitive(hir::PrimitiveType::I64)) => {}
 
       (v, u) => self.error(TypeError::NotSubtype(v.clone(), u.clone())),
     }
