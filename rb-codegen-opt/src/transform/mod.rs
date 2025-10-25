@@ -84,6 +84,6 @@ passes![
   eliminate_unreachable_blocks::EliminateUnreachableBlocks,
   eliminate_unused_vars::EliminateUnusedVars,
   // legalize::Legalize,
-  // merge_blocks::MergeBlocks,
+  merge_blocks::MergeBlocks,
   update_phis::UpdatePhis,
 ];
