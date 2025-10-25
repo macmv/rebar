@@ -6,7 +6,7 @@ use ast::{ExprId, StmtId};
 use rb_diagnostic::Span;
 
 #[derive(Default)]
-pub struct SpanMap {
+pub struct FunctionSpanMap {
   pub name_span: Option<Span>,
 
   pub exprs: Vec<Span>,
@@ -19,7 +19,7 @@ pub struct SpanMap {
   pub if_exprs:   HashMap<ExprId, (Span, Option<Span>)>,
 }
 
-impl Index<ExprId> for SpanMap {
+impl Index<ExprId> for FunctionSpanMap {
   type Output = Span;
 
   fn index(&self, index: ExprId) -> &Self::Output {
@@ -27,7 +27,7 @@ impl Index<ExprId> for SpanMap {
   }
 }
 
-impl Index<StmtId> for SpanMap {
+impl Index<StmtId> for FunctionSpanMap {
   type Output = Span;
 
   fn index(&self, index: StmtId) -> &Self::Output {

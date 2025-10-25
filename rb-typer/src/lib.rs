@@ -4,7 +4,7 @@ use la_arena::Arena;
 use rb_diagnostic::{emit, Span};
 use rb_hir::{
   ast::{self as hir, ExprId, StmtId},
-  SpanMap,
+  FunctionSpanMap,
 };
 use ty::{TypeVar, VType, VarId};
 
@@ -22,7 +22,7 @@ pub struct Typer<'a> {
   // Inputs to the typer: the environment, an HIR tree, and a map of spans for diagnostics.
   env:      &'a Environment,
   function: &'a hir::Function,
-  span_map: &'a SpanMap,
+  span_map: &'a FunctionSpanMap,
 
   // Outputs of the typer: a map of expressions to their rendered types.
   exprs: HashMap<ExprId, VType>,
@@ -47,7 +47,7 @@ pub fn type_of_type_expr(te: &hir::TypeExpr) -> Type {
 }
 
 impl<'a> Typer<'a> {
-  fn new(env: &'a Environment, function: &'a hir::Function, span_map: &'a SpanMap) -> Self {
+  fn new(env: &'a Environment, function: &'a hir::Function, span_map: &'a FunctionSpanMap) -> Self {
     Typer {
       env,
       function,
@@ -60,7 +60,11 @@ impl<'a> Typer<'a> {
   }
 
   /// Typecheck a function body.
-  pub fn check(env: &'a Environment, function: &'a hir::Function, span_map: &'a SpanMap) -> Self {
+  pub fn check(
+    env: &'a Environment,
+    function: &'a hir::Function,
+    span_map: &'a FunctionSpanMap,
+  ) -> Self {
     let mut typer = Typer::new(env, function, span_map);
 
     for (arg, ty) in &function.args {

@@ -6,14 +6,14 @@ use std::collections::HashMap;
 use rb_diagnostic::{emit, SourceId, Span};
 use rb_hir::{
   ast::{self as hir, StringInterp},
-  SpanMap,
+  FunctionSpanMap,
 };
 use rb_syntax::{cst, AstNode, SyntaxNodePtr};
 
 pub fn lower_source(
   cst: cst::SourceFile,
   source: SourceId,
-) -> (hir::SourceFile, Vec<SpanMap>, Vec<AstIdMap>) {
+) -> (hir::SourceFile, Vec<FunctionSpanMap>, Vec<AstIdMap>) {
   let mut out = hir::SourceFile::default();
   let mut span_maps = vec![];
   let mut ast_id_maps = vec![];
@@ -28,7 +28,7 @@ pub fn lower_source(
 
 struct SourceLower<'a> {
   source:      SourceId,
-  span_maps:   &'a mut Vec<SpanMap>,
+  span_maps:   &'a mut Vec<FunctionSpanMap>,
   ast_id_maps: &'a mut Vec<AstIdMap>,
   out:         &'a mut hir::SourceFile,
 }
@@ -42,7 +42,7 @@ pub struct AstIdMap {
 impl SourceLower<'_> {
   fn source(&mut self, cst: &cst::SourceFile) -> hir::FunctionId {
     let mut func = hir::Function::default();
-    let mut span_map = SpanMap::default();
+    let mut span_map = FunctionSpanMap::default();
     let mut ast_id_map = AstIdMap::default();
     let mut lower = FunctionLower {
       source:     self,
@@ -65,7 +65,7 @@ impl SourceLower<'_> {
 
   fn function(&mut self, cst: &cst::FunctionDef) -> hir::FunctionId {
     let mut f = hir::Function::default();
-    let mut span_map = SpanMap::default();
+    let mut span_map = FunctionSpanMap::default();
     let mut ast_id_map = AstIdMap::default();
     let mut lower = FunctionLower {
       source:     self,
@@ -131,7 +131,7 @@ impl SourceLower<'_> {
 struct FunctionLower<'a, 'b> {
   source:     &'a mut SourceLower<'b>,
   f:          &'a mut hir::Function,
-  span_map:   &'a mut SpanMap,
+  span_map:   &'a mut FunctionSpanMap,
   ast_id_map: &'a mut AstIdMap,
 }
 

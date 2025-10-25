@@ -106,7 +106,7 @@ impl RuntimeEnvironment {
   fn build(
     &mut self,
     hir: &rb_hir::ast::SourceFile,
-    spans: &[rb_hir::SpanMap],
+    spans: &[rb_hir::FunctionSpanMap],
   ) -> (rb_typer::Environment, rb_mir_lower::Env<'_>) {
     let mut typer_env = self.env.typer_env();
 

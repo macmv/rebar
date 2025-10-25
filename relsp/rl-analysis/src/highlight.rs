@@ -1,4 +1,4 @@
-use rb_hir::{ast as hir, SpanMap};
+use rb_hir::{ast as hir, FunctionSpanMap};
 use rb_hir_lower::AstIdMap;
 use rb_syntax::{
   cst, AstNode, NodeOrToken, Parse, SyntaxKind::*, SyntaxNodePtr, TextRange, TextSize,
@@ -50,7 +50,7 @@ pub enum HighlightKind {
 
 struct Highlighter<'a> {
   func:       &'a hir::Function,
-  span_map:   &'a SpanMap,
+  span_map:   &'a FunctionSpanMap,
   ast_id_map: &'a AstIdMap,
 
   hl: &'a mut Highlight,
@@ -60,7 +60,7 @@ impl Highlight {
   pub fn from_ast(
     cst: Parse<cst::SourceFile>,
     file: hir::SourceFile,
-    span_maps: &[SpanMap],
+    span_maps: &[FunctionSpanMap],
     ast_id_maps: &[AstIdMap],
   ) -> Highlight {
     let mut hl = Highlight { tokens: vec![] };

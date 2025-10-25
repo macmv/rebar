@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use rb_diagnostic::emit;
-use rb_hir::{ast as hir, SpanMap};
+use rb_hir::{ast as hir, FunctionSpanMap};
 use rb_mir::{
   ast::{self as mir, UserFunctionId},
   MirContext,
@@ -28,7 +28,12 @@ pub struct UserFunction {
 }
 
 impl Env<'_> {
-  pub fn declare_user_function(&mut self, id: u64, function: &hir::Function, span: &SpanMap) {
+  pub fn declare_user_function(
+    &mut self,
+    id: u64,
+    function: &hir::Function,
+    span: &FunctionSpanMap,
+  ) {
     let mut func = UserFunction { id: UserFunctionId(id), intrinsic: None };
 
     for attr in &function.attrs {
