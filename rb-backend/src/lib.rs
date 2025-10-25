@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use rb_codegen::{
-  Condition, Function, FunctionBuilder, FunctionId, Math, Signature, TerminatorInstruction,
-  Variable, VariableSize::*,
+  Condition, Function, FunctionBuilder, FunctionId, InstructionInput, Math, Signature,
+  TerminatorInstruction, Variable, VariableSize::*,
 };
 use rb_mir::{ast as mir, MirContext};
 
@@ -195,7 +195,7 @@ impl FuncBuilder<'_> {
           let arg = self.compile_expr(arg);
 
           let v = arg.to_ir(self);
-          arg_values.push(v);
+          arg_values.extend(v.into_iter().map(|v| InstructionInput::from(v)));
         }
 
         let _ret_ty = match *sig_ty {
@@ -203,7 +203,7 @@ impl FuncBuilder<'_> {
           _ => unreachable!(),
         };
 
-        let output = self.builder.instr().call(self.ctx.function_ids[&function], Bit64, 0);
+        let output = self.builder.instr().call(self.ctx.function_ids[&function], &arg_values);
         RValue::int(output)
       }
 

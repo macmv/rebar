@@ -146,13 +146,26 @@ instructions! {
   math2: Math(math: Math) => input1, input2;
   branch: Branch(condition: Condition, block: BlockId) => input1, input2;
   cmp: Compare(condition: Condition) => input1, input2;
-  call: Call(function: FunctionId) => input;
   lea: Lea(symbol: Symbol) => ;
   mov: Move => input;
   syscall1: Syscall => input;
   syscall2: Syscall => input1, input2;
   syscall3: Syscall => input1, input2, input3;
   syscall4: Syscall => input1, input2, input3, input4;
+}
+
+impl InstrBuilder<'_> {
+  pub fn call(self, function: FunctionId, args: &[InstructionInput]) -> Variable {
+    let output = self.function.var(VariableSize::Bit64);
+
+    self.function.function.blocks[self.block.0 as usize].instructions.push(crate::Instruction {
+      opcode: crate::Opcode::Call(function),
+      input:  args.into_iter().copied().collect(),
+      output: smallvec![output.into()],
+    });
+
+    output
+  }
 }
 
 #[cfg(test)]
