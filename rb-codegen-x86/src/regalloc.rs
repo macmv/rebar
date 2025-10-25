@@ -179,7 +179,7 @@ impl Regalloc<'_> {
 
         let requirement = match instr.opcode {
           Opcode::Math(_) => Some(RegisterIndex::Eax),
-          Opcode::Call(_) => match i {
+          Opcode::Call(_) => match 0 {
             0 => Some(RegisterIndex::Eax),
             _ => todo!("more than 1 return"),
           },
