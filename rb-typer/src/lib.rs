@@ -300,7 +300,10 @@ impl<'a> Typer<'a> {
           | hir::BinaryOp::ShiftLeft
           | hir::BinaryOp::ShiftRight => {
             self.constrain(
-              &VType::Function(vec![VType::Integer, VType::Integer], Box::new(VType::Integer)),
+              &VType::Function(
+                vec![hir::PrimitiveType::I64.into(), hir::PrimitiveType::I64.into()],
+                Box::new(hir::PrimitiveType::I64.into()),
+              ),
               &call_type,
               self.span(expr),
             );
