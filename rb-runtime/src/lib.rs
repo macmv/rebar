@@ -60,10 +60,6 @@ fn compile_diagnostics(
 
   let files = results.into_iter().map(|r| r.unwrap()).collect::<Vec<_>>();
 
-  // TODO: This is where we join all the threads, collect all the functions up,
-  // and then split out to a thread pool to typecheck and lower each function.
-  let mut functions = vec![];
-
   let (typer_env, mir_env) = env.build(&files);
 
   rb_diagnostic::check()?;
@@ -75,18 +71,27 @@ fn compile_diagnostics(
     })
     .collect::<Vec<_>>();
 
-  for (id, function, span_map) in funcs {
-    let typer = rb_typer::Typer::check(&typer_env, &function, &span_map);
-    if rb_diagnostic::is_ok() {
-      if let Some(mut func) = rb_mir_lower::lower_function(&mir_env, &typer, &function) {
-        func.id = rb_mir::ast::UserFunctionId(id.into_raw().into_u32() as u64);
+  let functions = run_parallel(
+    &funcs,
+    || (),
+    |_, (id, function, span_map)| {
+      let typer = rb_typer::Typer::check(&typer_env, &function, &span_map);
 
-        functions.push(func);
+      if rb_diagnostic::is_ok() {
+        if let Some(mut func) = rb_mir_lower::lower_function(&mir_env, &typer, &function) {
+          func.id = rb_mir::ast::UserFunctionId(id.into_raw().into_u32() as u64);
+
+          return Some(func);
+        }
       }
-    }
-  }
+
+      None
+    },
+  );
 
   rb_diagnostic::check()?;
+
+  let functions = functions.into_iter().flatten().collect::<Vec<_>>();
 
   // If we get to this point, all checks have passed, and we can compile to
   // cranelift IR. Collect all the functions, split them into chunks, and compile
