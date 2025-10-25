@@ -176,13 +176,31 @@ impl Regalloc<'_> {
         let instr = &function.block(block).instructions[i];
 
         let &[InstructionOutput::Var(out)] = instr.output.as_slice() else { continue };
-        if self.is_used_later(
+
+        let requirement = match instr.opcode {
+          Opcode::Math(_) => Some(RegisterIndex::Eax),
+          Opcode::Call(_) => match i {
+            0 => Some(RegisterIndex::Eax),
+            _ => todo!("more than 1 return"),
+          },
+          _ => None,
+        };
+
+        let used_later = self.is_used_later(
           &function.block(block).instructions[i + 1..],
           &function.block(block).terminator,
           out,
-        ) {
+        );
+
+        if let Some(req) = requirement {
+          self.active.insert(req, out);
+          self.alloc.registers.set_with(
+            out,
+            Register { size: var_to_reg_size(out.size()).unwrap(), index: req },
+            || Register::RAX,
+          );
+        } else if used_later {
           self.allocate(loc, out);
-          live_outs.insert(out);
         } else {
           let reg = self.pick_register(loc, out);
           self.alloc.registers.set_with(
@@ -190,6 +208,10 @@ impl Regalloc<'_> {
             Register { size: var_to_reg_size(out.size()).unwrap(), index: reg },
             || Register::RAX,
           );
+        }
+
+        if used_later {
+          live_outs.insert(out);
         }
       }
 
@@ -378,20 +400,21 @@ impl Regalloc<'_> {
           *v = new_var;
         }
         None => {
-          let new_var = self.fresh_var(v.size());
-          moves.push(Move::VarVar { from: *v, to: new_var });
-          self.alloc.registers.set_with(
-            new_var,
-            Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
-            || Register::RAX,
-          );
-          *v = new_var;
+          if self.alloc.registers.get(*v).is_some_and(|r| r.index != requirement) {
+            let new_var = self.fresh_var(v.size());
+            moves.push(Move::VarVar { from: *v, to: new_var });
+            self.alloc.registers.set_with(
+              new_var,
+              Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
+              || Register::RAX,
+            );
+            *v = new_var;
+          }
         }
       },
       InstructionInput::Imm(imm) => match prev {
         Some(other) => {
-          let moved_reg = self.pick_register(loc, other);
-          moves.push(Move::VarReg { from: other, to: moved_reg });
+          self.rehome(loc, other);
 
           let new_var = self.fresh_var(VariableSize::Bit64);
           moves.push(Move::ImmVar { from: *imm, to: new_var });
@@ -471,7 +494,7 @@ impl Regalloc<'_> {
 
   fn rehome(&mut self, loc: InstructionLocation, var: Variable) {
     let new_var = self.fresh_var(var.size());
-    let new_reg = self.pick_register(loc, new_var);
+    let new_reg = self.pick_register(loc, var);
     self.alloc.registers.set_with(
       new_var,
       Register { size: var_to_reg_size(var.size()).unwrap(), index: new_reg },
