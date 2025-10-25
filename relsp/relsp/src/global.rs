@@ -433,10 +433,10 @@ fn check(src: &str) -> Vec<Diagnostic> {
   }
 
   let res = rb_diagnostic::run(sources, || {
-    let (hir, span_maps, _) = hir;
+    let (hir, span_map, _) = hir;
 
     for (idx, function) in hir.functions {
-      let span_map = &span_maps[idx.into_raw().into_u32() as usize];
+      let span_map = &span_map.functions[&idx];
 
       rb_typer::Typer::check(&typer_env, &function, &span_map);
     }
