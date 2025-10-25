@@ -46,8 +46,6 @@ enum Move {
 
 impl VariableRegisters {
   pub fn pass(function: &mut Function) -> Self {
-    println!("{function}");
-
     let mut analysis = Analysis::default();
     analysis.load(DominatorTree::ID, function);
     analysis.load(ValueUses::ID, function);
@@ -134,8 +132,6 @@ impl VariableRegisters {
       }
     }
 
-    println!("{function}");
-
     regs
   }
 
@@ -164,8 +160,6 @@ impl Regalloc<'_> {
 
       for i in 0..function.block(block).instructions.len() {
         let loc = InstructionLocation { block, index: i };
-        println!("= {}", function.block(block).instructions[i]);
-
         self.visit_instr(&mut live_outs, loc, &mut function.block_mut(block).instructions[i..]);
 
         let instr = &function.block(block).instructions[i];
@@ -287,11 +281,9 @@ impl Regalloc<'_> {
           InstructionInput::Var(v) => match prev.unwrap() {
             Some(active) if active == *v => {}
             Some(other) => {
-              println!("saving {other}");
               moves.push(Move::VarReg { from: other, to: RegisterIndex::Ebx });
 
               let new_var = self.fresh_var(v.size());
-              println!("moving {v} -> {requirement:?} {new_var} (tmp)");
               moves.push(Move::VarVar { from: *v, to: new_var });
               self.alloc.registers.set_with(
                 new_var,
@@ -301,7 +293,6 @@ impl Regalloc<'_> {
               *v = new_var;
             }
             None => {
-              println!("moving {v} -> {requirement:?}");
               let new_var = self.fresh_var(v.size());
               moves.push(Move::VarVar { from: *v, to: new_var });
               self.alloc.registers.set_with(
@@ -314,11 +305,9 @@ impl Regalloc<'_> {
           },
           InstructionInput::Imm(imm) => match prev.unwrap() {
             Some(other) => {
-              println!("saving {other}");
               moves.push(Move::VarReg { from: other, to: RegisterIndex::Ebx });
 
               let new_var = self.fresh_var(VariableSize::Bit64);
-              println!("moving {new_var} (tmp) -> {requirement:?}");
               moves.push(Move::ImmVar { from: *imm, to: new_var });
               self.alloc.registers.set_with(
                 new_var,
@@ -332,7 +321,6 @@ impl Regalloc<'_> {
             }
             None => {
               let new_var = self.fresh_var(VariableSize::Bit64);
-              println!("moving {new_var} (tmp) -> {requirement:?}");
               moves.push(Move::ImmVar { from: *imm, to: new_var });
               self.alloc.registers.set_with(
                 new_var,
@@ -369,7 +357,7 @@ impl Regalloc<'_> {
 
     for clobber in clobbers {
       if let Some(&var) = self.active.get(clobber) {
-        println!("clobbering {var} in {clobber:?}");
+        self.clobber(var);
       }
     }
     */
@@ -383,7 +371,6 @@ impl Regalloc<'_> {
 
   fn allocate(&mut self, loc: InstructionLocation, var: Variable) {
     let reg = self.pick_register(loc, var);
-    println!("allocating {var} = {reg:?}");
     self.active.insert(reg, var);
     self.alloc.registers.set_with(
       var,
@@ -395,12 +382,9 @@ impl Regalloc<'_> {
   fn free(&mut self, var: Variable) {
     match self.active.iter().find(|&(_, &v)| v == var) {
       Some((&reg, _)) => {
-        println!("freeing {var} in {reg:?}");
         self.active.remove(&reg);
       }
-      None => {
-        println!("freeing {var} (none)");
-      }
+      None => {}
     }
   }
 
@@ -431,7 +415,6 @@ impl Regalloc<'_> {
   fn rehome(&mut self, loc: InstructionLocation, var: Variable) {
     let new_var = self.fresh_var(var.size());
     let new_reg = self.pick_register(loc, new_var);
-    println!("rehoming {var} -> {new_var} in {new_reg:?}");
     self.alloc.registers.set_with(
       new_var,
       Register { size: var_to_reg_size(var.size()).unwrap(), index: new_reg },
