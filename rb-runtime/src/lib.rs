@@ -39,7 +39,7 @@ fn compile_diagnostics(
 
   let res = cst::SourceFile::parse(&src.source);
 
-  let (hir, span_maps, _) = if res.errors().is_empty() {
+  let (hir, span_map, _) = if res.errors().is_empty() {
     rb_hir_lower::lower_source(res.tree(), id)
   } else {
     for error in res.errors() {
@@ -55,17 +55,17 @@ fn compile_diagnostics(
   // and then split out to a thread pool to typecheck and lower each function.
   let mut functions = vec![];
 
-  let (typer_env, mir_env) = env.build(&hir, &span_maps);
+  let (typer_env, mir_env) = env.build(&hir, &span_map);
 
   rb_diagnostic::check()?;
 
-  for (idx, function) in hir.functions {
-    let span_map = &span_maps[idx.into_raw().into_u32() as usize];
+  for (id, function) in hir.functions {
+    let span_map = &span_map.functions[&id];
 
     let typer = rb_typer::Typer::check(&typer_env, &function, &span_map);
     if rb_diagnostic::is_ok() {
       if let Some(mut func) = rb_mir_lower::lower_function(&mir_env, &typer, &function) {
-        func.id = rb_mir::ast::UserFunctionId(idx.into_raw().into_u32() as u64);
+        func.id = rb_mir::ast::UserFunctionId(id.into_raw().into_u32() as u64);
 
         functions.push(func);
       }
@@ -106,7 +106,7 @@ impl RuntimeEnvironment {
   fn build(
     &mut self,
     hir: &rb_hir::ast::SourceFile,
-    spans: &[rb_hir::FunctionSpanMap],
+    spans: &rb_hir::SpanMap,
   ) -> (rb_typer::Environment, rb_mir_lower::Env<'_>) {
     let mut typer_env = self.env.typer_env();
 
@@ -131,8 +131,8 @@ impl RuntimeEnvironment {
     }
 
     let mut mir_env = self.mir_env();
-    for (id, f) in hir.functions.values().enumerate() {
-      mir_env.declare_user_function(id as u64, f, &spans[id]);
+    for (id, f) in hir.functions.iter() {
+      mir_env.declare_user_function(id.into_raw().into_u32() as u64, f, &spans.functions[&id]);
     }
 
     (typer_env, mir_env)

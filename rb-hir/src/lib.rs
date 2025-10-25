@@ -2,8 +2,13 @@ pub mod ast;
 
 use std::{collections::HashMap, ops::Index};
 
-use ast::{ExprId, StmtId};
+use ast::{ExprId, FunctionId, StmtId};
 use rb_diagnostic::Span;
+
+#[derive(Default)]
+pub struct SpanMap {
+  pub functions: HashMap<FunctionId, FunctionSpanMap>,
+}
 
 #[derive(Default)]
 pub struct FunctionSpanMap {
