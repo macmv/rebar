@@ -1,4 +1,4 @@
-use std::{cell::RefCell, sync::Arc};
+use std::sync::{Arc, Mutex};
 
 use crate::{Diagnostic, Sources};
 
@@ -9,9 +9,7 @@ pub struct Context {
   sources: Arc<Sources>,
 }
 
-thread_local! {
-  static CONTEXT: RefCell<Option<Context>> = const { RefCell::new(None) };
-}
+static CONTEXT: Mutex<Option<Context>> = const { Mutex::new(None) };
 
 impl Context {
   fn new(sources: Arc<Sources>) -> Self { Context { error: false, diagnostics: None, sources } }
@@ -27,22 +25,19 @@ impl Context {
   }
 
   pub fn init(sources: Arc<Sources>) {
-    CONTEXT.with(|c| {
-      if (*c.borrow()).is_some() {
-        panic!("context already initialized");
-      }
+    let mut c = CONTEXT.lock().unwrap();
 
-      *c.borrow_mut() = Some(Context::new(sources));
-    });
+    if c.is_some() {
+      panic!("context already initialized");
+    }
+
+    *c = Some(Context::new(sources));
   }
-  pub fn cleanup() {
-    CONTEXT.with(|c| {
-      *c.borrow_mut() = None;
-    });
-  }
+  pub fn cleanup() { *CONTEXT.lock().unwrap() = None; }
 
   pub fn run<T>(f: impl FnOnce(&mut Context) -> T) -> T {
-    CONTEXT.with(|c| f(c.borrow_mut().as_mut().expect("context not initialized")))
+    let mut c = CONTEXT.lock().unwrap();
+    f(c.as_mut().expect("context not initialized"))
   }
 
   pub fn error(&mut self, diagnostic: Diagnostic) {
