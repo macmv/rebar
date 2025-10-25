@@ -119,10 +119,10 @@ impl BlockBuilder<'_> {
 
   #[track_caller]
   pub fn terminate(self, term: crate::TerminatorInstruction) {
-    assert!(!self.is_terminated(), "cannot add instruction to terminated block");
-
-    self.function.function.blocks[self.block.0 as usize].terminator = term;
-    self.function.terminated[self.block.0 as usize] = true;
+    if !self.is_terminated() {
+      self.function.function.blocks[self.block.0 as usize].terminator = term;
+      self.function.terminated[self.block.0 as usize] = true;
+    }
   }
 }
 
