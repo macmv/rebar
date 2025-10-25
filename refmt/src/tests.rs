@@ -415,7 +415,9 @@ fn fn_stmt() {
       }
     "#,
     expect![@r#"
-      fn foo(x: int, y: str) { x + y }
+      fn foo(x: int, y: str) {
+        x + y
+      }
     "#],
   );
 
@@ -424,7 +426,9 @@ fn fn_stmt() {
       fn foo(x:int,y:str){x+y}
     "#,
     expect![@r#"
-      fn foo(x: int, y: str) { x + y }
+      fn foo(x: int, y: str) {
+        x + y
+      }
     "#],
   );
 
@@ -434,6 +438,18 @@ fn fn_stmt() {
     "#,
     expect![@r#"
       extern "syscall" fn foo(x: int) -> int
+    "#],
+  );
+}
+
+#[test]
+fn short_function() {
+  check(
+    &r#"
+      fn foo(x:int){x+1}
+    "#,
+    expect![@r#"
+      fn foo(x: int) { x + 1 }
     "#],
   );
 }
@@ -694,6 +710,23 @@ fn struct_init_multiline() {
         d: 5,
         e: 6,
         f: 7
+      }
+    "#],
+  );
+}
+
+#[test]
+fn long_call_in_function() {
+  check(
+    r#"
+      fn foo() { bar(a_long_argument_1, a_long_argument_2) }
+    "#,
+    expect![@r#"
+      fn foo() {
+        bar(
+          a_long_argument_1,
+          a_long_argument_2,
+        )
       }
     "#],
   );

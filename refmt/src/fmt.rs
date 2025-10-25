@@ -214,6 +214,7 @@ impl FormatterContext<'_> {
 
           let retry = match n.kind() {
             // Expressions that can toggle the multiline flag.
+            BLOCK if n.parent().unwrap().kind() != IF_EXPR => Some(self.clone()),
             CALL_EXPR | BINARY_EXPR | IF_EXPR | ARRAY_EXPR | STRUCT_EXPR => Some(self.clone()),
             _ => None,
           };
