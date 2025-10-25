@@ -123,10 +123,12 @@ impl FuncBuilder<'_> {
 
     if let Some(res) = res {
       let ir = res.to_ir(&mut self);
-      self
-        .builder
-        .current_block()
-        .terminate(TerminatorInstruction::Return(ir.into_iter().map(|v| v.into()).collect()));
+      if !self.builder.current_block().is_terminated() {
+        self
+          .builder
+          .current_block()
+          .terminate(TerminatorInstruction::Return(ir.into_iter().map(|v| v.into()).collect()));
+      }
     }
 
     self.builder.build()
