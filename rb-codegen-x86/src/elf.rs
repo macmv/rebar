@@ -132,7 +132,7 @@ pub fn generate(filename: &Path, object: &Object) {
     st_info:  ((elf::STB_GLOBAL as u8) << 4) | (elf::STT_FUNC as u8),
     st_other: 0,
     st_shndx: 0,
-    st_value: 0,
+    st_value: object.start_offset,
     st_size:  object.text.len() as u64,
   });
 

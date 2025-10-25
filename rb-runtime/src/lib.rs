@@ -118,7 +118,8 @@ fn compile_mir(env: RuntimeEnvironment, functions: Vec<rb_mir::ast::Function>) {
     compiler.finish_function(func);
   }
 
-  compiler.finish();
+  // TODO: Pick a main function in a sane way
+  compiler.finish(functions[1].id);
 }
 
 impl RuntimeEnvironment {

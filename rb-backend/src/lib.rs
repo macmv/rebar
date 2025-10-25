@@ -63,11 +63,12 @@ impl Compiler {
 
   pub fn finish_function(&mut self, func: Function) { self.functions.push(func); }
 
-  pub fn finish(self) {
+  pub fn finish(self, start: mir::UserFunctionId) {
     let mut builder = rb_codegen_x86::ObjectBuilder::default();
     for function in self.functions {
       builder.add_function(function);
     }
+    builder.set_start_function(self.function_ids[&start]);
     let object = builder.finish();
     object.save(std::path::Path::new("out.o"));
 

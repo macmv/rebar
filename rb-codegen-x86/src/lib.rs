@@ -34,6 +34,7 @@ struct Call {
 #[derive(Default)]
 pub struct Object {
   text:         Vec<u8>,
+  start_offset: u64,
   ro_data:      Vec<u8>,
   relocs:       Vec<Rel>,
   data_symbols: Vec<SymbolDef>,
@@ -55,6 +56,10 @@ pub struct Jump {
 }
 
 impl ObjectBuilder {
+  pub fn set_start_function(&mut self, function: FunctionId) {
+    self.object.start_offset = self.functions[function.as_u32() as usize];
+  }
+
   pub fn add_function(&mut self, mut function: rb_codegen::Function) {
     let ro_offset = self.object.ro_data.len() as u32;
     self.object.ro_data.extend_from_slice(&function.data);
@@ -861,6 +866,7 @@ mod tests {
     let binary_path = dir.path().join("a.out");
     Object {
       text:         builder.text,
+      start_offset: 0,
       ro_data:      data.to_vec(),
       relocs:       builder.relocs,
       data_symbols: vec![SymbolDef { offset: 0, name: "foo".to_string() }],
