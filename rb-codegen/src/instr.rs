@@ -10,6 +10,7 @@ use crate::{
 pub struct FunctionBuilder {
   next_variable: u32,
   function:      Function,
+  terminated:    Vec<bool>,
   block:         BlockId,
 }
 
@@ -33,6 +34,7 @@ impl FunctionBuilder {
         data: vec![],
         data_symbols: vec![],
       },
+      terminated:    vec![false],
       block:         BlockId(0),
     }
   }
@@ -86,11 +88,15 @@ impl FunctionBuilder {
 impl BlockBuilder<'_> {
   pub fn id(&self) -> BlockId { self.block }
 
+  pub fn is_terminated(&self) -> bool { self.function.terminated[self.block.0 as usize] }
+
+  #[track_caller]
   pub fn phi(&mut self, from: BTreeMap<BlockId, Option<Variable>>) -> Variable {
     assert!(
       self.function.function.blocks[self.block.0 as usize].instructions.is_empty(),
       "phis must proceed other instructions",
     );
+    assert!(!self.is_terminated(), "cannot add phi to terminated block");
 
     let size = from.values().flatten().next().expect("phi cannot be empty").size();
     assert!(
@@ -103,12 +109,19 @@ impl BlockBuilder<'_> {
     to
   }
 
+  #[track_caller]
   pub fn instr(&mut self) -> InstrBuilder<'_> {
+    assert!(!self.is_terminated(), "cannot add instruction to terminated block");
+
     InstrBuilder { function: self.function, block: self.block }
   }
 
+  #[track_caller]
   pub fn terminate(self, term: crate::TerminatorInstruction) {
+    assert!(!self.is_terminated(), "cannot add instruction to terminated block");
+
     self.function.function.blocks[self.block.0 as usize].terminator = term;
+    self.function.terminated[self.block.0 as usize] = true;
   }
 }
 
