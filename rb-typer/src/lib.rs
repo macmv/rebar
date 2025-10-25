@@ -37,6 +37,16 @@ pub struct Typer<'a> {
   locals:          HashMap<String, VType>,
 }
 
+pub fn type_of_function(func: &hir::Function) -> Type {
+  let args = func.args.iter().map(|(_, ty)| type_of_type_expr(ty)).collect();
+  let ret = match func.ret {
+    Some(ref ty) => Box::new(type_of_type_expr(&ty)),
+    None => Box::new(Type::unit()),
+  };
+
+  Type::Function(args, ret)
+}
+
 // TODO: Need a version of this that can resolve names.
 pub fn type_of_type_expr(te: &hir::TypeExpr) -> Type {
   match te {

@@ -159,6 +159,7 @@ impl RuntimeEnvironment {
     for (hir, span_map) in files {
       for (id, f) in hir.functions.iter() {
         mir_env.declare_user_function(id.into_raw().into_u32() as u64, f, &span_map.functions[&id]);
+        typer_env.names.insert(f.name.clone(), rb_typer::type_of_function(f));
       }
     }
 

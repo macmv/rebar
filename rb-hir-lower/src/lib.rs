@@ -94,6 +94,10 @@ impl SourceLower<'_> {
       lower.f.args.push((name, ty));
     }
 
+    if let Some(ret) = cst.params().unwrap().return_type() {
+      lower.f.ret = Some(type_expr(lower.source.source, &ret.ty().unwrap()));
+    }
+
     if let Some(block) = cst.block() {
       let mut body = vec![];
       for stmt in block.stmts() {
