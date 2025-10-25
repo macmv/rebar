@@ -30,11 +30,11 @@ pub struct UserFunction {
 impl Env<'_> {
   pub fn declare_user_function(
     &mut self,
-    id: u64,
+    id: UserFunctionId,
     function: &hir::Function,
     span: &FunctionSpanMap,
   ) {
-    let mut func = UserFunction { id: UserFunctionId(id), intrinsic: None };
+    let mut func = UserFunction { id, intrinsic: None };
 
     for attr in &function.attrs {
       if attr.path == "rebar::intrinsic" {

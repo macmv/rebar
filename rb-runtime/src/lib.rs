@@ -60,10 +60,6 @@ fn compile_diagnostics(
 
   let files = results.into_iter().map(|r| r.unwrap()).collect::<Vec<_>>();
 
-  let (typer_env, mir_env) = env.build(&files);
-
-  rb_diagnostic::check()?;
-
   let funcs = files
     .iter()
     .flat_map(|(hir, span_map)| {
@@ -72,6 +68,10 @@ fn compile_diagnostics(
     .enumerate()
     .map(|(i, (function, span_map))| (rb_mir::ast::UserFunctionId(i as u64), function, span_map))
     .collect::<Vec<_>>();
+
+  let (typer_env, mir_env) = env.build(&files, &funcs);
+
+  rb_diagnostic::check()?;
 
   let functions = run_parallel(
     &funcs,
@@ -127,6 +127,7 @@ impl RuntimeEnvironment {
   fn build(
     &mut self,
     files: &[(rb_hir::ast::SourceFile, rb_hir::SpanMap)],
+    functions: &[(rb_mir::ast::UserFunctionId, &rb_hir::ast::Function, &rb_hir::FunctionSpanMap)],
   ) -> (rb_typer::Environment, rb_mir_lower::Env<'_>) {
     let mut typer_env = self.env.typer_env();
 
@@ -156,11 +157,9 @@ impl RuntimeEnvironment {
     }
 
     let mut mir_env = self.mir_env();
-    for (hir, span_map) in files {
-      for (id, f) in hir.functions.iter() {
-        mir_env.declare_user_function(id.into_raw().into_u32() as u64, f, &span_map.functions[&id]);
-        typer_env.names.insert(f.name.clone(), rb_typer::type_of_function(f));
-      }
+    for (id, f, span_map) in functions {
+      mir_env.declare_user_function(*id, f, &span_map);
+      typer_env.names.insert(f.name.clone(), rb_typer::type_of_function(f));
     }
 
     (typer_env, mir_env)
