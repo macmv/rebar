@@ -67,8 +67,10 @@ fn compile_diagnostics(
   let funcs = files
     .iter()
     .flat_map(|(hir, span_map)| {
-      hir.functions.iter().map(|(id, function)| (id, function, &span_map.functions[&id]))
+      hir.functions.iter().map(|(id, function)| (function, &span_map.functions[&id]))
     })
+    .enumerate()
+    .map(|(i, (function, span_map))| (rb_mir::ast::UserFunctionId(i as u64), function, span_map))
     .collect::<Vec<_>>();
 
   let functions = run_parallel(
@@ -79,7 +81,7 @@ fn compile_diagnostics(
 
       if rb_diagnostic::is_ok() {
         if let Some(mut func) = rb_mir_lower::lower_function(&mir_env, &typer, &function) {
-          func.id = rb_mir::ast::UserFunctionId(id.into_raw().into_u32() as u64);
+          func.id = *id;
 
           return Some(func);
         }
