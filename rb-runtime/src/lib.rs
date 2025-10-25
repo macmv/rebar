@@ -33,35 +33,49 @@ pub fn run(
 fn compile_diagnostics(
   mut env: RuntimeEnvironment,
   sources: Arc<Sources>,
-  id: SourceId,
+  _id: SourceId,
 ) -> Result<(), ()> {
-  let src = sources.get(id);
+  let results = run_parallel(
+    &sources.all().collect::<Vec<_>>(),
+    || (),
+    |_, &id| {
+      let src = sources.get(id);
+      let res = cst::SourceFile::parse(&src.source);
 
-  let res = cst::SourceFile::parse(&src.source);
+      let (hir, span_maps, _) = if res.errors().is_empty() {
+        rb_hir_lower::lower_source(res.tree(), id)
+      } else {
+        for error in res.errors() {
+          emit!(Span { file: id, range: error.span() } => error.message());
+        }
 
-  let (hir, span_map, _) = if res.errors().is_empty() {
-    rb_hir_lower::lower_source(res.tree(), id)
-  } else {
-    for error in res.errors() {
-      emit!(Span { file: id, range: error.span() } => error.message());
-    }
+        return Err(());
+      };
 
-    return Err(());
-  };
+      Ok((hir, span_maps))
+    },
+  );
 
   rb_diagnostic::check()?;
+
+  let files = results.into_iter().map(|r| r.unwrap()).collect::<Vec<_>>();
 
   // TODO: This is where we join all the threads, collect all the functions up,
   // and then split out to a thread pool to typecheck and lower each function.
   let mut functions = vec![];
 
-  let (typer_env, mir_env) = env.build(&hir, &span_map);
+  let (typer_env, mir_env) = env.build(&files);
 
   rb_diagnostic::check()?;
 
-  for (id, function) in hir.functions {
-    let span_map = &span_map.functions[&id];
+  let funcs = files
+    .iter()
+    .flat_map(|(hir, span_map)| {
+      hir.functions.iter().map(|(id, function)| (id, function, &span_map.functions[&id]))
+    })
+    .collect::<Vec<_>>();
 
+  for (id, function, span_map) in funcs {
     let typer = rb_typer::Typer::check(&typer_env, &function, &span_map);
     if rb_diagnostic::is_ok() {
       if let Some(mut func) = rb_mir_lower::lower_function(&mir_env, &typer, &function) {
@@ -105,34 +119,40 @@ impl RuntimeEnvironment {
 
   fn build(
     &mut self,
-    hir: &rb_hir::ast::SourceFile,
-    spans: &rb_hir::SpanMap,
+    files: &[(rb_hir::ast::SourceFile, rb_hir::SpanMap)],
   ) -> (rb_typer::Environment, rb_mir_lower::Env<'_>) {
     let mut typer_env = self.env.typer_env();
 
-    for (id, s) in hir.structs.values().enumerate() {
-      let id = rb_mir::ast::StructId(id as u64);
+    for (hir, _) in files {
+      for (id, s) in hir.structs.values().enumerate() {
+        let id = rb_mir::ast::StructId(id as u64);
 
-      typer_env.structs.insert(
-        s.name.clone(),
-        s.fields.iter().map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te))).collect(),
-      );
-      self.env.mir_ctx.struct_paths.insert(s.name.clone(), id);
-      self.env.mir_ctx.structs.insert(
-        id,
-        rb_mir::Struct {
-          fields: s
-            .fields
+        typer_env.structs.insert(
+          s.name.clone(),
+          s.fields
             .iter()
             .map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te)))
             .collect(),
-        },
-      );
+        );
+        self.env.mir_ctx.struct_paths.insert(s.name.clone(), id);
+        self.env.mir_ctx.structs.insert(
+          id,
+          rb_mir::Struct {
+            fields: s
+              .fields
+              .iter()
+              .map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te)))
+              .collect(),
+          },
+        );
+      }
     }
 
     let mut mir_env = self.mir_env();
-    for (id, f) in hir.functions.iter() {
-      mir_env.declare_user_function(id.into_raw().into_u32() as u64, f, &spans.functions[&id]);
+    for (hir, span_map) in files {
+      for (id, f) in hir.functions.iter() {
+        mir_env.declare_user_function(id.into_raw().into_u32() as u64, f, &span_map.functions[&id]);
+      }
     }
 
     (typer_env, mir_env)

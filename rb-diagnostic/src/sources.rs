@@ -1,6 +1,6 @@
 use std::ops::Index;
 
-use la_arena::{Arena, Idx};
+use la_arena::{Arena, Idx, RawIdx};
 use line_index::LineIndex;
 
 pub type SourceId = Idx<Source>;
@@ -30,6 +30,9 @@ impl Sources {
 
   pub fn add(&mut self, source: Source) -> SourceId { self.sources.alloc(source) }
   pub fn get(&self, id: SourceId) -> &Source { &self.sources[id] }
+  pub fn all(&self) -> impl Iterator<Item = SourceId> {
+    (0..self.sources.len()).map(|i| SourceId::from_raw(RawIdx::from_u32(i as u32)))
+  }
 }
 
 impl Index<SourceId> for Sources {
