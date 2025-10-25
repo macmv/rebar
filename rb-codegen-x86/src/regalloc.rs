@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use rb_codegen::{
   BlockId, Function, Immediate, Instruction, InstructionInput, InstructionOutput, Opcode, TVec,
-  Variable, VariableSize,
+  TerminatorInstruction, Variable, VariableSize,
 };
 use rb_codegen_opt::analysis::{Analysis, dominator_tree::DominatorTree, value_uses::ValueUses};
 use smallvec::smallvec;
@@ -188,6 +188,36 @@ impl Regalloc<'_> {
           );
         }
       }
+
+      let loc = InstructionLocation { block, index: function.block(block).instructions.len() };
+      match function.block_mut(block).terminator {
+        TerminatorInstruction::Return(ref mut inputs) => {
+          for (i, input) in inputs.iter_mut().enumerate() {
+            let requirement = match i {
+              0 => RegisterIndex::Eax,
+              _ => todo!("more than 1 return"),
+            };
+
+            let prev = self.active.get(&requirement).copied();
+            match input {
+              InstructionInput::Var(v) => {
+                while let Some(&new_v) = self.rehomes.get(v) {
+                  *v = new_v;
+                }
+
+                live_outs.remove(v);
+                if !self.is_used_later(&[], *v) {
+                  self.free(*v);
+                }
+              }
+              _ => {}
+            }
+
+            self.satisfy_requirement(loc, input, prev, requirement);
+          }
+        }
+        _ => {}
+      }
     }
   }
 
@@ -249,8 +279,6 @@ impl Regalloc<'_> {
     loc: InstructionLocation,
     block_after_instr: &mut [Instruction],
   ) {
-    let mut moves = vec![];
-
     let (instr, block_after_instr) = block_after_instr.split_first_mut().unwrap();
     for (i, input) in instr.input.iter_mut().enumerate() {
       let requirement = match instr.opcode {
@@ -288,68 +316,8 @@ impl Regalloc<'_> {
       }
 
       if let Some(requirement) = requirement {
-        match input {
-          InstructionInput::Var(v) => match prev.unwrap() {
-            Some(active) if active == *v => {}
-            Some(other) => {
-              moves.push(Move::VarReg { from: other, to: RegisterIndex::Ebx });
-
-              let new_var = self.fresh_var(v.size());
-              moves.push(Move::VarVar { from: *v, to: new_var });
-              self.alloc.registers.set_with(
-                new_var,
-                Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
-                || Register::RAX,
-              );
-              *v = new_var;
-            }
-            None => {
-              let new_var = self.fresh_var(v.size());
-              moves.push(Move::VarVar { from: *v, to: new_var });
-              self.alloc.registers.set_with(
-                new_var,
-                Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
-                || Register::RAX,
-              );
-              *v = new_var;
-            }
-          },
-          InstructionInput::Imm(imm) => match prev.unwrap() {
-            Some(other) => {
-              moves.push(Move::VarReg { from: other, to: RegisterIndex::Ebx });
-
-              let new_var = self.fresh_var(VariableSize::Bit64);
-              moves.push(Move::ImmVar { from: *imm, to: new_var });
-              self.alloc.registers.set_with(
-                new_var,
-                Register {
-                  size:  var_to_reg_size(VariableSize::Bit64).unwrap(),
-                  index: requirement,
-                },
-                || Register::RAX,
-              );
-              *input = InstructionInput::Var(new_var);
-            }
-            None => {
-              let new_var = self.fresh_var(VariableSize::Bit64);
-              moves.push(Move::ImmVar { from: *imm, to: new_var });
-              self.alloc.registers.set_with(
-                new_var,
-                Register {
-                  size:  var_to_reg_size(VariableSize::Bit64).unwrap(),
-                  index: requirement,
-                },
-                || Register::RAX,
-              );
-              *input = InstructionInput::Var(new_var);
-            }
-          },
-        }
+        self.satisfy_requirement(loc, input, prev.unwrap(), requirement);
       }
-    }
-
-    if !moves.is_empty() {
-      self.copies.insert(loc, moves);
     }
 
     // TODO
@@ -372,6 +340,72 @@ impl Regalloc<'_> {
       }
     }
     */
+  }
+
+  fn satisfy_requirement(
+    &mut self,
+    loc: InstructionLocation,
+    input: &mut InstructionInput,
+    prev: Option<Variable>,
+    requirement: RegisterIndex,
+  ) {
+    let mut moves = vec![];
+
+    match input {
+      InstructionInput::Var(v) => match prev {
+        Some(active) if active == *v => {}
+        Some(other) => {
+          moves.push(Move::VarReg { from: other, to: RegisterIndex::Ebx });
+
+          let new_var = self.fresh_var(v.size());
+          moves.push(Move::VarVar { from: *v, to: new_var });
+          self.alloc.registers.set_with(
+            new_var,
+            Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
+            || Register::RAX,
+          );
+          *v = new_var;
+        }
+        None => {
+          let new_var = self.fresh_var(v.size());
+          moves.push(Move::VarVar { from: *v, to: new_var });
+          self.alloc.registers.set_with(
+            new_var,
+            Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
+            || Register::RAX,
+          );
+          *v = new_var;
+        }
+      },
+      InstructionInput::Imm(imm) => match prev {
+        Some(other) => {
+          moves.push(Move::VarReg { from: other, to: RegisterIndex::Ebx });
+
+          let new_var = self.fresh_var(VariableSize::Bit64);
+          moves.push(Move::ImmVar { from: *imm, to: new_var });
+          self.alloc.registers.set_with(
+            new_var,
+            Register { size: var_to_reg_size(VariableSize::Bit64).unwrap(), index: requirement },
+            || Register::RAX,
+          );
+          *input = InstructionInput::Var(new_var);
+        }
+        None => {
+          let new_var = self.fresh_var(VariableSize::Bit64);
+          moves.push(Move::ImmVar { from: *imm, to: new_var });
+          self.alloc.registers.set_with(
+            new_var,
+            Register { size: var_to_reg_size(VariableSize::Bit64).unwrap(), index: requirement },
+            || Register::RAX,
+          );
+          *input = InstructionInput::Var(new_var);
+        }
+      },
+    }
+
+    if !moves.is_empty() {
+      self.copies.entry(loc).or_default().extend(moves);
+    }
   }
 
   fn fresh_var(&mut self, size: VariableSize) -> Variable {
