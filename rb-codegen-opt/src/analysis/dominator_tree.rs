@@ -35,11 +35,7 @@ impl AnalysisPass for DominatorTree {
 
 impl DominatorTree {
   pub fn immediate_dominator(&self, block: BlockId) -> Option<BlockId> {
-    self
-      .idom
-      .get(block)
-      .copied()
-      .unwrap_or_else(|| panic!("no such block {block:?} in dominator tree"))
+    self.idom.get(block).copied().flatten()
   }
 
   pub fn direct_dominating(&self, block: BlockId) -> &[BlockId] {
