@@ -26,7 +26,7 @@ pub struct InstrBuilder<'a> {
 impl FunctionBuilder {
   pub fn new(sig: Signature) -> Self {
     FunctionBuilder {
-      next_variable: 0,
+      next_variable: sig.args.len() as u32,
       function:      Function {
         sig,
         blocks: vec![Block::default()],

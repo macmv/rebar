@@ -200,6 +200,10 @@ impl Variable {
 impl Function {
   pub fn entry(&self) -> BlockId { BlockId::new(0) }
 
+  pub fn args(&self) -> impl Iterator<Item = crate::Variable> + '_ {
+    self.sig.args.iter().enumerate().map(|(i, size)| Variable::new(i as u32, *size))
+  }
+
   pub fn instructions(&self) -> impl Iterator<Item = AnyInstructionRef<'_>> {
     self.blocks.iter().flat_map(|b| b.instructions())
   }

@@ -200,6 +200,13 @@ impl CongruenceSet {
   pub fn new(function: &Function) -> Self {
     let mut congruence_to_vars = HashMap::<Congruence, HashSet<Variable>>::new();
     let mut var_to_congruence = HashMap::<Variable, Congruence>::new();
+
+    for arg in function.args() {
+      let c = Congruence(congruence_to_vars.len() as u32);
+      congruence_to_vars.insert(c, HashSet::from([arg]));
+      var_to_congruence.insert(arg, c);
+    }
+
     for block in function.blocks() {
       for instr in &function.block(block).instructions {
         for &output in &instr.output {
