@@ -113,7 +113,7 @@ impl AnalysisPass for ValueUses {
 
 impl ValueUses {
   fn pass_instr(&mut self, instr: &Instruction) {
-    if instr.opcode == Opcode::Syscall {
+    if matches!(instr.opcode, Opcode::Syscall | Opcode::Call(_)) {
       for input in &instr.input {
         if let InstructionInput::Var(var) = input {
           self.mark_required(*var);
@@ -139,7 +139,10 @@ impl ValueUses {
         self.set(out, v);
       }
       Opcode::Lea(_) => {}
-      Opcode::Call(_) => {}
+      Opcode::Call(_) => {
+        self.set(out, VariableValue::Unknown);
+        self.mark_required(out);
+      }
       Opcode::Syscall => {}
       Opcode::Compare(_) => {
         let cmp = VariableValue::Compare {
