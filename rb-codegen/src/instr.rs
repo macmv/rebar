@@ -69,6 +69,7 @@ impl FunctionBuilder {
   pub fn new_block(&mut self) -> BlockBuilder<'_> {
     let id = BlockId(self.function.blocks.len() as u32);
     self.function.blocks.push(Block::default());
+    self.terminated.push(false);
 
     self.block(id)
   }
