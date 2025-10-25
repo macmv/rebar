@@ -492,11 +492,11 @@ mod tests {
       block 0:
         mov r0 = 0x01
         mov r1 = 0x00
-        syscall r0, r1
-        mov r2 = 0x02
-        syscall r0, r2
-        mov r3 = 0x03
-        syscall r3, r1
+        syscall r2 = r0, r1
+        mov r3 = 0x02
+        syscall r4 = r0, r3
+        mov r5 = 0x03
+        syscall r6 = r5, r1
       ",
     );
 
@@ -506,23 +506,26 @@ mod tests {
       block 0:
         mov r0 = 0x01
         mov r1 = 0x00
-        syscall = r0, r1
-        mov r4 = r1
-        mov r2 = 0x02
-        syscall = r0, r2
-        mov r3 = 0x03
-        mov r5 = r4
-        syscall = r3, r5
+        syscall r2 = r0, r1
+        mov r7 = r1
+        mov r3 = 0x02
+        syscall r4 = r0, r3
+        mov r5 = 0x03
+        mov r8 = r7
+        syscall r6 = r5, r8
         trap
     "#
     ]);
 
     assert_eq!(regs.get(v!(r 0)), Register::RAX);
     assert_eq!(regs.get(v!(r 1)), Register::RDI);
-    assert_eq!(regs.get(v!(r 2)), Register::RDI);
-    assert_eq!(regs.get(v!(r 3)), Register::RAX);
-    assert_eq!(regs.get(v!(r 4)), Register::RCX);
-    assert_eq!(regs.get(v!(r 5)), Register::RDI);
+    assert_eq!(regs.get(v!(r 2)), Register::RCX);
+    assert_eq!(regs.get(v!(r 3)), Register::RDI);
+    assert_eq!(regs.get(v!(r 4)), Register::RAX);
+    assert_eq!(regs.get(v!(r 5)), Register::RAX);
+    assert_eq!(regs.get(v!(r 6)), Register::RAX);
+    assert_eq!(regs.get(v!(r 7)), Register::RCX);
+    assert_eq!(regs.get(v!(r 8)), Register::RDI);
   }
 
   #[test]
@@ -530,9 +533,9 @@ mod tests {
     let mut function = parse(
       "
       block 0:
-        syscall 0x00, 0x01
-        syscall 0x00, 0x02
-        syscall 0x00, 0x03
+        syscall r0 = 0x00, 0x01
+        syscall r1 = 0x00, 0x02
+        syscall r2 = 0x00, 0x03
       ",
     );
 
@@ -540,25 +543,25 @@ mod tests {
 
     function.check(expect![@r#"
       block 0:
-        mov r0 = 0x00
-        mov r1 = 0x01
-        syscall r0, r1
-        mov r2 = 0x00
-        mov r3 = 0x02
-        syscall r2, r3
-        mov r4 = 0x00
-        mov r5 = 0x03
-        syscall r4, r5
+        mov r3 = 0x00
+        mov r4 = 0x01
+        syscall r0 = r3, r4
+        mov r5 = 0x00
+        mov r6 = 0x02
+        syscall r1 = r5, r6
+        mov r7 = 0x00
+        mov r8 = 0x03
+        syscall r2 = r7, r8
         trap
     "#
     ]);
 
-    assert_eq!(regs.get(v!(r 0)), Register::RAX);
-    assert_eq!(regs.get(v!(r 1)), Register::RDI);
-    assert_eq!(regs.get(v!(r 2)), Register::RAX);
-    assert_eq!(regs.get(v!(r 3)), Register::RDI);
-    assert_eq!(regs.get(v!(r 4)), Register::RAX);
-    assert_eq!(regs.get(v!(r 5)), Register::RDI);
+    assert_eq!(regs.get(v!(r 3)), Register::RAX);
+    assert_eq!(regs.get(v!(r 4)), Register::RDI);
+    assert_eq!(regs.get(v!(r 5)), Register::RAX);
+    assert_eq!(regs.get(v!(r 6)), Register::RDI);
+    assert_eq!(regs.get(v!(r 7)), Register::RAX);
+    assert_eq!(regs.get(v!(r 8)), Register::RDI);
   }
 
   #[ignore]
