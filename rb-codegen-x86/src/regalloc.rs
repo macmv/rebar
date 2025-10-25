@@ -151,6 +151,17 @@ impl Regalloc<'_> {
 
     let mut live_outs = HashSet::new();
 
+    for (i, arg) in function.args().enumerate() {
+      let index = match i {
+        0 => RegisterIndex::Edi,
+        1 => RegisterIndex::Esi,
+        2 => RegisterIndex::Edx,
+        _ => todo!("more arguments"),
+      };
+
+      self.alloc.registers.set(arg, Register { size: var_to_reg_size(arg.size()).unwrap(), index });
+    }
+
     for block in self.dom.preorder() {
       self.visited.insert(block);
       let live_ins = HashSet::new(); // "set of instructions live into `block`"
