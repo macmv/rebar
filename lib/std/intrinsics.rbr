@@ -1,17 +1,17 @@
 #[rebar::intrinsic]
-fn string_ptr(str: str) -> int
+fn string_ptr(str: str) -> i64
 
 #[rebar::intrinsic]
-fn string_len(str: str) -> int
+fn string_len(str: str) -> i64
 
 #[rebar::intrinsic]
-fn syscall5(id: int, a1: int, a2: int, a3: int, a4: int) -> int
+fn syscall5(id: i64, a1: i64, a2: i64, a3: i64, a4: i64) -> i64
 
 #[rebar::intrinsic]
-fn syscall4(id: int, a1: int, a2: int, a3: int) -> int
+fn syscall4(id: i64, a1: i64, a2: i64, a3: i64) -> i64
 
 #[rebar::intrinsic]
-fn syscall3(id: int, a1: int, a2: int) -> int
+fn syscall3(id: i64, a1: i64, a2: i64) -> i64
 
 #[rebar::intrinsic]
-fn syscall2(id: int, a1: int) -> int
+fn syscall2(id: i64, a1: i64) -> i64
