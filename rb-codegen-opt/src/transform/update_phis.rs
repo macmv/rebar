@@ -100,6 +100,7 @@ impl<'a> TransformPass<'a> for UpdatePhis<'a> {
     for arg in function.args() {
       let cong = congruence.lookup(arg);
       renamer.stacks.entry(cong).or_default().push(arg);
+      renamer.fresh_var(arg.size());
     }
 
     renamer.pass(function.entry(), function);

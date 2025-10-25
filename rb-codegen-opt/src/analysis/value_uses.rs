@@ -43,6 +43,10 @@ impl AnalysisPass for ValueUses {
   fn id() -> AnalysisPassId { Self::ID }
 
   fn pass(&mut self, _: &mut Analysis, function: &Function) {
+    for arg in function.args() {
+      self.set(arg, VariableValue::Unknown);
+    }
+
     for block in function.blocks() {
       self.current_block = block;
 
