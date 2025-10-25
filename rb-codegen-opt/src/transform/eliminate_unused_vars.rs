@@ -79,7 +79,7 @@ mod tests {
       expect![@"
           block 0:
             mov r0 = 0x00
-            syscall r0
+            syscall r1 = r0
             trap
       "],
     );
