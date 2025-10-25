@@ -15,3 +15,8 @@ fn syscall3(id: i64, a1: i64, a2: i64) -> i64
 
 #[rebar::intrinsic]
 fn syscall2(id: i64, a1: i64) -> i64
+
+fn write(fd: i64, buf: str) -> i64 {
+  syscall4(1, fd, string_ptr(buf), string_len(buf))
+}
+fn exit(code: i64) { syscall2(60, code) }
