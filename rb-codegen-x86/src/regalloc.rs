@@ -390,7 +390,8 @@ impl Regalloc<'_> {
       },
       InstructionInput::Imm(imm) => match prev {
         Some(other) => {
-          moves.push(Move::VarReg { from: other, to: RegisterIndex::Ebx });
+          let moved_reg = self.pick_register(loc, other);
+          moves.push(Move::VarReg { from: other, to: moved_reg });
 
           let new_var = self.fresh_var(VariableSize::Bit64);
           moves.push(Move::ImmVar { from: *imm, to: new_var });
