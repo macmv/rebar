@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use rb_codegen::{
-  BlockId, Function, Immediate, Instruction, InstructionInput, InstructionOutput, Opcode, TVec,
-  TerminatorInstruction, Variable, VariableSize,
+  Block, BlockId, Function, Immediate, Instruction, InstructionInput, InstructionOutput, Opcode,
+  TVec, TerminatorInstruction, Variable, VariableSize,
 };
 use rb_codegen_opt::analysis::{Analysis, dominator_tree::DominatorTree, value_uses::ValueUses};
 use smallvec::smallvec;
@@ -171,12 +171,16 @@ impl Regalloc<'_> {
 
       for i in 0..function.block(block).instructions.len() {
         let loc = InstructionLocation { block, index: i };
-        self.visit_instr(&mut live_outs, loc, &mut function.block_mut(block).instructions[i..]);
+        self.visit_instr(&mut live_outs, loc, &mut function.block_mut(block));
 
         let instr = &function.block(block).instructions[i];
 
         let &[InstructionOutput::Var(out)] = instr.output.as_slice() else { continue };
-        if self.is_used_later(&function.block(block).instructions[i + 1..], out) {
+        if self.is_used_later(
+          &function.block(block).instructions[i + 1..],
+          &function.block(block).terminator,
+          out,
+        ) {
           self.allocate(loc, out);
           live_outs.insert(out);
         } else {
@@ -206,7 +210,7 @@ impl Regalloc<'_> {
                 }
 
                 live_outs.remove(v);
-                if !self.is_used_later(&[], *v) {
+                if !self.is_used_later(&[], &TerminatorInstruction::Trap, *v) {
                   self.free(*v);
                 }
               }
@@ -277,9 +281,9 @@ impl Regalloc<'_> {
     &mut self,
     live_outs: &mut HashSet<Variable>,
     loc: InstructionLocation,
-    block_after_instr: &mut [Instruction],
+    block: &mut Block,
   ) {
-    let (instr, block_after_instr) = block_after_instr.split_first_mut().unwrap();
+    let (instr, block_after_instr) = block.instructions[loc.index..].split_first_mut().unwrap();
     for (i, input) in instr.input.iter_mut().enumerate() {
       let requirement = match instr.opcode {
         Opcode::Syscall => match i {
@@ -296,6 +300,13 @@ impl Regalloc<'_> {
           2 => Some(RegisterIndex::Edx),
           _ => todo!("more arguments"),
         },
+        Opcode::Math(_) => {
+          if i == 0 {
+            Some(RegisterIndex::Eax)
+          } else {
+            None
+          }
+        }
         _ => None,
       };
 
@@ -308,7 +319,7 @@ impl Regalloc<'_> {
           }
 
           live_outs.remove(v);
-          if !self.is_used_later(block_after_instr, *v) {
+          if !self.is_used_later(block_after_instr, &block.terminator, *v) {
             self.free(*v);
           }
         }
@@ -472,7 +483,12 @@ impl Regalloc<'_> {
     self.rehomes_reverse.insert(new_var, var);
   }
 
-  fn is_used_later(&self, after: &[Instruction], var: Variable) -> bool {
+  fn is_used_later(
+    &self,
+    after: &[Instruction],
+    term: &TerminatorInstruction,
+    var: Variable,
+  ) -> bool {
     if self.is_tmp_var(var) {
       return false;
     }
@@ -483,9 +499,16 @@ impl Regalloc<'_> {
       .used_by
       .iter()
       .any(|u| !self.visited.contains(&self.vu.variables_to_block[u]));
+    let is_used_later_by_term = match term {
+      TerminatorInstruction::Return(inputs) => inputs.iter().any(|input| match input {
+        InstructionInput::Var(v) => *v == var,
+        _ => false,
+      }),
+      _ => false,
+    };
     let is_used_in_block = is_used_later_in_block(after, var);
 
-    is_used_in_later_block || is_used_in_block
+    is_used_in_later_block || is_used_later_by_term || is_used_in_block
   }
 
   fn is_tmp_var(&self, var: Variable) -> bool { var.id() >= self.first_new_variable }
