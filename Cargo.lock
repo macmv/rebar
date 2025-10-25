@@ -867,6 +867,7 @@ dependencies = [
 name = "rb-value"
 version = "0.1.0"
 dependencies = [
+ "rb-hir",
  "rb-mir",
  "rb-typer",
 ]

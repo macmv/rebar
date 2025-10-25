@@ -95,7 +95,7 @@ impl ValueType {
       ValueType::Nil => 0,
       ValueType::Int => 1,
       ValueType::Bool => 1,
-      ValueType::String => 1,
+      ValueType::String => 2,
       ValueType::Array => 1,
 
       ValueType::Function => 1,
@@ -110,6 +110,7 @@ impl ValueType {
   pub fn for_type(ctx: &MirContext, ty: &Type) -> Self {
     match ty {
       Type::Array(_) => ValueType::Array,
+      Type::Primitive(rb_hir::ast::PrimitiveType::Str) => ValueType::String,
       Type::Primitive(_) => ValueType::Int,
       Type::Union(_) => todo!("unions in backend"),
       Type::Function(..) => todo!("function types to values"),
