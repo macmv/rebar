@@ -32,19 +32,13 @@ fn eliminate_empty_blocks(function: &mut Function) {
     if let Some((to_remove, redirect)) = found {
       merge_phis(function, to_remove, redirect);
 
-      let new_redirect =
-        if redirect > to_remove { BlockId::new(redirect.as_u32() - 1) } else { redirect };
-
-      let mut i = 0;
-      function.blocks.retain_mut(|block| {
-        if to_remove.as_u32() == i {
-          i += 1;
-          return false;
+      function.retain_blocks(|id, block| {
+        if id == to_remove {
+          false
+        } else {
+          helper::redirect_jumps(block, to_remove, redirect);
+          true
         }
-
-        helper::redirect_jumps(block, to_remove, new_redirect);
-        i += 1;
-        true
       });
     } else {
       break;

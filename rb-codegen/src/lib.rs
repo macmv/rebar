@@ -224,14 +224,14 @@ impl Function {
     }
   }
 
-  pub fn retain_blocks(&mut self, f: impl Fn(BlockId) -> bool) {
+  pub fn retain_blocks(&mut self, f: impl Fn(BlockId, &mut Block) -> bool) {
     let mut i = 0;
     let mut new_id = 0;
     let mut mapping = TVec::new();
     let old_len = self.blocks.len();
-    self.blocks.retain(|_| {
+    self.blocks.retain_mut(|block| {
       let id = BlockId::new(i);
-      let ret = f(id);
+      let ret = f(id, block);
       if ret {
         mapping.push(Some(BlockId::new(new_id)));
         new_id += 1;
