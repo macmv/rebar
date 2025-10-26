@@ -34,7 +34,7 @@ fn op_bp(t: SyntaxKind) -> Option<(u8, u8)> {
 
 fn expr_bp(p: &mut Parser, min_bp: u8, cond: bool) {
   let m = p.start();
-  let Some(mut lhs) = atom_expr(p, m) else { return };
+  let Some(mut lhs) = atom_expr(p, m, cond) else { return };
   lhs = postfix_expr(p, lhs);
 
   loop {
@@ -78,7 +78,7 @@ pub fn path(p: &mut Parser) -> CompletedMarker {
   m.complete(p, PATH)
 }
 
-fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
+fn atom_expr(p: &mut Parser, m: Marker, cond: bool) -> Option<CompletedMarker> {
   match p.current() {
     // test ok
     // 2
@@ -95,23 +95,23 @@ fn atom_expr(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
       let lhs = m.complete(p, PATH_EXPR);
 
       // Special case for struct literals.
-      match p.current() {
+      if p.current() == T!['{'] && !cond {
         // test ok
         // Foo { a: 2 }
-        T!['{'] => {
-          let strct = lhs.precede(p);
+        // if a { println() }
+        let strct = lhs.precede(p);
 
-          arg_list(p, T!['{'], T!['}'], |p| {
-            let m = p.start();
-            p.expect(T![ident]);
-            p.expect(T![:]);
-            expr(p);
-            m.complete(p, FIELD_INIT);
-          });
+        arg_list(p, T!['{'], T!['}'], |p| {
+          let m = p.start();
+          p.expect(T![ident]);
+          p.expect(T![:]);
+          expr(p);
+          m.complete(p, FIELD_INIT);
+        });
 
-          Some(strct.complete(p, STRUCT_EXPR))
-        }
-        _ => Some(lhs),
+        Some(strct.complete(p, STRUCT_EXPR))
+      } else {
+        Some(lhs)
       }
     }
 
