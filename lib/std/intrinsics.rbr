@@ -17,6 +17,9 @@ fn syscall3(id: i64, a1: i64, a2: i64) -> i64
 fn syscall2(id: i64, a1: i64) -> i64
 
 #[rebar::intrinsic]
+fn syscall1(id: i64) -> i64
+
+#[rebar::intrinsic]
 fn trap()
 
 fn write(fd: i64, buf: str) -> i64 {
