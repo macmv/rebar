@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use rb_diagnostic::{emit, Diagnostic, Source, SourceId, Sources, Span};
-use rb_mir::MirContext;
+use rb_mir::{ast as mir, MirContext};
 use rb_syntax::cst;
+use rb_typer::Type;
 
 const NUM_CPUS: usize = 32;
 
@@ -97,15 +98,45 @@ fn compile_diagnostics(
 
   rb_diagnostic::check()?;
 
-  let functions = functions.into_iter().flatten().collect::<Vec<_>>();
+  let mut functions = functions.into_iter().flatten().collect::<Vec<_>>();
+
+  let start_id = rb_mir::ast::UserFunctionId(functions.len() as u64);
+  functions.push(generate_start_func(main_func, start_id));
 
   // If we get to this point, all checks have passed, and we can compile to
   // cranelift IR. Collect all the functions, split them into chunks, and compile
   // them on a thread pool.
 
-  compile_mir(env, functions, main_func);
+  compile_mir(env, functions, start_id);
 
   Ok(())
+}
+
+fn generate_start_func(
+  main_func: mir::UserFunctionId,
+  start_id: mir::UserFunctionId,
+) -> mir::Function {
+  let mut start_func = mir::Function::default();
+  start_func.id = start_id;
+
+  let call = start_func.exprs.alloc(mir::Expr::Call(
+    main_func,
+    Type::Function(vec![], Box::new(Type::unit())),
+    vec![],
+  ));
+  start_func.items.push(start_func.stmts.alloc(mir::Stmt::Expr(call)));
+
+  let exit_syscall = start_func.exprs.alloc(mir::Expr::Literal(mir::Literal::Int(60)));
+  let exit_code = start_func.exprs.alloc(mir::Expr::Literal(mir::Literal::Int(0)));
+  let exit = start_func
+    .exprs
+    .alloc(mir::Expr::CallIntrinsic(mir::Intrinsic::Syscall, vec![exit_syscall, exit_code]));
+  start_func.items.push(start_func.stmts.alloc(mir::Stmt::Expr(exit)));
+
+  let trap = start_func.exprs.alloc(mir::Expr::CallIntrinsic(mir::Intrinsic::Trap, vec![]));
+  start_func.items.push(start_func.stmts.alloc(mir::Stmt::Expr(trap)));
+
+  start_func
 }
 
 fn compile_mir(
