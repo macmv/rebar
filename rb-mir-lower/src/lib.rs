@@ -40,8 +40,8 @@ impl Env<'_> {
       if attr.path == "rebar::intrinsic" {
         let syscall = match function.name.as_str() {
           "syscall2" | "syscall3" | "syscall4" | "syscall5" | "syscall6" => mir::Intrinsic::Syscall,
-          "string_ptr" => mir::Intrinsic::StringPtr,
-          "string_len" => mir::Intrinsic::StringLen,
+          "slice_ptr" => mir::Intrinsic::SlicePtr,
+          "slice_len" => mir::Intrinsic::SliceLen,
           "trap" => mir::Intrinsic::Trap,
           _ => {
             emit!(span.name_span.unwrap() => "unknown intrinsic {}", function.name);

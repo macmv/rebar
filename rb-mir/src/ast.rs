@@ -72,8 +72,8 @@ pub enum Expr {
 
 #[derive(Debug, Clone, Copy)]
 pub enum Intrinsic {
-  StringPtr,
-  StringLen,
+  SlicePtr,
+  SliceLen,
   Syscall,
   Trap,
 }

@@ -16,7 +16,7 @@ pub enum ValueType {
   Int,
   Function,
   UserFunction, // FIXME: Fix names
-  String,
+  Slice,
 
   /// Array is a bit mystical. The value that lives on the stack is always a
   /// pointer (arrays are thin pointers, so that they can be grown/shrunk
@@ -38,7 +38,7 @@ impl ValueType {
       ValueType::Int => 2,
       ValueType::Function => 3,
       ValueType::UserFunction => 4,
-      ValueType::String => 5,
+      ValueType::Slice => 5,
       ValueType::Array => 6,
 
       // Leave the first 32 ids for the built-in types.
@@ -57,7 +57,7 @@ impl TryFrom<i64> for ValueType {
       2 => Ok(ValueType::Int),
       3 => Ok(ValueType::Function),
       4 => Ok(ValueType::UserFunction),
-      5 => Ok(ValueType::String),
+      5 => Ok(ValueType::Slice),
       6 => Ok(ValueType::Array),
 
       v if v >= 32 => Ok(ValueType::Struct(StructId(v as u64 - 32))),
@@ -95,7 +95,7 @@ impl ValueType {
       ValueType::Nil => 0,
       ValueType::Int => 1,
       ValueType::Bool => 1,
-      ValueType::String => 2,
+      ValueType::Slice => 2,
       ValueType::Array => 1,
 
       ValueType::Function => 1,
@@ -110,7 +110,7 @@ impl ValueType {
   pub fn for_type(ctx: &MirContext, ty: &Type) -> Self {
     match ty {
       Type::Array(_) => ValueType::Array,
-      Type::Primitive(rb_hir::ast::PrimitiveType::Str) => ValueType::String,
+      Type::Primitive(rb_hir::ast::PrimitiveType::Str) => ValueType::Slice,
       Type::Primitive(_) => ValueType::Int,
       Type::Union(_) => todo!("unions in backend"),
       Type::Function(..) => todo!("function types to values"),

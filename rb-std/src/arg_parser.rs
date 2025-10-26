@@ -29,7 +29,7 @@ impl<'a> RebarArgsParser<'a> {
         Value::Bool(self.next() as u8 != 0)
       }
       ValueType::Int => Value::Int(self.next()),
-      ValueType::String => {
+      ValueType::Slice => {
         let ptr = self.next();
 
         // NB: `ptr` is a pointer from `rb-gc`.

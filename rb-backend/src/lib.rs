@@ -162,7 +162,7 @@ impl FuncBuilder<'_> {
         mir::Literal::String(s) => {
           let symbol = self.builder.add_data(s.as_bytes());
           let addr = self.builder.instr().lea(symbol, Bit64);
-          RValue::string(addr, self.builder.instr().mov(Bit64, s.len() as u64))
+          RValue::slice(addr, self.builder.instr().mov(Bit64, s.len() as u64))
         }
       },
 
@@ -242,14 +242,14 @@ impl FuncBuilder<'_> {
         RValue::int(output)
       }
 
-      mir::Expr::CallIntrinsic(mir::Intrinsic::StringPtr, ref args) => {
+      mir::Expr::CallIntrinsic(mir::Intrinsic::SlicePtr, ref args) => {
         match self.compile_expr(args[0]).kind {
           r_value::RValueKind::Dyn(ref v) => RValue::int(v[0]),
           _ => unreachable!(),
         }
       }
 
-      mir::Expr::CallIntrinsic(mir::Intrinsic::StringLen, ref args) => {
+      mir::Expr::CallIntrinsic(mir::Intrinsic::SliceLen, ref args) => {
         match self.compile_expr(args[0]).kind {
           r_value::RValueKind::Dyn(ref v) => RValue::int(v[1]),
           _ => unreachable!(),

@@ -1,8 +1,8 @@
 #[rebar::intrinsic]
-fn string_ptr(str: str) -> i64
+fn slice_ptr(str: str) -> i64
 
 #[rebar::intrinsic]
-fn string_len(str: str) -> i64
+fn slice_len(str: str) -> i64
 
 #[rebar::intrinsic]
 fn syscall5(id: i64, a1: i64, a2: i64, a3: i64, a4: i64) -> i64
@@ -20,6 +20,6 @@ fn syscall2(id: i64, a1: i64) -> i64
 fn trap()
 
 fn write(fd: i64, buf: str) -> i64 {
-  syscall4(1, fd, string_ptr(buf), string_len(buf))
+  syscall4(1, fd, slice_ptr(buf), slice_len(buf))
 }
 fn exit(code: i64) { syscall2(60, code) }
