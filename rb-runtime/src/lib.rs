@@ -174,18 +174,7 @@ impl RuntimeEnvironment {
   }
 
   fn mir_env(&self) -> rb_mir_lower::Env<'_> {
-    rb_mir_lower::Env {
-      ctx:   &self.env.mir_ctx,
-      items: self
-        .env
-        .ids
-        .iter()
-        .enumerate()
-        .map(|(k, v)| {
-          (v.clone(), rb_mir_lower::Item::NativeFunction(rb_mir::ast::NativeFunctionId(k as u64)))
-        })
-        .collect(),
-    }
+    rb_mir_lower::Env { ctx: &self.env.mir_ctx, items: Default::default() }
   }
 }
 
