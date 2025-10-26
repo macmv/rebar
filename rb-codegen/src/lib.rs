@@ -281,6 +281,19 @@ impl Block {
   }
 }
 
+impl Condition {
+  pub fn invert(&self) -> Condition {
+    match self {
+      Condition::Equal => Condition::NotEqual,
+      Condition::NotEqual => Condition::Equal,
+      Condition::Greater => Condition::LessEqual,
+      Condition::Less => Condition::GreaterEqual,
+      Condition::GreaterEqual => Condition::Less,
+      Condition::LessEqual => Condition::Greater,
+    }
+  }
+}
+
 enum InstructionInputIter<'a> {
   Phi(std::iter::Flatten<std::collections::btree_map::Values<'a, BlockId, Option<Variable>>>),
   Slice(std::slice::Iter<'a, InstructionInput>),

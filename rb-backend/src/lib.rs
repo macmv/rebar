@@ -481,7 +481,7 @@ impl FuncBuilder<'_> {
         let merge_block = self.builder.new_block().id();
 
         // Test the if condition and conditionally branch.
-        self.builder.instr().branch(cond, else_block, Bit64, a, b);
+        self.builder.instr().branch(cond.invert(), else_block, Bit64, a, b);
         let then_res = self.compile_expr(then);
         self.builder.current_block().terminate(TerminatorInstruction::Jump(merge_block));
 
