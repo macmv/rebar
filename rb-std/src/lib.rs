@@ -1,9 +1,7 @@
 mod arg_parser;
 mod array;
-mod core;
 mod environment;
 mod slice;
-mod std;
 mod strct;
 mod value;
 
