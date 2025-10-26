@@ -11,7 +11,6 @@ rb-hir.workspace = true
 rb-hir-lower.workspace = true
 rb-typer.workspace = true
 rb-diagnostic.workspace = true
-rb-std.workspace = true
 
 lsp-server = "0.7.6"
 serde_json = "1.0.117"

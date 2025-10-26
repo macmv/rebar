@@ -44,6 +44,10 @@ pub(crate) enum VType {
   Struct(String),
 }
 
+impl Environment {
+  pub fn empty() -> Self { Environment { names: HashMap::new(), structs: HashMap::new() } }
+}
+
 impl Type {
   pub const fn unit() -> Self { Type::Tuple(vec![]) }
 }

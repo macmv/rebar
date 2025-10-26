@@ -47,7 +47,7 @@ fn main() -> ExitCode {
               let sources = Arc::new(sources);
 
               let res = catch_unwind(|| {
-                let env = RuntimeEnvironment::new(Environment::std());
+                let env = RuntimeEnvironment::new(Environment::empty());
                 match rb_runtime::run(env, sources.clone(), id) {
                   Ok(_) => println!("{}... \x1b[32mok\x1b[0m", stringified),
                   Err(diagnostics) => {

@@ -928,7 +928,6 @@ dependencies = [
  "rb-diagnostic",
  "rb-hir",
  "rb-hir-lower",
- "rb-std",
  "rb-syntax",
  "rb-typer",
  "rl-analysis",

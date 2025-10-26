@@ -12,7 +12,7 @@ pub struct RuntimeEnvironment {
 }
 
 pub fn eval(src: &str) {
-  let env = RuntimeEnvironment::new(Environment::std());
+  let env = RuntimeEnvironment::new(Environment::empty());
 
   let mut sources = Sources::new();
   let id = sources.add(Source::new("inline.rbr".into(), src.into()));
@@ -137,7 +137,7 @@ impl RuntimeEnvironment {
     files: &[(rb_hir::ast::SourceFile, rb_hir::SpanMap)],
     functions: &[(rb_mir::ast::UserFunctionId, &rb_hir::ast::Function, &rb_hir::FunctionSpanMap)],
   ) -> (rb_typer::Environment, rb_mir_lower::Env<'_>) {
-    let mut typer_env = self.env.typer_env();
+    let mut typer_env = rb_typer::Environment::empty();
 
     for (hir, _) in files {
       for (id, s) in hir.structs.values().enumerate() {

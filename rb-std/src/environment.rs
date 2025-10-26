@@ -27,17 +27,6 @@ impl Environment {
     }
   }
 
-  pub fn typer_env(&self) -> rb_typer::Environment {
-    rb_typer::Environment {
-      names:   self
-        .static_functions
-        .iter()
-        .map(|(k, v)| (k.clone(), Type::Function(v.args.clone(), Box::new(v.ret.clone()))))
-        .collect(),
-      structs: HashMap::new(),
-    }
-  }
-
   pub fn add_fn<T>(&mut self, name: impl Into<String>, function: impl DynFunction<T>) {
     let name = name.into();
     self.static_functions.insert(name.clone(), function.into_function());
