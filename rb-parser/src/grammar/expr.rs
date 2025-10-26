@@ -131,7 +131,8 @@ fn atom_expr(p: &mut Parser, m: Marker, cond: bool) -> Option<CompletedMarker> {
         p.bump();
         m.complete(p, PREFIX_OP);
       }
-      expr(p);
+      // if !foo { println() }
+      expr_bp(p, 0, cond);
       Some(m.complete(p, PREFIX_EXPR))
     }
 
