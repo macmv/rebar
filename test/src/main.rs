@@ -51,6 +51,7 @@ fn main() -> ExitCode {
                 match rb_runtime::run(env, sources.clone(), id) {
                   Ok(_) => println!("{}... \x1b[32mok\x1b[0m", stringified),
                   Err(diagnostics) => {
+                    failed.fetch_or(true, Ordering::AcqRel);
                     println!("{}... \x1b[31mfail\x1b[0m", stringified);
                     for d in diagnostics {
                       println!("{}", d.render(&sources));
