@@ -631,7 +631,10 @@ impl FuncBuilder<'_> {
         RValue::TypedDyn(ValueType::Struct(id), Slot::Multiple(len as usize, slot))
       }
       */
-      ref v => unimplemented!("expr: {v:?}"),
+      mir::Expr::StructInit(_, _) => todo!("struct literals"),
+      mir::Expr::Index(_, _, _) => todo!("indexing"),
+      mir::Expr::Assign { .. } => todo!("assignments"),
+      mir::Expr::While { .. } => todo!("loops"),
     }
   }
 
