@@ -821,18 +821,7 @@ dependencies = [
  "rb-hir-lower",
  "rb-mir",
  "rb-mir-lower",
- "rb-std",
  "rb-syntax",
- "rb-typer",
- "rb-value",
-]
-
-[[package]]
-name = "rb-std"
-version = "0.1.0"
-dependencies = [
- "rb-hir",
- "rb-mir",
  "rb-typer",
  "rb-value",
 ]

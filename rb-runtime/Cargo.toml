@@ -14,4 +14,3 @@ rb-mir.workspace = true
 rb-value.workspace = true
 rb-gc.workspace = true
 rb-backend.workspace = true
-rb-std.workspace = true

@@ -1,18 +1,17 @@
 use std::sync::Arc;
 
 use rb_diagnostic::{emit, Diagnostic, Source, SourceId, Sources, Span};
+use rb_mir::MirContext;
 use rb_syntax::cst;
-
-pub use rb_std::Environment;
 
 const NUM_CPUS: usize = 32;
 
 pub struct RuntimeEnvironment {
-  pub env: Environment,
+  pub mir: MirContext,
 }
 
 pub fn eval(src: &str) {
-  let env = RuntimeEnvironment::new(Environment::empty());
+  let env = RuntimeEnvironment::new();
 
   let mut sources = Sources::new();
   let id = sources.add(Source::new("inline.rbr".into(), src.into()));
@@ -113,7 +112,7 @@ fn compile_mir(
   functions: Vec<rb_mir::ast::Function>,
   main_func: rb_mir::ast::UserFunctionId,
 ) {
-  let mut compiler = rb_backend::Compiler::new(env.env.mir_ctx.clone());
+  let mut compiler = rb_backend::Compiler::new(env.mir.clone());
 
   for func in &functions {
     compiler.declare_function(func);
@@ -130,7 +129,7 @@ fn compile_mir(
 }
 
 impl RuntimeEnvironment {
-  pub fn new(env: Environment) -> Self { RuntimeEnvironment { env } }
+  pub fn new() -> Self { RuntimeEnvironment { mir: MirContext::default() } }
 
   fn build(
     &mut self,
@@ -150,8 +149,8 @@ impl RuntimeEnvironment {
             .map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te)))
             .collect(),
         );
-        self.env.mir_ctx.struct_paths.insert(s.name.clone(), id);
-        self.env.mir_ctx.structs.insert(
+        self.mir.struct_paths.insert(s.name.clone(), id);
+        self.mir.structs.insert(
           id,
           rb_mir::Struct {
             fields: s
@@ -174,7 +173,7 @@ impl RuntimeEnvironment {
   }
 
   fn mir_env(&self) -> rb_mir_lower::Env<'_> {
-    rb_mir_lower::Env { ctx: &self.env.mir_ctx, items: Default::default() }
+    rb_mir_lower::Env { ctx: &self.mir, items: Default::default() }
   }
 }
 

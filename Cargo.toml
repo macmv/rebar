@@ -18,7 +18,6 @@ members = [
   "rb-codegen-opt",
   "rb-codegen-x86",
   "rb-backend",
-  "rb-std",
   "rb-runtime",
 
   "test",
@@ -46,5 +45,4 @@ rb-codegen-opt-macros = { path = "rb-codegen-opt-macros" }
 rb-codegen-opt = { path = "rb-codegen-opt" }
 rb-codegen-x86 = { path = "rb-codegen-x86" }
 rb-backend = { path = "rb-backend" }
-rb-std = { path = "rb-std" }
 rb-runtime = { path = "rb-runtime" }
