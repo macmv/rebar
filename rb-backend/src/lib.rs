@@ -320,7 +320,8 @@ impl FuncBuilder<'_> {
 
         let res = match op {
           mir::UnaryOp::Neg => RValue::int(self.builder.instr().math1(Math::Neg, Bit64, lhs)),
-          mir::UnaryOp::Not => RValue::bool(self.builder.instr().math2(Math::Xor, Bit1, lhs, 1)),
+          // TODO: Use `bit1`?
+          mir::UnaryOp::Not => RValue::bool(self.builder.instr().math2(Math::Xor, Bit64, lhs, 1)),
         };
 
         res

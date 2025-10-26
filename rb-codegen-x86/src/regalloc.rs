@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use rb_codegen::{
-  Block, BlockId, Function, Immediate, Instruction, InstructionInput, InstructionOutput, Opcode,
-  TVec, TerminatorInstruction, Variable, VariableSize,
+  Block, BlockId, Function, Immediate, Instruction, InstructionInput, InstructionOutput, Math,
+  Opcode, TVec, TerminatorInstruction, Variable, VariableSize,
 };
 use rb_codegen_opt::analysis::{Analysis, dominator_tree::DominatorTree, value_uses::ValueUses};
 use smallvec::smallvec;
@@ -178,7 +178,30 @@ impl Regalloc<'_> {
         let &[InstructionOutput::Var(out)] = instr.output.as_slice() else { continue };
 
         let requirement = match instr.opcode {
-          Opcode::Math(_) => Some(RegisterIndex::Eax),
+          Opcode::Math(m) => {
+            let InstructionInput::Var(v) = instr.input[0] else {
+              panic!("expected var input for math instruction: {instr}");
+            };
+            let input = self.alloc.registers.get(v).unwrap();
+
+            match m {
+              // In-place, any register.
+              Math::Add
+              | Math::Sub
+              | Math::And
+              | Math::Or
+              | Math::Xor
+              | Math::Not
+              | Math::Neg
+              | Math::Shl
+              | Math::Ishr
+              | Math::Ushr => Some(input.index),
+              // In-place, only EAX.
+              Math::Imul | Math::Umul | Math::Idiv | Math::Udiv => Some(RegisterIndex::Eax),
+              // In-place, only EDX.
+              Math::Irem | Math::Urem => Some(RegisterIndex::Edx),
+            }
+          }
           Opcode::Call(_) => match 0 {
             0 => Some(RegisterIndex::Eax),
             _ => todo!("more than 1 return"),
