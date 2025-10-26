@@ -40,7 +40,7 @@ fn main() -> ExitCode {
           if path.extension().unwrap() == "rbr" {
             let stringified = path.display().to_string();
             if stringified.contains(f) {
-              let src = std::fs::read_to_string(&path).unwrap();
+              let src = std::fs::read_to_string(path).unwrap();
 
               let mut sources = std.clone();
               let id = sources.add(Source::new(stringified.clone(), src.clone()));

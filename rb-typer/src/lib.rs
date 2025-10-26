@@ -40,7 +40,7 @@ pub struct Typer<'a> {
 pub fn type_of_function(func: &hir::Function) -> Type {
   let args = func.args.iter().map(|(_, ty)| type_of_type_expr(ty)).collect();
   let ret = match func.ret {
-    Some(ref ty) => Box::new(type_of_type_expr(&ty)),
+    Some(ref ty) => Box::new(type_of_type_expr(ty)),
     None => Box::new(Type::unit()),
   };
 
@@ -84,18 +84,15 @@ impl<'a> Typer<'a> {
     }
 
     for &item in function.body.iter().flatten() {
-      match function.stmts[item] {
-        hir::Stmt::FunctionDef(ref func) => {
-          let args = func.args.iter().map(|(_, ty)| type_of_type_expr(ty)).collect();
-          let ret = match func.ret {
-            Some(ref ty) => Box::new(type_of_type_expr(&ty)),
-            None => Box::new(Type::unit()),
-          };
+      if let hir::Stmt::FunctionDef(ref func) = function.stmts[item] {
+        let args = func.args.iter().map(|(_, ty)| type_of_type_expr(ty)).collect();
+        let ret = match func.ret {
+          Some(ref ty) => Box::new(type_of_type_expr(ty)),
+          None => Box::new(Type::unit()),
+        };
 
-          let ty = Type::Function(args, ret);
-          typer.local_functions.insert(func.name.clone(), ty);
-        }
-        _ => {}
+        let ty = Type::Function(args, ret);
+        typer.local_functions.insert(func.name.clone(), ty);
       }
     }
 
@@ -126,7 +123,7 @@ impl<'a> Typer<'a> {
         if var.values.is_empty() {
           Type::unit()
         } else if var.values.len() == 1 {
-          self.lower_type(&var.values.iter().next().unwrap())
+          self.lower_type(var.values.iter().next().unwrap())
         } else {
           let mut types = vec![];
           for ty in &var.values {
@@ -189,7 +186,7 @@ impl<'a> Typer<'a> {
       }
 
       hir::Expr::Array(ref exprs) => {
-        let v = self.fresh_var(self.span(expr), format!("array element"));
+        let v = self.fresh_var(self.span(expr), "array element".to_string());
 
         for &expr in exprs {
           let e = self.type_expr(expr);
@@ -224,7 +221,7 @@ impl<'a> Typer<'a> {
             None => {
               emit!(self.span(expr) => "undeclared name {name:?}");
 
-              VType::Var(self.fresh_var(self.span(expr), format!("")))
+              VType::Var(self.fresh_var(self.span(expr), String::new()))
             }
           },
         },
@@ -340,7 +337,7 @@ impl<'a> Typer<'a> {
         let lhs = self.type_expr(lhs);
         let rhs = self.type_expr(rhs);
 
-        let elem = VType::Var(self.fresh_var(self.span(expr), format!("array element")));
+        let elem = VType::Var(self.fresh_var(self.span(expr), "array element".to_string()));
 
         self.constrain(&lhs, &VType::Array(Box::new(elem.clone())), self.span(expr));
         self.constrain(&rhs, &VType::Primitive(hir::PrimitiveType::U64), self.span(expr));
@@ -357,7 +354,7 @@ impl<'a> Typer<'a> {
         if let Some(els) = els {
           let els_ty = self.type_expr(els);
 
-          let res = self.fresh_var(self.span(expr), format!("if statment foo"));
+          let res = self.fresh_var(self.span(expr), "if statment foo".to_string());
           let res = VType::Var(res);
 
           self.constrain(&then_ty, &res, self.span(then));

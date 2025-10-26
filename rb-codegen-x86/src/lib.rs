@@ -642,28 +642,26 @@ fn encode_binary_reg_imm(
     RegisterSize::Bit64 => match input2 {
       rb_codegen::Immediate::Signed(v) => {
         if let Ok(v) = i32::try_from(v) {
-          return encode_sized(reg.size, opcode_8, opcode_32)
+          encode_sized(reg.size, opcode_8, opcode_32)
             .with_mod(0b11, reg.index)
-            .with_immediate(Immediate::i32(v as u32));
+            .with_immediate(Immediate::i32(v as u32))
         } else {
           panic!("immediate too large for binary operation");
         }
       }
       rb_codegen::Immediate::Unsigned(v) => {
         if let Ok(v) = u32::try_from(v) {
-          return encode_sized(reg.size, opcode_8, opcode_32)
+          encode_sized(reg.size, opcode_8, opcode_32)
             .with_mod(0b11, reg.index)
-            .with_immediate(Immediate::i32(v));
+            .with_immediate(Immediate::i32(v))
         } else {
           panic!("immediate too large for binary operation");
         }
       }
     },
-    _ => {
-      return encode_sized(reg.size, opcode_8, opcode_32)
-        .with_mod(0b11, reg.index)
-        .with_immediate(Immediate::new(reg.size, input2));
-    }
+    _ => encode_sized(reg.size, opcode_8, opcode_32)
+      .with_mod(0b11, reg.index)
+      .with_immediate(Immediate::new(reg.size, input2)),
   }
 }
 
@@ -707,7 +705,7 @@ fn encode_sized(size: RegisterSize, opcode_8: Opcode, opcode_32: Opcode) -> Inst
 pub fn link(objects: &[std::path::PathBuf], output: &Path) {
   let mut cmd = std::process::Command::new("wild");
   cmd.arg("-pie");
-  cmd.arg("-o").arg(&output);
+  cmd.arg("-o").arg(output);
   for obj in objects {
     cmd.arg(obj);
   }

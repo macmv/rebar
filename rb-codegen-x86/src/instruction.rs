@@ -113,13 +113,13 @@ impl Immediate {
   pub const fn i8(value: u8) -> Self { Immediate { len: 1, value: value as u64 } }
   pub const fn i16(value: u16) -> Self { Immediate { len: 2, value: value as u64 } }
   pub const fn i32(value: u32) -> Self { Immediate { len: 4, value: value as u64 } }
-  pub const fn i64(value: u64) -> Self { Immediate { len: 8, value: value as u64 } }
+  pub const fn i64(value: u64) -> Self { Immediate { len: 8, value } }
   pub const fn for_size(value: u64, size: RegisterSize) -> Self {
     match size {
       RegisterSize::Bit8 => Immediate::i8(value as u8),
       RegisterSize::Bit16 => Immediate::i16(value as u16),
       RegisterSize::Bit32 => Immediate::i32(value as u32),
-      RegisterSize::Bit64 => Immediate::i64(value as u64),
+      RegisterSize::Bit64 => Immediate::i64(value),
     }
   }
 

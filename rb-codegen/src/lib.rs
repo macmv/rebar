@@ -249,21 +249,15 @@ impl Function {
     if self.blocks.len() != old_len {
       for block in &mut self.blocks {
         for instr in &mut block.instructions {
-          match &mut instr.opcode {
-            Opcode::Branch(_, target) => {
-              let new_id = mapping[*target];
-              *target = new_id.expect("retained block has branch to removed block");
-            }
-            _ => {}
-          }
-        }
-
-        match &mut block.terminator {
-          TerminatorInstruction::Jump(target) => {
+          if let Opcode::Branch(_, target) = &mut instr.opcode {
             let new_id = mapping[*target];
             *target = new_id.expect("retained block has branch to removed block");
           }
-          _ => {}
+        }
+
+        if let TerminatorInstruction::Jump(target) = &mut block.terminator {
+          let new_id = mapping[*target];
+          *target = new_id.expect("retained block has branch to removed block");
         }
       }
     }

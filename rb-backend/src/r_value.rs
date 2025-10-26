@@ -171,7 +171,7 @@ impl RValue {
   fn to_compact_ir(&self, func: &mut FuncBuilder) -> Vec<Variable> {
     match self.kind {
       RValueKind::Const(ref items) => {
-        items.into_iter().map(|it| func.builder.instr().mov(Bit64, *it)).collect()
+        items.iter().map(|it| func.builder.instr().mov(Bit64, *it)).collect()
       }
       RValueKind::Dyn(ref v) => v.clone(),
     }

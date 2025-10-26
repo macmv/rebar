@@ -21,11 +21,10 @@ fn eliminate_empty_blocks(function: &mut Function) {
       let b = function.block(block);
       if let TerminatorInstruction::Jump(redirect) = &b.terminator
         && b.instructions.is_empty()
+        && block != *redirect
       {
-        if block != *redirect {
-          found = Some((block, *redirect));
-          break;
-        }
+        found = Some((block, *redirect));
+        break;
       }
     }
 

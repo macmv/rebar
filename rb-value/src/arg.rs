@@ -17,14 +17,14 @@ impl RebarArgs {
   pub unsafe fn arg(&self, offset: usize) -> *const i64 {
     unsafe {
       let ptr = self as *const _;
-      (ptr as *const i64).offset(offset as isize)
+      (ptr as *const i64).add(offset)
     }
   }
 
   pub unsafe fn ret(&mut self, offset: usize, value: i64) {
     unsafe {
       let ptr = self as *mut _;
-      *(ptr as *mut i64).offset(offset as isize) = value
+      *(ptr as *mut i64).add(offset) = value
     }
   }
 }

@@ -91,7 +91,7 @@ impl Deref for Finalization {
 
   fn deref(&self) -> &Self::Target {
     // SAFETY: Finalization and Mutation are #[repr(transparent)]
-    unsafe { mem::transmute::<&Self, &Mutation>(&self) }
+    unsafe { mem::transmute::<&Self, &Mutation>(self) }
   }
 }
 
@@ -184,7 +184,7 @@ impl Drop for Context {
       }
     }
 
-    let _guard = PhaseGuard::enter(&self, Some(Phase::Drop));
+    let _guard = PhaseGuard::enter(self, Some(Phase::Drop));
     DropAll(&self.metrics, self.all.get());
   }
 }
@@ -208,7 +208,7 @@ impl Context {
 
   #[inline]
   pub(crate) unsafe fn mutation_context(&self) -> &Mutation {
-    mem::transmute::<&Self, &Mutation>(&self)
+    mem::transmute::<&Self, &Mutation>(self)
   }
 
   #[inline]
@@ -219,7 +219,7 @@ impl Context {
 
   #[inline]
   pub(crate) unsafe fn finalization_context<'gc>(&self) -> &Finalization {
-    mem::transmute::<&Self, &Finalization>(&self)
+    mem::transmute::<&Self, &Finalization>(self)
   }
 
   #[inline]
@@ -293,10 +293,8 @@ impl Context {
           let next_gray = if let Some(gc_box) = self.gray.borrow_mut().pop() {
             self.metrics.mark_gc_traced(gc_box.header().size_of_box());
             Some(gc_box)
-          } else if let Some(gc_box) = self.gray_again.borrow_mut().pop() {
-            Some(gc_box)
           } else {
-            None
+            self.gray_again.borrow_mut().pop().map(|gc_box| gc_box)
           };
 
           if let Some(gc_box) = next_gray {
@@ -333,21 +331,19 @@ impl Context {
             // again" objects.
             root.trace(ctx, self.collection_context());
             self.root_needs_trace.set(false);
+          } else if early_stop == Some(EarlyStop::BeforeSweep) {
+            target_debt = f64::INFINITY;
           } else {
-            if early_stop == Some(EarlyStop::BeforeSweep) {
-              target_debt = f64::INFINITY;
-            } else {
-              // If we have no gray objects left, we enter the sweep phase.
-              entered.switch(Phase::Sweep);
+            // If we have no gray objects left, we enter the sweep phase.
+            entered.switch(Phase::Sweep);
 
-              // Set `sweep to the current head of our `all` linked list. Any new
-              // allocations during the newly-entered `Phase:Sweep` will update `all`,
-              // but will *not* be reachable from `this.sweep`.
-              self.sweep.set(self.all.get());
+            // Set `sweep to the current head of our `all` linked list. Any new
+            // allocations during the newly-entered `Phase:Sweep` will update `all`,
+            // but will *not* be reachable from `this.sweep`.
+            self.sweep.set(self.all.get());
 
-              // No need to update metrics here.
-              continue;
-            }
+            // No need to update metrics here.
+            continue;
           }
         }
         Phase::Sweep => {
@@ -477,7 +473,7 @@ impl Context {
         parent.header().set_color(GcColor::Gray);
         this.gray_again.borrow_mut().push(parent);
       }
-      barrier(&self, parent);
+      barrier(self, parent);
     }
   }
 

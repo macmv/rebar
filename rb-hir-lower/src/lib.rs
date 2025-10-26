@@ -119,14 +119,11 @@ impl SourceLower<'_> {
     s.name = cst.ident_token().unwrap().to_string();
 
     for item in cst.struct_block().unwrap().struct_items() {
-      match item {
-        cst::StructItem::Field(ref field) => {
-          let name = field.ident_token().unwrap().to_string();
-          let ty = type_expr(self.source, &field.ty().unwrap());
+      if let cst::StructItem::Field(ref field) = item {
+        let name = field.ident_token().unwrap().to_string();
+        let ty = type_expr(self.source, &field.ty().unwrap());
 
-          s.fields.push((name, ty));
-        }
-        _ => {}
+        s.fields.push((name, ty));
       }
     }
 
@@ -212,15 +209,11 @@ impl FunctionLower<'_, '_> {
     let id = self.f.stmts.alloc(stmt);
     self.ast_id_map.stmts.insert(SyntaxNodePtr::new(cst.syntax()), id);
 
-    match cst {
-      cst::Stmt::Let(ref let_stmt) => {
-        let span =
-          Span { file: self.source.source, range: let_stmt.let_token().unwrap().text_range() };
+    if let cst::Stmt::Let(ref let_stmt) = cst {
+      let span =
+        Span { file: self.source.source, range: let_stmt.let_token().unwrap().text_range() };
 
-        self.span_map.let_stmts.insert(id, span);
-      }
-
-      _ => {}
+      self.span_map.let_stmts.insert(id, span);
     }
 
     id

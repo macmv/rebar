@@ -8,6 +8,7 @@ pub use file::FileId;
 use line_index::LineIndex;
 use salsa::{Cancelled, ParallelDatabase};
 
+#[derive(Default)]
 pub struct AnalysisHost {
   db: RootDatabase,
 }
@@ -20,7 +21,7 @@ pub struct Analysis {
 pub type Cancellable<T> = Result<T, Cancelled>;
 
 impl AnalysisHost {
-  pub fn new() -> AnalysisHost { AnalysisHost { db: RootDatabase::default() } }
+  pub fn new() -> Self { AnalysisHost::default() }
   pub fn snapshot(&self) -> Analysis { Analysis { db: self.db.snapshot() } }
 
   pub fn change_file(&mut self, file_id: FileId, new_text: String) {

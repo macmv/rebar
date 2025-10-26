@@ -59,7 +59,7 @@ impl<'a> Transformer<'a> {
     for &id in pass.requires() {
       self.analysis.load(id, self.function);
     }
-    pass.run(&mut self.analysis, self.function);
+    pass.run(self.analysis, self.function);
     for &id in pass.invalidates() {
       self.analysis.invalidate(id);
     }

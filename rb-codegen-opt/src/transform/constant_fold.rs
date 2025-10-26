@@ -49,19 +49,13 @@ enum InstrChange {
 
 impl ConstantFold<'_> {
   fn pass_instr(&self, instr: &mut Instruction) -> InstrChange {
-    match instr.output.as_slice() {
-      &[InstructionOutput::Var(v)] => {
-        match self.value_uses.actual_value(rb_codegen::InstructionInput::Var(v)) {
-          VariableValue::Immediate(d) => {
-            instr.opcode = Opcode::Move;
-            instr.input = smallvec![d.into()];
-            instr.output = smallvec![v.into()];
-            return InstrChange::None;
-          }
-          _ => {}
-        }
+    if let &[InstructionOutput::Var(v)] = instr.output.as_slice() {
+      if let VariableValue::Immediate(d) = self.value_uses.actual_value(rb_codegen::InstructionInput::Var(v)) {
+        instr.opcode = Opcode::Move;
+        instr.input = smallvec![d.into()];
+        instr.output = smallvec![v.into()];
+        return InstrChange::None;
       }
-      _ => {}
     }
 
     for input in &mut instr.input {
@@ -72,19 +66,15 @@ impl ConstantFold<'_> {
       }
     }
 
-    match instr.opcode {
-      Opcode::Branch(cond, target) => {
-        if let &[InstructionInput::Imm(a), InstructionInput::Imm(b)] = instr.input.as_slice() {
-          if let Some(res) = const_condition(cond, a, b) {
-            if res {
-              return InstrChange::ReplaceWithJump { target };
-            } else {
-              return InstrChange::Remove;
-            }
+    if let Opcode::Branch(cond, target) = instr.opcode {
+      if let &[InstructionInput::Imm(a), InstructionInput::Imm(b)] = instr.input.as_slice()
+        && let Some(res) = const_condition(cond, a, b) {
+          if res {
+            return InstrChange::ReplaceWithJump { target };
+          } else {
+            return InstrChange::Remove;
           }
         }
-      }
-      _ => {}
     }
 
     InstrChange::None

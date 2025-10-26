@@ -30,7 +30,7 @@ impl<T: ?Sized> GcWeak<T> {
   #[inline]
   pub fn upgrade(self, mc: &Mutation) -> Option<Gc<T>> {
     let ptr = unsafe { GcBox::erase(self.inner.ptr) };
-    mc.upgrade(ptr).then(|| self.inner)
+    mc.upgrade(ptr).then_some(self.inner)
   }
 
   /// During collection, return whether the value referenced by this `GcWeak`

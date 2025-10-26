@@ -24,12 +24,10 @@ fn main() {
 
   let res = if args.input == Path::new("-") {
     format_stdin()
+  } else if args.input.is_dir() {
+    format_dir(&args.input)
   } else {
-    if args.input.is_dir() {
-      format_dir(&args.input)
-    } else {
-      format_file(&args.input)
-    }
+    format_file(&args.input)
   };
 
   match res {
@@ -68,7 +66,7 @@ fn format_dir(dir: &Path) -> Result<(), io::Error> {
 }
 
 fn format_file(path: &Path) -> Result<(), io::Error> {
-  let source = std::fs::read_to_string(&path)?;
+  let source = std::fs::read_to_string(path)?;
 
   let formatted = format_str(source)?;
 

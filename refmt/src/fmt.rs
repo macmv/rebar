@@ -249,9 +249,8 @@ impl FormatterContext<'_> {
               self.multiline = true;
               self.fmt_syntax(n, parent_can_retry);
 
-              match n.kind() {
-                BINARY_EXPR => self.multiline = false,
-                _ => {}
+              if n.kind() == BINARY_EXPR {
+                self.multiline = false
               }
             }
           }
@@ -312,17 +311,15 @@ impl FormatterContext<'_> {
           // This makes blocks line up correctly.
           self.decrease_indent(t.kind());
 
-          if !text.trim().is_empty() {
-            if self.out.ends_with('\n') {
-              for _ in 0..self.indent * self.formatter.indent {
-                self.out.push(' ');
-              }
+          if !text.trim().is_empty() && self.out.ends_with('\n') {
+            for _ in 0..self.indent * self.formatter.indent {
+              self.out.push(' ');
             }
           }
 
           self.increase_indent(t.kind());
 
-          self.out += &text.trim();
+          self.out += text.trim();
 
           match right {
             Spacing::None => {}
@@ -357,7 +354,7 @@ pub fn format(cst: &cst::SourceFile) -> String { format_opts(cst, Formatter::def
 
 // TODO: Hook up formatter options to the CLI.
 pub fn format_opts(cst: &cst::SourceFile, fmt: Formatter) -> String {
-  let mut out = fmt.fmt(&cst);
+  let mut out = fmt.fmt(cst);
 
   while out.ends_with('\n') {
     out.pop();

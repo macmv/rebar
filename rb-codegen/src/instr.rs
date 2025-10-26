@@ -174,7 +174,7 @@ impl InstrBuilder<'_> {
 
     self.function.function.blocks[self.block.0 as usize].instructions.push(crate::Instruction {
       opcode: crate::Opcode::Call(function),
-      input:  args.into_iter().copied().collect(),
+      input:  args.iter().copied().collect(),
       output: smallvec![output.into()],
     });
 

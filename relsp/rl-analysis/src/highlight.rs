@@ -92,8 +92,6 @@ impl Highlight {
                 add_token(&mut line_start, offset);
               }
 
-              if c == '\n' {}
-
               prev = c;
               offset += c.len_utf8();
             }
@@ -151,17 +149,13 @@ impl Highlight {
 
 impl Highlighter<'_> {
   fn visit_stmt(&mut self, stmt: hir::StmtId) {
-    match self.func.stmts[stmt] {
-      hir::Stmt::Let(_, _) => {
-        let span = self.span_map.let_stmts[&stmt];
-        self.hl.tokens.push(HighlightToken {
-          range:      span.range,
-          kind:       HighlightKind::Keyword,
-          modifierst: 0,
-        });
-      }
-
-      _ => {}
+    if let hir::Stmt::Let(_, _) = self.func.stmts[stmt] {
+      let span = self.span_map.let_stmts[&stmt];
+      self.hl.tokens.push(HighlightToken {
+        range:      span.range,
+        kind:       HighlightKind::Keyword,
+        modifierst: 0,
+      });
     }
   }
 

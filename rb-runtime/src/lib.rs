@@ -6,6 +6,7 @@ use rb_syntax::cst;
 
 const NUM_CPUS: usize = 32;
 
+#[derive(Default)]
 pub struct RuntimeEnvironment {
   pub mir: MirContext,
 }
@@ -80,10 +81,10 @@ fn compile_diagnostics(
     &funcs,
     || (),
     |_, (id, function, span_map)| {
-      let typer = rb_typer::Typer::check(&typer_env, &function, &span_map);
+      let typer = rb_typer::Typer::check(&typer_env, function, span_map);
 
       if rb_diagnostic::is_ok() {
-        if let Some(mut func) = rb_mir_lower::lower_function(&mir_env, &typer, &function) {
+        if let Some(mut func) = rb_mir_lower::lower_function(&mir_env, &typer, function) {
           func.id = *id;
 
           return Some(func);
@@ -129,7 +130,7 @@ fn compile_mir(
 }
 
 impl RuntimeEnvironment {
-  pub fn new() -> Self { RuntimeEnvironment { mir: MirContext::default() } }
+  pub fn new() -> Self { RuntimeEnvironment::default() }
 
   fn build(
     &mut self,
@@ -165,7 +166,7 @@ impl RuntimeEnvironment {
 
     let mut mir_env = self.mir_env();
     for (id, f, span_map) in functions {
-      mir_env.declare_user_function(*id, f, &span_map);
+      mir_env.declare_user_function(*id, f, span_map);
       typer_env.names.insert(f.name.clone(), rb_typer::type_of_function(f));
     }
 

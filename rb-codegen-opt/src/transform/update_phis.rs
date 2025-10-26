@@ -57,10 +57,8 @@ impl<'a> TransformPass<'a> for UpdatePhis<'a> {
       let mut in_work = HashSet::<BlockId>::from_iter(def_blocks.iter().copied());
       while let Some(b) = work.pop_front() {
         for x in self.dominance_frontier(b) {
-          if phi_sites.insert(x) {
-            if in_work.insert(x) {
-              work.push_back(x);
-            }
+          if phi_sites.insert(x) && in_work.insert(x) {
+            work.push_back(x);
           }
         }
       }
@@ -136,16 +134,13 @@ impl Renamer<'_> {
 
     for instr in &mut function.block_mut(block).instructions {
       for input in &mut instr.input {
-        match input {
-          InstructionInput::Var(var) => {
-            *var = self
-              .stacks
-              .get(&self.congruence.lookup(*var))
-              .and_then(|s| s.last())
-              .copied()
-              .unwrap_or_else(|| panic!("no variable on stack for {:?}", var));
-          }
-          _ => {}
+        if let InstructionInput::Var(var) = input {
+          *var = self
+            .stacks
+            .get(&self.congruence.lookup(*var))
+            .and_then(|s| s.last())
+            .copied()
+            .unwrap_or_else(|| panic!("no variable on stack for {:?}", var));
         }
       }
 
@@ -158,23 +153,19 @@ impl Renamer<'_> {
       }
     }
 
-    match &mut function.block_mut(block).terminator {
-      rb_codegen::TerminatorInstruction::Return(inputs) => {
-        for input in inputs {
-          match input {
-            InstructionInput::Var(var) => {
-              *var = self
-                .stacks
-                .get(&self.congruence.lookup(*var))
-                .and_then(|s| s.last())
-                .copied()
-                .unwrap_or_else(|| panic!("no variable on stack for {:?}", var));
-            }
-            _ => {}
-          }
+    if let rb_codegen::TerminatorInstruction::Return(inputs) =
+      &mut function.block_mut(block).terminator
+    {
+      for input in inputs {
+        if let InstructionInput::Var(var) = input {
+          *var = self
+            .stacks
+            .get(&self.congruence.lookup(*var))
+            .and_then(|s| s.last())
+            .copied()
+            .unwrap_or_else(|| panic!("no variable on stack for {:?}", var));
         }
       }
-      _ => {}
     }
 
     for &succ in self.update.cfg.exits(block) {
@@ -236,8 +227,8 @@ impl CongruenceSet {
             (c1, c2) if c1 == c2 => {} // Already congruent.
 
             (None, _) => {
-              var_to_congruence.insert(phi.to, var_to_congruence[&from]);
-              congruence_to_vars.entry(var_to_congruence[&from]).and_modify(|s| {
+              var_to_congruence.insert(phi.to, var_to_congruence[from]);
+              congruence_to_vars.entry(var_to_congruence[from]).and_modify(|s| {
                 s.insert(phi.to);
               });
             }

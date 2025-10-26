@@ -253,7 +253,7 @@ impl Lower<'_> {
       }
 
       hir::Expr::StructInit(ref path, ref fields) => {
-        let strct = self.env.ctx.struct_paths[path].clone();
+        let strct = self.env.ctx.struct_paths[path];
 
         let fields =
           fields.iter().map(|(name, expr)| (name.clone(), self.lower_expr(*expr))).collect();

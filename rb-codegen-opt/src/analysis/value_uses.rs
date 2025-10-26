@@ -82,15 +82,12 @@ impl AnalysisPass for ValueUses {
         self.pass_instr(instr);
       }
 
-      match function.block(block).terminator {
-        rb_codegen::TerminatorInstruction::Return(ref rets) => {
-          for ret in rets {
-            if let InstructionInput::Var(var) = ret {
-              self.mark_required(*var);
-            }
+      if let rb_codegen::TerminatorInstruction::Return(ref rets) = function.block(block).terminator {
+        for ret in rets {
+          if let InstructionInput::Var(var) = ret {
+            self.mark_required(*var);
           }
         }
-        _ => {}
       }
     }
 
@@ -121,9 +118,9 @@ impl ValueUses {
       }
     }
 
-    let out = match instr.output.as_slice() {
-      &[] => return,
-      &[InstructionOutput::Var(v)] => v,
+    let out = match *instr.output.as_slice() {
+      [] => return,
+      [InstructionOutput::Var(v)] => v,
       _ => todo!("handle non-variable outputs in ValueUses analysis"),
     };
 

@@ -437,7 +437,7 @@ fn check(src: &str) -> Vec<Diagnostic> {
     for (idx, function) in hir.functions {
       let span_map = &span_map.functions[&idx];
 
-      rb_typer::Typer::check(&typer_env, &function, &span_map);
+      rb_typer::Typer::check(&typer_env, &function, span_map);
     }
   });
 

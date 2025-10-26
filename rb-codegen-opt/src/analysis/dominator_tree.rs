@@ -62,7 +62,7 @@ impl DominatorTree {
       return false;
     }
 
-    return self.is_dominator(dom, child);
+    self.is_dominator(dom, child)
   }
 
   pub fn is_dominator(&self, dom: BlockId, child: BlockId) -> bool {

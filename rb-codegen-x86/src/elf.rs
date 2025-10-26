@@ -117,7 +117,7 @@ pub fn generate(filename: &Path, object: &Object) {
     writer.write_symbol(&Sym {
       name:     Some(id),
       section:  Some(ro_data_section),
-      st_info:  ((elf::STB_LOCAL as u8) << 4) | (elf::STT_OBJECT as u8),
+      st_info:  (elf::STB_LOCAL << 4) | elf::STT_OBJECT,
       st_other: 0,
       st_shndx: 0,
       st_value: symbol.offset as u64,
@@ -129,7 +129,7 @@ pub fn generate(filename: &Path, object: &Object) {
   writer.write_symbol(&Sym {
     name:     Some(start),
     section:  Some(text_section),
-    st_info:  ((elf::STB_GLOBAL as u8) << 4) | (elf::STT_FUNC as u8),
+    st_info:  (elf::STB_GLOBAL << 4) | elf::STT_FUNC,
     st_other: 0,
     st_shndx: 0,
     st_value: object.start_offset,

@@ -171,7 +171,7 @@ impl Regalloc<'_> {
 
       for i in 0..function.block(block).instructions.len() {
         let loc = InstructionLocation { block, index: i };
-        self.visit_instr(&mut live_outs, loc, &mut function.block_mut(block));
+        self.visit_instr(&mut live_outs, loc, function.block_mut(block));
 
         let instr = &function.block(block).instructions[i];
 
@@ -216,33 +216,27 @@ impl Regalloc<'_> {
       }
 
       let loc = InstructionLocation { block, index: function.block(block).instructions.len() };
-      match function.block_mut(block).terminator {
-        TerminatorInstruction::Return(ref mut inputs) => {
-          for (i, input) in inputs.iter_mut().enumerate() {
-            let requirement = match i {
-              0 => RegisterIndex::Eax,
-              _ => todo!("more than 1 return"),
-            };
+      if let TerminatorInstruction::Return(ref mut inputs) = function.block_mut(block).terminator {
+        for (i, input) in inputs.iter_mut().enumerate() {
+          let requirement = match i {
+            0 => RegisterIndex::Eax,
+            _ => todo!("more than 1 return"),
+          };
 
-            let prev = self.active.get(&requirement).copied();
-            match input {
-              InstructionInput::Var(v) => {
-                while let Some(&new_v) = self.rehomes.get(v) {
-                  *v = new_v;
-                }
-
-                live_outs.remove(v);
-                if !self.is_used_later(&[], &TerminatorInstruction::Trap, *v) {
-                  self.free(*v);
-                }
-              }
-              _ => {}
+          let prev = self.active.get(&requirement).copied();
+          if let InstructionInput::Var(v) = input {
+            while let Some(&new_v) = self.rehomes.get(v) {
+              *v = new_v;
             }
 
-            self.satisfy_requirement(loc, input, prev, requirement);
+            live_outs.remove(v);
+            if !self.is_used_later(&[], &TerminatorInstruction::Trap, *v) {
+              self.free(*v);
+            }
           }
+
+          self.satisfy_requirement(loc, input, prev, requirement);
         }
-        _ => {}
       }
     }
   }
@@ -334,18 +328,15 @@ impl Regalloc<'_> {
 
       let prev = requirement.map(|r| self.active.get(&r).copied());
 
-      match input {
-        InstructionInput::Var(v) => {
-          while let Some(&new_v) = self.rehomes.get(v) {
-            *v = new_v;
-          }
-
-          live_outs.remove(v);
-          if !self.is_used_later(block_after_instr, &block.terminator, *v) {
-            self.free(*v);
-          }
+      if let InstructionInput::Var(v) = input {
+        while let Some(&new_v) = self.rehomes.get(v) {
+          *v = new_v;
         }
-        _ => {}
+
+        live_outs.remove(v);
+        if !self.is_used_later(block_after_instr, &block.terminator, *v) {
+          self.free(*v);
+        }
       }
 
       if let Some(requirement) = requirement {
@@ -460,11 +451,8 @@ impl Regalloc<'_> {
   }
 
   fn free(&mut self, var: Variable) {
-    match self.active.iter().find(|&(_, &v)| v == var) {
-      Some((&reg, _)) => {
-        self.active.remove(&reg);
-      }
-      None => {}
+    if let Some((&reg, _)) = self.active.iter().find(|&(_, &v)| v == var) {
+      self.active.remove(&reg);
     }
   }
 
@@ -541,10 +529,10 @@ impl Regalloc<'_> {
 fn is_used_later_in_block(after: &[Instruction], var: Variable) -> bool {
   for instr in after.iter() {
     for input in &instr.input {
-      if let InstructionInput::Var(v) = input {
-        if *v == var {
-          return true;
-        }
+      if let InstructionInput::Var(v) = input
+        && *v == var
+      {
+        return true;
       }
     }
   }

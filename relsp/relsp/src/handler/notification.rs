@@ -37,7 +37,7 @@ pub fn handle_save_text_document(
   global: &mut GlobalState,
   params: lsp_types::DidSaveTextDocumentParams,
 ) -> Result<(), Box<dyn Error>> {
-  if let Some(_) = global.workspace_path(&params.text_document.uri) {
+  if global.workspace_path(&params.text_document.uri).is_some() {
     // TODO: Go typecheck? Idk. We kinda do everything on every character press.
     // Not sure if we actually need to do anything on save.
   }
