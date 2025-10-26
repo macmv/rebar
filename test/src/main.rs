@@ -20,21 +20,30 @@ fn main() -> ExitCode {
 
   let failed = std::sync::atomic::AtomicBool::new(false);
 
+  let mut std = Sources::new();
+  for src in std::fs::read_dir("lib/std").unwrap() {
+    let src = src.unwrap();
+    let path = src.path();
+    if path.extension().is_some_and(|e| e == "rbr") {
+      let content = std::fs::read_to_string(&path).unwrap();
+      std.add(Source::new(path.display().to_string(), content));
+    }
+  }
+
   std::thread::scope(|scope| {
     for chunk in files.chunks(chunk_size) {
       let f = &filter;
       let failed = &failed;
+      let std = &std;
       scope.spawn(move || {
         for path in chunk {
           if path.extension().unwrap() == "rbr" {
             let stringified = path.display().to_string();
             if stringified.contains(f) {
               let src = std::fs::read_to_string(&path).unwrap();
-              let std = std::fs::read_to_string("lib/std/intrinsics.rbr").unwrap();
 
-              let mut sources = Sources::new();
+              let mut sources = std.clone();
               let id = sources.add(Source::new(stringified.clone(), src.clone()));
-              sources.add(Source::new("lib/std/intrinsics.rbr".into(), std));
               let sources = Arc::new(sources);
 
               let res = catch_unwind(|| {

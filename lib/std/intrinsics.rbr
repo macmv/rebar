@@ -21,12 +21,3 @@ fn syscall1(id: i64) -> i64
 
 #[rebar::intrinsic]
 fn trap()
-
-fn write(fd: i64, buf: str) -> i64 {
-  syscall4(1, fd, slice_ptr(buf), slice_len(buf))
-}
-fn getpid() -> i64 { syscall1(39) }
-fn exit(code: i64) { syscall2(60, code) }
-fn kill(pid: i64, sig: i64) -> i64 { syscall3(62, pid, sig) }
-
-fn abort() { kill(getpid(), 6) }

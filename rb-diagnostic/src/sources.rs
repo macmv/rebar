@@ -5,10 +5,12 @@ use line_index::LineIndex;
 
 pub type SourceId = Idx<Source>;
 
+#[derive(Clone)]
 pub struct Sources {
   sources: Arena<Source>,
 }
 
+#[derive(Clone)]
 pub struct Source {
   pub source:     String,
   pub name:       String,
