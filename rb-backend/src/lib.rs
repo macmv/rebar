@@ -448,29 +448,22 @@ impl FuncBuilder<'_> {
           DynamicValueType::Union(len) => RValue::UntypedPtr(len, element_ptr),
         }
       }
+      */
       mir::Expr::If { cond, then, els: None, ty: _ } => {
-        let cond = self.compile_expr(cond);
-        let cond = cond.unwrap_single(self);
+        let (cond, a, b) = self.compile_conditional(cond);
 
-        let then_block = self.builder.create_block();
-        let merge_block = self.builder.create_block();
+        self.builder.current_block().id();
+        let merge_block = self.builder.new_block().id();
 
-        // Test the if condition and conditionally branch.
-        self.builder.instr().brif(cond, then_block, &[], merge_block, &[]);
-
-        self.builder.switch_to_block(then_block);
-        self.builder.seal_block(then_block);
+        self.builder.instr().branch(cond.invert(), merge_block, Bit64, a, b);
         self.compile_expr(then);
+        self.builder.current_block().terminate(TerminatorInstruction::Jump(merge_block));
 
-        self.builder.instr().jump(merge_block, &[]);
-
-        // Use `merge_block` for the rest of the function.
-        self.builder.switch_to_block(merge_block);
-        self.builder.seal_block(merge_block);
+        self.builder.switch_to(merge_block);
 
         RValue::nil()
       }
-      */
+
       mir::Expr::If { cond, then, els: Some(els), ref ty } => {
         let vt = ValueType::for_type(self.mir(), ty);
 
@@ -480,7 +473,6 @@ impl FuncBuilder<'_> {
         let else_block = self.builder.new_block().id();
         let merge_block = self.builder.new_block().id();
 
-        // Test the if condition and conditionally branch.
         self.builder.instr().branch(cond.invert(), else_block, Bit64, a, b);
         let then_res = self.compile_expr(then);
         self.builder.current_block().terminate(TerminatorInstruction::Jump(merge_block));
