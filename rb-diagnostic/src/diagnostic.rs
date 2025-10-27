@@ -77,7 +77,7 @@ impl Diagnostic {
       let end = u32::from(source.line_index.offset(LineCol { line: pos.line + 1, col: 0 }).unwrap())
         as usize;
 
-      let line_str = &source.source[start..end].trim();
+      let line_str = &source.source[start..end].trim_end();
 
       let margin_str = " ".repeat(line_num.ilog10() as usize + 1);
       let underline_str = format!("{}{}", " ".repeat(start_col), "^".repeat(end_col - start_col));
