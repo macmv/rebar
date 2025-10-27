@@ -1,31 +1,44 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use rb_diagnostic::{Diagnostic, Source, Sources};
-use rb_hir::{ast as hir, ModuleSpanMap};
+use rb_hir::{ast as hir, ModuleSpanMap, SpanMap};
 use rb_syntax::cst;
 
 use crate::AstIdMap;
 
 struct Collector {
   module:   hir::Module,
+  span_map: SpanMap,
+
   errors:   Vec<Diagnostic>,
   to_check: Vec<hir::Path>,
 }
 
-pub fn parse_hir(path: &std::path::Path) -> (Sources, Result<hir::Module, Vec<Diagnostic>>) {
+pub fn parse_hir(
+  path: &std::path::Path,
+) -> (Sources, Result<(hir::Module, SpanMap), Vec<Diagnostic>>) {
   let (mut sources, res) = parse_source(path, Sources::new());
 
   match res {
-    Ok((module, _, _)) => {
-      let mut collector =
-        Collector { module, errors: vec![], to_check: vec![hir::Path { segments: vec![] }] };
+    Ok((module, span_map, _)) => {
+      let mut collector = Collector {
+        module,
+        span_map: SpanMap { modules: HashMap::new() },
+        errors: vec![],
+        to_check: vec![hir::Path { segments: vec![] }],
+      };
+      collector
+        .span_map
+        .modules
+        .insert(hir::Path { segments: vec![] }, ModuleSpanMap { functions: span_map.functions });
+
       let root = path.parent().unwrap();
       while let Some(p) = collector.to_check.pop() {
         sources = collector.check(root, &p, sources);
       }
 
       if collector.errors.is_empty() {
-        (sources, Ok(collector.module))
+        (sources, Ok((collector.module, collector.span_map)))
       } else {
         (sources, Err(collector.errors))
       }
@@ -58,9 +71,13 @@ impl Collector {
           sources = new_sources;
 
           match res {
-            Ok((m, _, _)) => {
+            Ok((m, span_map, _)) => {
               let mut p = p.clone();
               p.segments.push(name.clone());
+              self
+                .span_map
+                .modules
+                .insert(p.clone(), ModuleSpanMap { functions: span_map.functions });
               self.to_check.push(p);
 
               *module = hir::PartialModule::Inline(m)

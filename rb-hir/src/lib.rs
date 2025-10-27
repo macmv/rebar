@@ -5,6 +5,13 @@ use std::{collections::HashMap, ops::Index};
 use ast::{ExprId, FunctionId, StmtId};
 use rb_diagnostic::Span;
 
+use crate::ast::Path;
+
+#[derive(Default)]
+pub struct SpanMap {
+  pub modules: HashMap<Path, ModuleSpanMap>,
+}
+
 #[derive(Default)]
 pub struct ModuleSpanMap {
   pub functions: HashMap<FunctionId, FunctionSpanMap>,

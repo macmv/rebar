@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rb_diagnostic::{Diagnostic, SourceId, Sources};
+use rb_diagnostic::{Diagnostic, Sources};
 use rb_mir::{ast as mir, MirContext};
 use rb_typer::Type;
 
@@ -11,21 +11,24 @@ pub struct RuntimeEnvironment {
   pub mir: MirContext,
 }
 
-pub fn compile(path: &std::path::Path) -> Result<(), Vec<Diagnostic>> {
+pub fn compile(path: &std::path::Path) -> (Sources, Result<(), Vec<Diagnostic>>) {
   let (sources, res) = rb_hir_lower::parse_hir(path);
-  let hir = res?;
+  let (hir, span_map) = match res {
+    Ok(v) => v,
+    Err(diagnostics) => return (sources, Err(diagnostics)),
+  };
 
   let sources = Arc::new(sources);
 
-  rb_diagnostic::run(sources.clone(), || compile_diagnostics(sources, hir)).map(|_| ())
+  let res = rb_diagnostic::run(sources.clone(), || compile_diagnostics(hir, span_map)).map(|_| ());
+  (Arc::try_unwrap(sources).unwrap_or_else(|_| panic!()), res)
 }
 
-fn compile_diagnostics(sources: Arc<Sources>, module: rb_hir::ast::Module) -> Result<(), ()> {
-  let env = RuntimeEnvironment::new();
-
+fn compile_diagnostics(module: rb_hir::ast::Module, span_map: rb_hir::SpanMap) -> Result<(), ()> {
   let mut funcs = vec![];
-  let mut main_func = rb_mir::ast::UserFunctionId(0);
-  for hir in module.modules() {
+  let main_func = rb_mir::ast::UserFunctionId(0);
+  for (path, hir) in module.modules() {
+    let span_map = &span_map.modules[&path];
     for (id, function) in hir.functions.iter() {
       let span_map = &span_map.functions[&id];
       let mir_id = rb_mir::ast::UserFunctionId(funcs.len() as u64);
@@ -33,7 +36,8 @@ fn compile_diagnostics(sources: Arc<Sources>, module: rb_hir::ast::Module) -> Re
     }
   }
 
-  let (typer_env, mir_env) = env.build(&files, &funcs);
+  let mut env = RuntimeEnvironment::new();
+  let (typer_env, mir_env) = env.build(&module, &funcs);
 
   rb_diagnostic::check()?;
 
@@ -124,34 +128,29 @@ impl RuntimeEnvironment {
 
   fn build(
     &mut self,
-    files: &[(rb_hir::ast::Module, rb_hir::ModuleSpanMap)],
+    module: &rb_hir::ast::Module,
     functions: &[(rb_mir::ast::UserFunctionId, &rb_hir::ast::Function, &rb_hir::FunctionSpanMap)],
   ) -> (rb_typer::Environment, rb_mir_lower::Env<'_>) {
     let mut typer_env = rb_typer::Environment::empty();
 
-    for (hir, _) in files {
-      for (id, s) in hir.structs.values().enumerate() {
-        let id = rb_mir::ast::StructId(id as u64);
+    for (id, s) in module.structs.values().enumerate() {
+      let id = rb_mir::ast::StructId(id as u64);
 
-        typer_env.structs.insert(
-          s.name.clone(),
-          s.fields
+      typer_env.structs.insert(
+        s.name.clone(),
+        s.fields.iter().map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te))).collect(),
+      );
+      self.mir.struct_paths.insert(s.name.clone(), id);
+      self.mir.structs.insert(
+        id,
+        rb_mir::Struct {
+          fields: s
+            .fields
             .iter()
             .map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te)))
             .collect(),
-        );
-        self.mir.struct_paths.insert(s.name.clone(), id);
-        self.mir.structs.insert(
-          id,
-          rb_mir::Struct {
-            fields: s
-              .fields
-              .iter()
-              .map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te)))
-              .collect(),
-          },
-        );
-      }
+        },
+      );
     }
 
     let mut mir_env = self.mir_env();
@@ -204,20 +203,4 @@ pub fn run_parallel<I: Send + Sync, C: Send, O: Send + Sync>(
   });
 
   results.into_iter().flatten().collect()
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  #[ignore] // TODO: Add `assert_eq`
-  fn foo() {
-    eval(
-      r#"
-        assert_eq(2 * 3 + 4 + 5, 15)
-        4
-      "#,
-    );
-  }
 }

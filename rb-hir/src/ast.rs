@@ -19,7 +19,7 @@ pub struct Module {
   pub main_function: Option<FunctionId>,
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct Path {
   pub segments: Vec<String>,
 }
@@ -183,7 +183,7 @@ impl Module {
 }
 
 impl<'a> Iterator for ModuleIter<'a> {
-  type Item = &'a Module;
+  type Item = (Path, &'a Module);
 
   fn next(&mut self) -> Option<Self::Item> {
     let path = self.stack.pop()?;
@@ -205,6 +205,6 @@ impl<'a> Iterator for ModuleIter<'a> {
       }
     }
 
-    Some(module)
+    Some((path, module))
   }
 }
