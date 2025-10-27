@@ -48,7 +48,7 @@ enum Requirement {
   /// The operand must be in the given register.
   Specific(RegisterIndex),
   /// The operand must in in a register, but it does not matter which.
-  Register,
+  Register(VariableSize),
   /// The operand may be in a register or immediate.
   None,
 }
@@ -332,8 +332,10 @@ impl Regalloc<'_> {
     block: &mut Block,
   ) {
     let (instr, block_after_instr) = block.instructions[loc.index..].split_first_mut().unwrap();
-    for (i, input) in instr.input.iter_mut().enumerate() {
-      let requirement = Requirement::for_input(instr.opcode, i);
+
+    for i in 0..instr.input.len() {
+      let requirement = Requirement::for_input(instr, i);
+      let input = &mut instr.input[i];
 
       let prev = match requirement {
         Requirement::Specific(r) => Some(self.active.get(&r).copied()),
@@ -385,8 +387,9 @@ impl Regalloc<'_> {
   ) {
     let (requirement, prev) = match requirement {
       Requirement::None => return,
-      Requirement::Register => {
-        let reg = self.pick_register(loc, input.unwrap_var());
+      Requirement::Register(size) => {
+        let new_var = self.fresh_var(size);
+        let reg = self.pick_register(loc, new_var);
         (reg, self.active.get(&reg).copied())
       }
       Requirement::Specific(reg) => (reg, prev.unwrap()),
@@ -546,10 +549,10 @@ impl Regalloc<'_> {
 }
 
 impl Requirement {
-  fn for_input(opcode: Opcode, index: usize) -> Requirement {
+  fn for_input(instr: &Instruction, index: usize) -> Requirement {
     use Requirement::*;
 
-    match opcode {
+    match instr.opcode {
       Opcode::Syscall => match index {
         0 => Specific(RegisterIndex::Eax),
         1 => Specific(RegisterIndex::Edi),
@@ -568,7 +571,7 @@ impl Requirement {
         if index == 0 {
           Specific(RegisterIndex::Eax)
         } else {
-          None
+          Register(instr.input[0].unwrap_var().size())
         }
       }
       _ => None,
