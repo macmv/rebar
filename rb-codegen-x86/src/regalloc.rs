@@ -255,20 +255,23 @@ impl Regalloc<'_> {
             _ => todo!("more than 1 return"),
           };
 
-          let prev = self.active.get(&RegisterIndex::Eax).copied();
           if let InstructionInput::Var(v) = input {
             while let Some(&new_v) = self.rehomes.get(v) {
               *v = new_v;
             }
+          }
 
+          if let Some(new_var) = self.satisfy_requirement(loc, input, requirement) {
+            *input = InstructionInput::Var(new_var);
+          }
+        }
+
+        for input in inputs {
+          if let InstructionInput::Var(v) = input {
             live_outs.remove(v);
             if !self.is_used_later(&[], &TerminatorInstruction::Trap, *v) {
               self.free(*v);
             }
-          }
-
-          if let Some(new_var) = self.satisfy_requirement(loc, input, Some(prev), requirement) {
-            *input = InstructionInput::Var(new_var);
           }
         }
       }
@@ -339,18 +342,13 @@ impl Regalloc<'_> {
       let requirement = Requirement::for_input(instr, i);
       let input = &mut instr.input[i];
 
-      let prev = match requirement {
-        Requirement::Specific(r) => Some(self.active.get(&r).copied()),
-        _ => None,
-      };
-
       if let InstructionInput::Var(v) = input {
         while let Some(&new_v) = self.rehomes.get(v) {
           *v = new_v;
         }
       }
 
-      if let Some(new_var) = self.satisfy_requirement(loc, input, prev, requirement) {
+      if let Some(new_var) = self.satisfy_requirement(loc, input, requirement) {
         *input = InstructionInput::Var(new_var);
       }
     }
@@ -390,7 +388,6 @@ impl Regalloc<'_> {
     &mut self,
     loc: InstructionLocation,
     input: &InstructionInput,
-    prev: Option<Option<Variable>>,
     requirement: Requirement,
   ) -> Option<Variable> {
     let (requirement, prev) = match requirement {
@@ -400,7 +397,7 @@ impl Regalloc<'_> {
         let reg = self.pick_register(loc, new_var);
         (reg, self.active.get(&reg).copied())
       }
-      Requirement::Specific(reg) => (reg, prev.unwrap()),
+      Requirement::Specific(reg) => (reg, self.active.get(&reg).copied()),
     };
 
     let mut moves = vec![];
