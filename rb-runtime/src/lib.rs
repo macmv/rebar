@@ -46,8 +46,9 @@ pub fn parse_hir(path: &std::path::Path) -> Result<hir::Module, Vec<Diagnostic>>
 
     let mut collector =
       Collector { module, errors: vec![], to_check: vec![hir::Path { segments: vec![] }] };
+    let root = path.parent().unwrap();
     while let Some(p) = collector.to_check.pop() {
-      sources = collector.check(&p, sources);
+      sources = collector.check(root, &p, sources);
     }
   } else {
     return Err(
@@ -63,14 +64,16 @@ pub fn parse_hir(path: &std::path::Path) -> Result<hir::Module, Vec<Diagnostic>>
 }
 
 impl Collector {
-  fn check(&mut self, p: &hir::Path, mut sources: Sources) -> Sources {
+  fn check(&mut self, root: &std::path::Path, p: &hir::Path, mut sources: Sources) -> Sources {
     let mut module = &mut self.module;
     let mut path = hir::Path::new();
+    let mut file_path = root.to_path_buf();
     for segment in &p.segments {
       match module.modules.iter_mut().find(|(n, _)| n == segment) {
         Some((_, hir::PartialModule::File(_))) => unreachable!("module wasn't filled in"),
         Some((_, hir::PartialModule::Inline(submodule))) => {
           path.segments.push(segment.clone());
+          file_path.push(segment);
           module = submodule;
         }
         None => panic!("module {segment} not found"),
@@ -80,7 +83,8 @@ impl Collector {
     for (_, module) in &mut module.modules {
       match module {
         hir::PartialModule::File(name) => {
-          let content = std::fs::read_to_string(name.clone()).unwrap();
+          let path = file_path.join(format!("{name}.rbr"));
+          let content = std::fs::read_to_string(&path).unwrap();
           let id = sources.add(Source::new(name.clone(), content));
 
           let src = sources.get(id);

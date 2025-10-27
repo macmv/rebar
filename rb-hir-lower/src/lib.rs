@@ -201,6 +201,14 @@ impl FunctionLower<'_, '_> {
         hir::Stmt::Struct
       }
 
+      cst::Stmt::Mod(ref module) => {
+        let name = module.ident_token().unwrap().to_string();
+
+        self.source.out.modules.push((name.clone(), hir::PartialModule::File(name)));
+
+        hir::Stmt::Struct
+      }
+
       _ => unimplemented!("lowering for {:?}", cst),
     };
 
