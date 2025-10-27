@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use la_arena::Idx;
 use rb_diagnostic::Span;
-use rb_hir::ast as hir;
+use rb_hir::ast::{self as hir, Path};
 
 /// A rendered type. This is the result of typechecking.
 #[derive(Debug, Clone, PartialEq)]
@@ -19,7 +19,7 @@ pub enum Type {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
-  pub names:   HashMap<String, Type>,
+  pub names:   HashMap<Path, Type>,
   pub structs: HashMap<String, Vec<(String, Type)>>,
 }
 

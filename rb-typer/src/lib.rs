@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use la_arena::Arena;
 use rb_diagnostic::{emit, Span};
 use rb_hir::{
-  ast::{self as hir, ExprId, StmtId},
+  ast::{self as hir, ExprId, Path, StmtId},
   FunctionSpanMap,
 };
 use ty::{TypeVar, VType, VarId};
@@ -216,7 +216,7 @@ impl<'a> Typer<'a> {
         Some(ty) => ty.clone(),
         None => match self.local_functions.get(name) {
           Some(ty) => ty.clone().into(),
-          None => match self.env.names.get(name) {
+          None => match self.env.names.get(&Path::new().join(name.clone())) {
             Some(ty) => VType::from(ty.clone()),
             None => {
               emit!(self.span(expr) => "undeclared name {name:?}");

@@ -182,9 +182,9 @@ fn build_environment<'a>(
 
       let mir_id = rb_mir::ast::UserFunctionId(functions.len() as u64);
       functions.push((mir_id, f, span_map));
-      function_map.insert(path, mir_id);
+      function_map.insert(path.clone(), mir_id);
       rb_mir_lower::declare_user_function(&mut mir_ctx, mir_id, f, span_map);
-      typer_env.names.insert(f.name.clone(), rb_typer::type_of_function(f));
+      typer_env.names.insert(path, rb_typer::type_of_function(f));
     }
   }
 
