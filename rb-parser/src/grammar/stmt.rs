@@ -54,6 +54,30 @@ pub fn stmt(p: &mut Parser) {
 
   match p.current() {
     // test ok
+    // mod foo
+    // mod bar {
+    //   struct baz {}
+    // }
+    T![mod] => {
+      p.eat(T![mod]);
+      p.expect(T![ident]);
+
+      if p.at(T!['{']) {
+        block(p);
+      }
+
+      m.complete(p, MOD);
+    }
+
+    // test ok
+    // use foo::bar::baz
+    T![use] => {
+      p.eat(T![use]);
+      super::expr::path(p);
+      m.complete(p, USE);
+    }
+
+    // test ok
     // let foo = 2 + 3
     // let bar: int = 4
     T![let] => {

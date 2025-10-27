@@ -199,6 +199,8 @@ impl<'a> Lexer<'a> {
         let res = self.ok(start, T![ident]);
 
         res.map(|r| match self.slice() {
+          "mod" => T![mod],
+          "use" => T![use],
           "if" => T![if],
           "else" => T![else],
           "let" => T![let],
