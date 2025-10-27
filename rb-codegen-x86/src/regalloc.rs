@@ -311,6 +311,7 @@ impl Regalloc<'_> {
 
       if let Some(new_var) = self.satisfy_requirement(loc, input, requirement) {
         *input = InstructionInput::Var(new_var);
+        self.active.insert(self.alloc.registers.get(new_var).unwrap().index, new_var);
       }
     }
 
@@ -702,6 +703,25 @@ mod tests {
           call function 0 rax(0) = rdi(1), rsi(2)
           trap
         "#
+      ],
+    );
+  }
+
+  #[test]
+  fn call_imul() {
+    check(
+      "
+      block 0:
+        math(imul) r0 = 0x02, 0x03
+        return r0
+      ",
+      expect![@r#"
+        block 0:
+          mov rax(1) = 0x02
+          mov rcx(3) = 0x03
+          math(imul) rax(0) = rax(1), rcx(3)
+          return r0
+      "#
       ],
     );
   }
