@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use la_arena::Arena;
 use rb_diagnostic::{emit, Span};
 use rb_hir::{
-  ast::{self as hir, ExprId, Path, StmtId},
+  ast::{self as hir, ExprId, StmtId},
   FunctionSpanMap,
 };
 use ty::{TypeVar, VType, VarId};
