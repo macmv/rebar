@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use rb_diagnostic::{emit, Diagnostic, Source, SourceId, Sources, Span};
-use rb_hir::ast as hir;
+use rb_hir::{ast as hir, SpanMap};
+use rb_hir_lower::AstIdMap;
 use rb_mir::{ast as mir, MirContext};
 use rb_syntax::cst;
 use rb_typer::Type;
@@ -32,39 +33,27 @@ struct Collector {
 
 // TODO: This should live elsewhere. Maybe hir-lower?
 pub fn parse_hir(path: &std::path::Path) -> Result<hir::Module, Vec<Diagnostic>> {
-  let mut sources = Sources::new();
-  let content = std::fs::read_to_string(path).unwrap();
-  let main_id = sources.add(Source::new(path.display().to_string(), content));
+  let (mut sources, res) = parse_source(path);
 
-  let src = sources.get(main_id);
-  let res = cst::SourceFile::parse(&src.source);
-  if res.errors().is_empty() {
-    let sources_arc = Arc::new(sources);
-    let (module, _span_map, _ast_ids) =
-      rb_diagnostic::run(sources_arc.clone(), || rb_hir_lower::lower_source(res.tree(), main_id))?;
-    sources = Arc::try_unwrap(sources_arc).unwrap_or_else(|_| panic!());
-
-    let mut collector =
-      Collector { module, errors: vec![], to_check: vec![hir::Path { segments: vec![] }] };
-    let root = path.parent().unwrap();
-    while let Some(p) = collector.to_check.pop() {
-      sources = collector.check(root, &p, sources);
+  match res {
+    Ok((module, _, _)) => {
+      let mut collector =
+        Collector { module, errors: vec![], to_check: vec![hir::Path { segments: vec![] }] };
+      let root = path.parent().unwrap();
+      while let Some(p) = collector.to_check.pop() {
+        sources = collector.check(root, &p, sources);
+      }
     }
-  } else {
-    return Err(
-      res
-        .errors()
-        .into_iter()
-        .map(|e| Diagnostic::error(e.message(), Span { file: main_id, range: e.span() }))
-        .collect(),
-    );
-  };
+    Err(e) => {
+      return Err(e);
+    }
+  }
 
   todo!()
 }
 
 impl Collector {
-  fn check(&mut self, root: &std::path::Path, p: &hir::Path, mut sources: Sources) -> Sources {
+  fn check(&mut self, root: &std::path::Path, p: &hir::Path, sources: Sources) -> Sources {
     let mut module = &mut self.module;
     let mut path = hir::Path::new();
     let mut file_path = root.to_path_buf();
@@ -83,17 +72,7 @@ impl Collector {
     for (_, module) in &mut module.modules {
       match module {
         hir::PartialModule::File(name) => {
-          let path = file_path.join(format!("{name}.rbr"));
-          let content = std::fs::read_to_string(&path).unwrap();
-          let id = sources.add(Source::new(name.clone(), content));
-
-          let src = sources.get(id);
-          let res = cst::SourceFile::parse(&src.source);
-          let sources_arc = Arc::new(sources);
-          let res =
-            rb_diagnostic::run(sources_arc.clone(), || rb_hir_lower::lower_source(res.tree(), id));
-
-          sources = Arc::try_unwrap(sources_arc).unwrap_or_else(|_| panic!());
+          let (_sources, res) = parse_source(&file_path.join(format!("{name}.rbr")));
 
           match res {
             Ok((m, _, _)) => {
@@ -112,6 +91,22 @@ impl Collector {
 
     sources
   }
+}
+
+fn parse_source(
+  path: &std::path::Path,
+) -> (Sources, Result<(hir::Module, SpanMap, Vec<AstIdMap>), Vec<Diagnostic>>) {
+  let mut sources = Sources::new();
+  let content = std::fs::read_to_string(&path).unwrap();
+  let id = sources.add(Source::new(path.display().to_string(), content));
+
+  let src = sources.get(id);
+  let res = cst::SourceFile::parse(&src.source);
+  let sources_arc = Arc::new(sources);
+  let res = rb_diagnostic::run(sources_arc.clone(), || rb_hir_lower::lower_source(res.tree(), id));
+  sources = Arc::try_unwrap(sources_arc).unwrap_or_else(|_| panic!());
+
+  (sources, res)
 }
 
 pub fn run(
