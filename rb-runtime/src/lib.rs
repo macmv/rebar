@@ -33,7 +33,7 @@ struct Collector {
 
 // TODO: This should live elsewhere. Maybe hir-lower?
 pub fn parse_hir(path: &std::path::Path) -> Result<hir::Module, Vec<Diagnostic>> {
-  let (mut sources, res) = parse_source(path);
+  let (mut sources, res) = parse_source(path, Sources::new());
 
   match res {
     Ok((module, _, _)) => {
@@ -53,7 +53,7 @@ pub fn parse_hir(path: &std::path::Path) -> Result<hir::Module, Vec<Diagnostic>>
 }
 
 impl Collector {
-  fn check(&mut self, root: &std::path::Path, p: &hir::Path, sources: Sources) -> Sources {
+  fn check(&mut self, root: &std::path::Path, p: &hir::Path, mut sources: Sources) -> Sources {
     let mut module = &mut self.module;
     let mut path = hir::Path::new();
     let mut file_path = root.to_path_buf();
@@ -72,7 +72,8 @@ impl Collector {
     for (_, module) in &mut module.modules {
       match module {
         hir::PartialModule::File(name) => {
-          let (_sources, res) = parse_source(&file_path.join(format!("{name}.rbr")));
+          let (new_sources, res) = parse_source(&file_path.join(format!("{name}.rbr")), sources);
+          sources = new_sources;
 
           match res {
             Ok((m, _, _)) => {
@@ -95,8 +96,8 @@ impl Collector {
 
 fn parse_source(
   path: &std::path::Path,
+  mut sources: Sources,
 ) -> (Sources, Result<(hir::Module, SpanMap, Vec<AstIdMap>), Vec<Diagnostic>>) {
-  let mut sources = Sources::new();
   let content = std::fs::read_to_string(&path).unwrap();
   let id = sources.add(Source::new(path.display().to_string(), content));
 
