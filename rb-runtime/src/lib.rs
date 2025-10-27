@@ -9,14 +9,18 @@ const NUM_CPUS: usize = 32;
 
 pub fn compile(path: &std::path::Path) -> (Sources, Result<(), Vec<Diagnostic>>) {
   let (sources, res) = rb_hir_lower::parse_hir(path);
-  let (hir, span_map) = match res {
+  let (mut hir, span_map) = match res {
     Ok(v) => v,
     Err(diagnostics) => return (sources, Err(diagnostics)),
   };
 
   let sources = Arc::new(sources);
 
-  let res = rb_diagnostic::run(sources.clone(), || compile_diagnostics(hir, span_map)).map(|_| ());
+  let res = rb_diagnostic::run(sources.clone(), || {
+    rb_hir_lower::resolve_hir(&mut hir);
+    compile_diagnostics(hir, span_map)
+  })
+  .map(|_| ());
   (Arc::try_unwrap(sources).unwrap_or_else(|_| panic!()), res)
 }
 
@@ -40,9 +44,15 @@ pub fn compile_test(
   hir.modules.insert("test".into(), rb_hir::ast::PartialModule::Inline(test_module));
   span_map.modules.insert(rb_hir::ast::Path { segments: vec!["test".into()] }, test_span_map);
 
+  rb_hir_lower::resolve_hir(&mut hir);
+
   let sources = Arc::new(sources);
 
-  let res = rb_diagnostic::run(sources.clone(), || compile_diagnostics(hir, span_map)).map(|_| ());
+  let res = rb_diagnostic::run(sources.clone(), || {
+    rb_hir_lower::resolve_hir(&mut hir);
+    compile_diagnostics(hir, span_map)
+  })
+  .map(|_| ());
   (Arc::try_unwrap(sources).unwrap_or_else(|_| panic!()), res)
 }
 

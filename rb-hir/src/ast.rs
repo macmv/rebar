@@ -178,6 +178,12 @@ impl Path {
     new_path.segments.push(segment);
     new_path
   }
+
+  pub fn concat(&self, p: &Path) -> Self {
+    let mut new_path = self.clone();
+    new_path.segments.extend(p.segments.iter().cloned());
+    new_path
+  }
 }
 
 impl TypeExpr {
