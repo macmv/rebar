@@ -163,6 +163,12 @@ pub enum BinaryOp {
 
 impl Path {
   pub const fn new() -> Self { Path { segments: vec![] } }
+
+  pub fn join(&self, segment: String) -> Self {
+    let mut new_path = self.clone();
+    new_path.segments.push(segment);
+    new_path
+  }
 }
 
 impl TypeExpr {

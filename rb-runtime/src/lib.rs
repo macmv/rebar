@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use rb_diagnostic::{Diagnostic, Sources};
 use rb_mir::{ast as mir, MirContext};
@@ -52,15 +52,24 @@ pub fn compile_test(
 
 fn compile_diagnostics(module: rb_hir::ast::Module, span_map: rb_hir::SpanMap) -> Result<(), ()> {
   let mut funcs = vec![];
-  let main_func = rb_mir::ast::UserFunctionId(0);
+  let mut function_map = HashMap::new();
   for (path, hir) in module.modules() {
     let span_map = &span_map.modules[&path];
     for (id, function) in hir.functions.iter() {
+      let path = path.join(function.name.clone());
       let span_map = &span_map.functions[&id];
       let mir_id = rb_mir::ast::UserFunctionId(funcs.len() as u64);
+      function_map.insert(path, mir_id);
       funcs.push((mir_id, function, span_map));
     }
   }
+
+  let main_func = function_map
+    .get(&rb_hir::ast::Path { segments: vec!["test".into(), "".into()] })
+    .cloned()
+    .ok_or_else(|| {
+      panic!("no main function found");
+    })?;
 
   let mut env = RuntimeEnvironment::new();
   let (typer_env, mir_env) = env.build(&module, &funcs);
