@@ -602,7 +602,7 @@ fn is_used_later_in_block(after: &[Instruction], var: Variable) -> bool {
 #[cfg(test)]
 mod tests {
   use rb_codegen_opt::{VariableDisplay, parse};
-  use rb_test::expect;
+  use rb_test::{Expect, expect};
 
   use crate::regalloc::VariableRegisters;
 
@@ -616,9 +616,15 @@ mod tests {
     }
   }
 
+  fn check(function: &str, expected: Expect) {
+    let mut function = parse(function);
+    let regs = VariableRegisters::pass(&mut function.function);
+    function.check_annotated(expected, &regs);
+  }
+
   #[test]
   fn simple_syscall() {
-    let mut function = parse(
+    check(
       "
       block 0:
         mov r0 = 0x01
@@ -629,12 +635,6 @@ mod tests {
         mov r5 = 0x03
         syscall r6 = r5, r1
       ",
-    );
-
-    let regs = VariableRegisters::pass(&mut function.function);
-
-    // FIXME: r7 gets clobbered by r3!
-    function.check_annotated(
       expect![@r#"
         block 0:
           mov rax(0) = 0x01
@@ -646,26 +646,20 @@ mod tests {
           mov rax(5) = 0x03
           syscall rax(6) = rax(5), rdi(7)
           trap
-      "#
+        "#
       ],
-      &regs,
     );
   }
 
   #[test]
   fn syscall_with_imm() {
-    let mut function = parse(
+    check(
       "
       block 0:
         syscall r0 = 0x00, 0x01
         syscall r1 = 0x00, 0x02
         syscall r2 = 0x00, 0x03
       ",
-    );
-
-    let regs = VariableRegisters::pass(&mut function.function);
-
-    function.check_annotated(
       expect![@r#"
         block 0:
           mov rax(3) = 0x00
@@ -678,33 +672,26 @@ mod tests {
           mov rdi(8) = 0x03
           syscall rax(2) = rax(7), rdi(8)
           trap
-      "#
+        "#
       ],
-      &regs,
     );
   }
 
   #[test]
   fn call_with_imm() {
-    let mut function = parse(
+    check(
       "
       block 0:
         call foo r0 = 0x00, 0x01
       ",
-    );
-
-    let regs = VariableRegisters::pass(&mut function.function);
-
-    function.check_annotated(
       expect![@r#"
         block 0:
           mov rdi(1) = 0x00
           mov rsi(2) = 0x01
           call function 0 rax(0) = rdi(1), rsi(2)
           trap
-      "#
+        "#
       ],
-      &regs,
     );
   }
 
