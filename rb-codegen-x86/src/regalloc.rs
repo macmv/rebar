@@ -601,11 +601,10 @@ fn is_used_later_in_block(after: &[Instruction], var: Variable) -> bool {
 
 #[cfg(test)]
 mod tests {
-  use rb_codegen::{Variable, VariableSize};
   use rb_codegen_opt::{VariableDisplay, parse};
   use rb_test::expect;
 
-  use crate::regalloc::{Register, VariableRegisters};
+  use crate::regalloc::VariableRegisters;
 
   impl VariableDisplay for VariableRegisters {
     fn write_variable(
@@ -615,18 +614,6 @@ mod tests {
     ) -> std::fmt::Result {
       write!(f, "{}({})", self.get(var), var.id())
     }
-  }
-
-  macro_rules! v {
-    ($size:tt $index:expr) => {
-      Variable::new($index, size!($size))
-    };
-  }
-
-  macro_rules! size {
-    (r) => {
-      VariableSize::Bit64
-    };
   }
 
   #[test]
@@ -678,27 +665,23 @@ mod tests {
 
     let regs = VariableRegisters::pass(&mut function.function);
 
-    function.check(expect![@r#"
-      block 0:
-        mov r3 = 0x00
-        mov r4 = 0x01
-        syscall r0 = r3, r4
-        mov r5 = 0x00
-        mov r6 = 0x02
-        syscall r1 = r5, r6
-        mov r7 = 0x00
-        mov r8 = 0x03
-        syscall r2 = r7, r8
-        trap
-    "#
-    ]);
-
-    assert_eq!(regs.get(v!(r 3)), Register::RAX);
-    assert_eq!(regs.get(v!(r 4)), Register::RDI);
-    assert_eq!(regs.get(v!(r 5)), Register::RAX);
-    assert_eq!(regs.get(v!(r 6)), Register::RDI);
-    assert_eq!(regs.get(v!(r 7)), Register::RAX);
-    assert_eq!(regs.get(v!(r 8)), Register::RDI);
+    function.check_annotated(
+      expect![@r#"
+        block 0:
+          mov rax(3) = 0x00
+          mov rdi(4) = 0x01
+          syscall rax(0) = rax(3), rdi(4)
+          mov rax(5) = 0x00
+          mov rdi(6) = 0x02
+          syscall rax(1) = rax(5), rdi(6)
+          mov rax(7) = 0x00
+          mov rdi(8) = 0x03
+          syscall rax(2) = rax(7), rdi(8)
+          trap
+      "#
+      ],
+      &regs,
+    );
   }
 
   #[test]
@@ -712,17 +695,17 @@ mod tests {
 
     let regs = VariableRegisters::pass(&mut function.function);
 
-    function.check(expect![@r#"
-      block 0:
-        mov r1 = 0x00
-        mov r2 = 0x01
-        call function 0 r0 = r1, r2
-        trap
-    "#
-    ]);
-
-    assert_eq!(regs.get(v!(r 1)), Register::RDI);
-    assert_eq!(regs.get(v!(r 2)), Register::RSI);
+    function.check_annotated(
+      expect![@r#"
+        block 0:
+          mov rdi(1) = 0x00
+          mov rsi(2) = 0x01
+          call function 0 rax(0) = rdi(1), rsi(2)
+          trap
+      "#
+      ],
+      &regs,
+    );
   }
 
   #[ignore]
