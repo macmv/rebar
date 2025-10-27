@@ -450,8 +450,8 @@ impl Regalloc<'_> {
     if let Some(pref) = self.preference_after(loc, var) {
       match self.active.get(&pref) {
         Some(&other) if other != var => {
-          self.active.remove(&pref);
           self.rehome(loc, other);
+          self.active.remove(&pref);
 
           return pref;
         }
