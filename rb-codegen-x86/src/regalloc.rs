@@ -186,37 +186,7 @@ impl Regalloc<'_> {
 
         let &[InstructionOutput::Var(out)] = instr.output.as_slice() else { continue };
 
-        let requirement = match instr.opcode {
-          Opcode::Math(m) => {
-            let InstructionInput::Var(v) = instr.input[0] else {
-              panic!("expected var input for math instruction: {instr}");
-            };
-            let input = self.alloc.registers.get(v).unwrap();
-
-            match m {
-              // In-place, any register.
-              Math::Add
-              | Math::Sub
-              | Math::And
-              | Math::Or
-              | Math::Xor
-              | Math::Not
-              | Math::Neg
-              | Math::Shl
-              | Math::Ishr
-              | Math::Ushr => Some(input.index),
-              // In-place, only EAX.
-              Math::Imul | Math::Umul | Math::Idiv | Math::Udiv => Some(RegisterIndex::Eax),
-              // In-place, only EDX.
-              Math::Irem | Math::Urem => Some(RegisterIndex::Edx),
-            }
-          }
-          Opcode::Call(_) => match 0 {
-            0 => Some(RegisterIndex::Eax),
-            _ => todo!("more than 1 return"),
-          },
-          _ => None,
-        };
+        let requirement = Requirement::for_output(self, instr, 0);
 
         let used_later = self.is_used_later(
           &function.block(block).instructions[i + 1..],
@@ -581,6 +551,40 @@ impl Requirement {
           Register(instr.input[0].unwrap_var().size())
         }
       }
+      _ => None,
+    }
+  }
+
+  fn for_output(regalloc: &Regalloc, instr: &Instruction, index: usize) -> Option<RegisterIndex> {
+    match instr.opcode {
+      Opcode::Math(m) => {
+        let InstructionInput::Var(v) = instr.input[0] else {
+          panic!("expected var input for math instruction: {instr}");
+        };
+        let input = regalloc.alloc.registers.get(v).unwrap();
+
+        match m {
+          // In-place, any register.
+          Math::Add
+          | Math::Sub
+          | Math::And
+          | Math::Or
+          | Math::Xor
+          | Math::Not
+          | Math::Neg
+          | Math::Shl
+          | Math::Ishr
+          | Math::Ushr => Some(input.index),
+          // In-place, only EAX.
+          Math::Imul | Math::Umul | Math::Idiv | Math::Udiv => Some(RegisterIndex::Eax),
+          // In-place, only EDX.
+          Math::Irem | Math::Urem => Some(RegisterIndex::Edx),
+        }
+      }
+      Opcode::Call(_) => match index {
+        0 => Some(RegisterIndex::Eax),
+        _ => todo!("more than 1 return"),
+      },
       _ => None,
     }
   }
