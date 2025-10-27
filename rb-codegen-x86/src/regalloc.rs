@@ -267,7 +267,9 @@ impl Regalloc<'_> {
             }
           }
 
-          self.satisfy_requirement(loc, input, Some(prev), requirement);
+          if let Some(new_var) = self.satisfy_requirement(loc, input, Some(prev), requirement) {
+            *input = InstructionInput::Var(new_var);
+          }
         }
       }
     }
@@ -353,7 +355,9 @@ impl Regalloc<'_> {
         }
       }
 
-      self.satisfy_requirement(loc, input, prev, requirement);
+      if let Some(new_var) = self.satisfy_requirement(loc, input, prev, requirement) {
+        *input = InstructionInput::Var(new_var);
+      }
     }
 
     // TODO
@@ -381,12 +385,12 @@ impl Regalloc<'_> {
   fn satisfy_requirement(
     &mut self,
     loc: InstructionLocation,
-    input: &mut InstructionInput,
+    input: &InstructionInput,
     prev: Option<Option<Variable>>,
     requirement: Requirement,
-  ) {
+  ) -> Option<Variable> {
     let (requirement, prev) = match requirement {
-      Requirement::None => return,
+      Requirement::None => return None,
       Requirement::Register(size) => {
         let new_var = self.fresh_var(size);
         let reg = self.pick_register(loc, new_var);
@@ -397,9 +401,9 @@ impl Regalloc<'_> {
 
     let mut moves = vec![];
 
-    match input {
+    let new_var = match input {
       InstructionInput::Var(v) => match prev {
-        Some(active) if active == *v => {}
+        Some(active) if active == *v => None,
         Some(other) => {
           moves.push(Move::VarReg { from: other, to: RegisterIndex::Ebx });
 
@@ -410,7 +414,7 @@ impl Regalloc<'_> {
             Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
             || Register::RAX,
           );
-          *v = new_var;
+          Some(new_var)
         }
         None => {
           if self.alloc.registers.get(*v).is_some_and(|r| r.index != requirement) {
@@ -421,7 +425,9 @@ impl Regalloc<'_> {
               Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
               || Register::RAX,
             );
-            *v = new_var;
+            Some(new_var)
+          } else {
+            None
           }
         }
       },
@@ -436,7 +442,7 @@ impl Regalloc<'_> {
             Register { size: var_to_reg_size(VariableSize::Bit64).unwrap(), index: requirement },
             || Register::RAX,
           );
-          *input = InstructionInput::Var(new_var);
+          Some(new_var)
         }
         None => {
           let new_var = self.fresh_var(VariableSize::Bit64);
@@ -446,14 +452,14 @@ impl Regalloc<'_> {
             Register { size: var_to_reg_size(VariableSize::Bit64).unwrap(), index: requirement },
             || Register::RAX,
           );
-          *input = InstructionInput::Var(new_var);
+          Some(new_var)
         }
       },
-    }
+    };
 
-    if !moves.is_empty() {
-      self.copies.entry(loc).or_default().extend(moves);
-    }
+    self.copies.entry(loc).or_default().extend(moves);
+
+    new_var
   }
 
   fn fresh_var(&mut self, size: VariableSize) -> Variable {
