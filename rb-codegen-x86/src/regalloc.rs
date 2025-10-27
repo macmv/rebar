@@ -22,7 +22,7 @@ struct Regalloc<'a> {
   active:  HashMap<RegisterIndex, Variable>,
   visited: HashSet<BlockId>,
 
-  preference: HashMap<Variable, RegisterIndex>,
+  preference: HashMap<Variable, (RegisterIndex, InstructionLocation)>,
 
   first_new_variable: u32,
   next_variable:      u32,
@@ -32,7 +32,7 @@ struct Regalloc<'a> {
   rehomes_reverse: HashMap<Variable, Variable>,
 }
 
-#[derive(Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct InstructionLocation {
   block: BlockId,
   index: usize,
@@ -240,7 +240,8 @@ impl Regalloc<'_> {
 
   fn pre_allocation(&mut self, function: &Function) {
     for block in function.blocks() {
-      for instr in &function.block(block).instructions {
+      for (i, instr) in function.block(block).instructions.iter().enumerate() {
+        let loc = InstructionLocation { block, index: i };
         if !matches!(instr.opcode, Opcode::Syscall | Opcode::Call(_)) {
           continue;
         }
@@ -261,7 +262,7 @@ impl Regalloc<'_> {
             _ => unreachable!(),
           };
 
-          self.preference.insert(var, reg_index);
+          self.preference.entry(var).or_insert((reg_index, loc));
         }
       }
     }
@@ -446,7 +447,7 @@ impl Regalloc<'_> {
   }
 
   fn pick_register(&mut self, loc: InstructionLocation, var: Variable) -> RegisterIndex {
-    if let Some(&pref) = self.preference.get(&var) {
+    if let Some(pref) = self.preference_after(loc, var) {
       match self.active.get(&pref) {
         Some(&other) if other != var => {
           self.active.remove(&pref);
@@ -482,6 +483,16 @@ impl Regalloc<'_> {
     self.copies.entry(loc).or_default().push(Move::VarVar { from: var, to: new_var });
     self.rehomes.insert(var, new_var);
     self.rehomes_reverse.insert(new_var, var);
+  }
+
+  fn preference_after(&self, loc: InstructionLocation, var: Variable) -> Option<RegisterIndex> {
+    if let Some(&(pref, pref_loc)) = self.preference.get(&var) {
+      if pref_loc >= loc {
+        return Some(pref);
+      }
+    }
+
+    None
   }
 
   fn is_used_later(
@@ -639,11 +650,12 @@ mod tests {
           mov rax(0) = 0x01
           mov rdi(1) = 0x00
           syscall rax(2) = rax(0), rdi(1)
-          mov rdi(7) = rdi(1)
+          mov rcx(7) = rdi(1)
           mov rdi(3) = 0x02
           syscall rax(4) = rax(0), rdi(3)
           mov rax(5) = 0x03
-          syscall rax(6) = rax(5), rdi(7)
+          mov rdi(8) = rcx(7)
+          syscall rax(6) = rax(5), rdi(8)
           trap
       "#
       ],
