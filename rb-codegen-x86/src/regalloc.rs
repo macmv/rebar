@@ -44,6 +44,15 @@ enum Move {
   ImmVar { from: Immediate, to: Variable },
 }
 
+enum Requirement {
+  /// The operand must be in the given register.
+  Specific(RegisterIndex),
+  /// The operand must in in a register, but it does not matter which.
+  Register,
+  /// The operand may be in a register or immediate.
+  None,
+}
+
 impl VariableRegisters {
   pub fn pass(function: &mut Function) -> Self {
     let mut analysis = Analysis::default();
@@ -242,11 +251,11 @@ impl Regalloc<'_> {
       if let TerminatorInstruction::Return(ref mut inputs) = function.block_mut(block).terminator {
         for (i, input) in inputs.iter_mut().enumerate() {
           let requirement = match i {
-            0 => RegisterIndex::Eax,
+            0 => Requirement::Specific(RegisterIndex::Eax),
             _ => todo!("more than 1 return"),
           };
 
-          let prev = self.active.get(&requirement).copied();
+          let prev = self.active.get(&RegisterIndex::Eax).copied();
           if let InstructionInput::Var(v) = input {
             while let Some(&new_v) = self.rehomes.get(v) {
               *v = new_v;
@@ -258,7 +267,7 @@ impl Regalloc<'_> {
             }
           }
 
-          self.satisfy_requirement(loc, input, prev, requirement);
+          self.satisfy_requirement(loc, input, Some(prev), requirement);
         }
       }
     }
@@ -324,32 +333,12 @@ impl Regalloc<'_> {
   ) {
     let (instr, block_after_instr) = block.instructions[loc.index..].split_first_mut().unwrap();
     for (i, input) in instr.input.iter_mut().enumerate() {
-      let requirement = match instr.opcode {
-        Opcode::Syscall => match i {
-          0 => Some(RegisterIndex::Eax),
-          1 => Some(RegisterIndex::Edi),
-          2 => Some(RegisterIndex::Esi),
-          3 => Some(RegisterIndex::Edx),
-          _ => unreachable!(),
-        },
-        // TODO: Calling convention?
-        Opcode::Call(_) => match i {
-          0 => Some(RegisterIndex::Edi),
-          1 => Some(RegisterIndex::Esi),
-          2 => Some(RegisterIndex::Edx),
-          _ => todo!("more arguments"),
-        },
-        Opcode::Math(_) => {
-          if i == 0 {
-            Some(RegisterIndex::Eax)
-          } else {
-            None
-          }
-        }
+      let requirement = Requirement::for_input(instr.opcode, i);
+
+      let prev = match requirement {
+        Requirement::Specific(r) => Some(self.active.get(&r).copied()),
         _ => None,
       };
-
-      let prev = requirement.map(|r| self.active.get(&r).copied());
 
       if let InstructionInput::Var(v) = input {
         while let Some(&new_v) = self.rehomes.get(v) {
@@ -362,9 +351,7 @@ impl Regalloc<'_> {
         }
       }
 
-      if let Some(requirement) = requirement {
-        self.satisfy_requirement(loc, input, prev.unwrap(), requirement);
-      }
+      self.satisfy_requirement(loc, input, prev, requirement);
     }
 
     // TODO
@@ -393,9 +380,18 @@ impl Regalloc<'_> {
     &mut self,
     loc: InstructionLocation,
     input: &mut InstructionInput,
-    prev: Option<Variable>,
-    requirement: RegisterIndex,
+    prev: Option<Option<Variable>>,
+    requirement: Requirement,
   ) {
+    let (requirement, prev) = match requirement {
+      Requirement::None => return,
+      Requirement::Register => {
+        let reg = self.pick_register(loc, input.unwrap_var());
+        (reg, self.active.get(&reg).copied())
+      }
+      Requirement::Specific(reg) => (reg, prev.unwrap()),
+    };
+
     let mut moves = vec![];
 
     match input {
@@ -547,6 +543,37 @@ impl Regalloc<'_> {
   }
 
   fn is_tmp_var(&self, var: Variable) -> bool { var.id() >= self.first_new_variable }
+}
+
+impl Requirement {
+  fn for_input(opcode: Opcode, index: usize) -> Requirement {
+    use Requirement::*;
+
+    match opcode {
+      Opcode::Syscall => match index {
+        0 => Specific(RegisterIndex::Eax),
+        1 => Specific(RegisterIndex::Edi),
+        2 => Specific(RegisterIndex::Esi),
+        3 => Specific(RegisterIndex::Edx),
+        _ => unreachable!(),
+      },
+      // TODO: Calling convention?
+      Opcode::Call(_) => match index {
+        0 => Specific(RegisterIndex::Edi),
+        1 => Specific(RegisterIndex::Esi),
+        2 => Specific(RegisterIndex::Edx),
+        _ => todo!("more arguments"),
+      },
+      Opcode::Math(_) => {
+        if index == 0 {
+          Specific(RegisterIndex::Eax)
+        } else {
+          None
+        }
+      }
+      _ => None,
+    }
+  }
 }
 
 fn is_used_later_in_block(after: &[Instruction], var: Variable) -> bool {
