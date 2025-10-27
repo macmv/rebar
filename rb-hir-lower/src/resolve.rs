@@ -50,7 +50,7 @@ fn resolve_module(
     match module {
       hir::PartialModule::File => panic!("module wasn't filled in"),
       hir::PartialModule::Inline(submodule) => {
-        let child_item = item.get(name)?;
+        let child_item = item.get(name).unwrap();
         let _ = resolve_module(submodule, root, span_map, current.join(name.clone()), child_item);
       }
     }
@@ -63,11 +63,11 @@ fn resolve_module(
     for (id, expr) in function.exprs.iter_mut() {
       match expr {
         hir::Expr::Name(p) => {
-          if root.resolve(p).is_ok() {
+          if root.contains(p) {
             // absolute path
           } else {
             let abs = current.concat(p);
-            if root.resolve(&abs).is_ok() {
+            if root.contains(&abs) {
               // relative path
               *p = abs;
             } else {
@@ -85,18 +85,21 @@ fn resolve_module(
 }
 
 impl Item {
-  pub fn resolve(&self, path: &Path) -> Result<(), ()> {
+  pub fn contains(&self, path: &Path) -> bool {
     let mut current = self;
     for segment in &path.segments {
-      current = current.get(segment)?;
+      match current.get(segment) {
+        Some(it) => current = it,
+        None => return false,
+      }
     }
-    Ok(())
+    true
   }
 
-  pub fn get(&self, name: &str) -> Result<&Item, ()> {
+  pub fn get(&self, name: &str) -> Option<&Item> {
     match self {
-      Item::Module { children } => children.get(name).ok_or(()),
-      Item::Function => Err(()),
+      Item::Module { children } => children.get(name),
+      Item::Function => None,
     }
   }
 }
