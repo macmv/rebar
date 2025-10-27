@@ -72,12 +72,12 @@ StructExpr = Path '{' FieldInit* '}'
 FieldInit = 'ident' ':' Expr
 
 ExprStmt = Attr* Expr
-Stmt = Let | Assign | FunctionDef | Struct | ExprStmt
+Stmt = Struct | Function | Let | Assign | ExprStmt
 
 Let = Attr* 'let' 'ident' (':' Type)? '=' Expr
 Assign = Attr* Expr '=' Expr
 
-FunctionDef = Attr* Extern? 'fn' 'ident' Params Block
+Function = Attr* Extern? 'fn' 'ident' Params Block
 Extern = 'extern' String?
 Attr = '#' '[' Path ']'
 Struct = Attr* 'struct' 'ident' StructBlock
@@ -86,9 +86,7 @@ Params = '(' Param* ')' ReturnType?
 Param = 'ident' ':' Type
 ReturnType = '->' Type
 
-StructBlock = '{' StructItem* '}'
-StructItem = Field | FunctionDef | ConstructorDef
-ConstructorDef = 'constructor' Params Block
+StructBlock = '{' Field* '}'
 
 Field = 'ident' ':' Type
 

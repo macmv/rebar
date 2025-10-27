@@ -97,7 +97,7 @@ pub fn stmt(p: &mut Parser) {
         block(p);
       }
 
-      m.complete(p, FUNCTION_DEF);
+      m.complete(p, FUNCTION);
     }
 
     // test ok
@@ -209,7 +209,7 @@ fn struct_item(p: &mut Parser) {
       params(p);
       block(p);
 
-      m.complete(p, FUNCTION_DEF);
+      m.complete(p, FUNCTION);
     }
 
     // test ok
@@ -299,7 +299,7 @@ mod tests {
         SOURCE_FILE
           NL_KW '\n'
           WHITESPACE '        '
-          FUNCTION_DEF
+          FUNCTION
             EXTERN_KW 'extern'
             WHITESPACE ' '
             STRING

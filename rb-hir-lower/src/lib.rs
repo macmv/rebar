@@ -64,7 +64,7 @@ impl SourceLower<'_> {
     id
   }
 
-  fn function(&mut self, cst: &cst::FunctionDef) -> hir::FunctionId {
+  fn function(&mut self, cst: &cst::Function) -> hir::FunctionId {
     let mut f = hir::Function::default();
     let mut span_map = FunctionSpanMap::default();
     let mut ast_id_map = AstIdMap::default();
@@ -118,13 +118,11 @@ impl SourceLower<'_> {
 
     s.name = cst.ident_token().unwrap().to_string();
 
-    for item in cst.struct_block().unwrap().struct_items() {
-      if let cst::StructItem::Field(ref field) = item {
-        let name = field.ident_token().unwrap().to_string();
-        let ty = type_expr(self.source, &field.ty().unwrap());
+    for field in cst.struct_block().unwrap().fields() {
+      let name = field.ident_token().unwrap().to_string();
+      let ty = type_expr(self.source, &field.ty().unwrap());
 
-        s.fields.push((name, ty));
-      }
+      s.fields.push((name, ty));
     }
 
     self.out.structs.alloc(s)
@@ -171,7 +169,7 @@ impl FunctionLower<'_, '_> {
       }
 
       // TODO: Allow inner defs to capture local variables.
-      cst::Stmt::FunctionDef(ref def) => {
+      cst::Stmt::Function(ref def) => {
         self.source.function(def);
 
         let name = def.ident_token().unwrap().to_string();

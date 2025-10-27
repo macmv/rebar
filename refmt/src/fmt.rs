@@ -109,7 +109,7 @@ impl FormatterContext<'_> {
 
       // The opening brace in if statements and defs needs some extra whitespace.
       (T!['{'], BLOCK)
-        if matches!(token.parent().unwrap().parent().unwrap().kind(), IF_EXPR | FUNCTION_DEF) =>
+        if matches!(token.parent().unwrap().parent().unwrap().kind(), IF_EXPR | FUNCTION) =>
       {
         (Space, if self.multiline { Newline } else { Space })
       }
