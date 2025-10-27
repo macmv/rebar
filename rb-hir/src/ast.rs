@@ -170,3 +170,39 @@ impl TypeExpr {
 impl From<PrimitiveType> for TypeExpr {
   fn from(value: PrimitiveType) -> Self { TypeExpr::Primitive(value) }
 }
+
+pub struct ModuleIter<'a> {
+  root:  &'a Module,
+  stack: Vec<Path>,
+}
+
+impl Module {
+  pub fn modules(&self) -> ModuleIter<'_> { ModuleIter { root: self, stack: vec![Path::new()] } }
+}
+
+impl<'a> Iterator for ModuleIter<'a> {
+  type Item = &'a Module;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    let path = self.stack.pop()?;
+    let mut module = self.root;
+    for segment in &path.segments {
+      match module.modules.iter().find(|(n, _)| n == segment) {
+        Some((_, PartialModule::Inline(submodule))) => {
+          module = submodule;
+        }
+        _ => panic!(),
+      }
+    }
+
+    for (name, partial) in &module.modules {
+      if let PartialModule::Inline(_) = partial {
+        let mut new_path = path.clone();
+        new_path.segments.push(name.clone());
+        self.stack.push(new_path);
+      }
+    }
+
+    Some(module)
+  }
+}

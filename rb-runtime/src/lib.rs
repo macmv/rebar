@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
-use rb_diagnostic::{emit, Diagnostic, Source, SourceId, Sources, Span};
+use rb_diagnostic::{Diagnostic, SourceId, Sources};
 use rb_mir::{ast as mir, MirContext};
-use rb_syntax::cst;
 use rb_typer::Type;
 
 const NUM_CPUS: usize = 32;
@@ -12,65 +11,25 @@ pub struct RuntimeEnvironment {
   pub mir: MirContext,
 }
 
-pub fn eval(src: &str) {
-  let env = RuntimeEnvironment::new();
+pub fn compile(path: &std::path::Path) -> Result<(), Vec<Diagnostic>> {
+  let (sources, res) = rb_hir_lower::parse_hir(path);
+  let hir = res?;
 
-  let mut sources = Sources::new();
-  let id = sources.add(Source::new("inline.rbr".into(), src.into()));
   let sources = Arc::new(sources);
 
-  rb_diagnostic::run_or_exit(sources.clone(), || compile_diagnostics(env, sources, id))
-    .expect("error with no diagnostics emitted");
+  rb_diagnostic::run(sources.clone(), || compile_diagnostics(sources, hir)).map(|_| ())
 }
 
-pub fn run(
-  env: RuntimeEnvironment,
-  sources: Arc<Sources>,
-  id: SourceId,
-) -> Result<(), Vec<Diagnostic>> {
-  rb_diagnostic::run(sources.clone(), || compile_diagnostics(env, sources, id)).map(|_| ())
-}
-
-fn compile_diagnostics(
-  mut env: RuntimeEnvironment,
-  sources: Arc<Sources>,
-  main: SourceId,
-) -> Result<(), ()> {
-  let results = run_parallel(
-    &sources.all().collect::<Vec<_>>(),
-    || (),
-    |_, &id| {
-      let src = sources.get(id);
-      let res = cst::SourceFile::parse(&src.source);
-
-      let (hir, span_maps, _) = if res.errors().is_empty() {
-        rb_hir_lower::lower_source(res.tree(), id)
-      } else {
-        for error in res.errors() {
-          emit!(Span { file: id, range: error.span() } => error.message());
-        }
-
-        return Err(());
-      };
-
-      Ok((hir, span_maps))
-    },
-  );
-
-  rb_diagnostic::check()?;
-
-  let files = results.into_iter().map(|r| r.unwrap()).collect::<Vec<_>>();
+fn compile_diagnostics(sources: Arc<Sources>, module: rb_hir::ast::Module) -> Result<(), ()> {
+  let env = RuntimeEnvironment::new();
 
   let mut funcs = vec![];
   let mut main_func = rb_mir::ast::UserFunctionId(0);
-  for (source_id, (hir, span_map)) in files.iter().enumerate() {
+  for hir in module.modules() {
     for (id, function) in hir.functions.iter() {
       let span_map = &span_map.functions[&id];
       let mir_id = rb_mir::ast::UserFunctionId(funcs.len() as u64);
       funcs.push((mir_id, function, span_map));
-    }
-    if main.into_raw().into_u32() as usize == source_id {
-      main_func = funcs.last().unwrap().0;
     }
   }
 

@@ -12,7 +12,7 @@ struct Collector {
   to_check: Vec<hir::Path>,
 }
 
-pub fn parse_hir(path: &std::path::Path) -> Result<hir::Module, Vec<Diagnostic>> {
+pub fn parse_hir(path: &std::path::Path) -> (Sources, Result<hir::Module, Vec<Diagnostic>>) {
   let (mut sources, res) = parse_source(path, Sources::new());
 
   match res {
@@ -23,9 +23,14 @@ pub fn parse_hir(path: &std::path::Path) -> Result<hir::Module, Vec<Diagnostic>>
       while let Some(p) = collector.to_check.pop() {
         sources = collector.check(root, &p, sources);
       }
-      Ok(collector.module)
+
+      if collector.errors.is_empty() {
+        (sources, Ok(collector.module))
+      } else {
+        (sources, Err(collector.errors))
+      }
     }
-    Err(e) => Err(e),
+    Err(e) => (sources, Err(e)),
   }
 }
 
