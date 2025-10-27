@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 
 use la_arena::Arena;
-use rb_diagnostic::{emit, Span};
+use rb_diagnostic::{Span, emit};
 use rb_hir::{
-  ast::{self as hir, ExprId, StmtId},
   FunctionSpanMap,
+  ast::{self as hir, ExprId, StmtId},
 };
 use ty::{TypeVar, VType, VarId};
 
@@ -213,29 +213,14 @@ impl<'a> Typer<'a> {
       }
 
       hir::Expr::Name(ref path) => {
-        if let Some(ident) = path.as_single() {
-          match self.locals.get(ident) {
-            Some(ty) => ty.clone(),
-            None => match self.local_functions.get(ident) {
-              Some(ty) => ty.clone().into(),
-              None => match self.env.names.get(&path) {
-                Some(ty) => VType::from(ty.clone()),
-                None => {
-                  emit!(self.span(expr) => "undeclared name `{path}`");
-
-                  VType::Var(self.fresh_var(self.span(expr), String::new()))
-                }
-              },
-            },
-          }
+        if let Some(ident) = path.as_single()
+          && let Some(ty) = self.local_functions.get(ident)
+        {
+          ty.clone().into()
         } else {
           match self.env.names.get(&path) {
             Some(ty) => VType::from(ty.clone()),
-            None => {
-              emit!(self.span(expr) => "undeclared name `{path}`");
-
-              VType::Var(self.fresh_var(self.span(expr), String::new()))
-            }
+            None => panic!("could not resolve {path}"),
           }
         }
       }
