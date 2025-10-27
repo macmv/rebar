@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-rowan = "0.15.15"
+rowan = "0.16.1"
 rb-parser.workspace = true
 
 [build-dependencies]

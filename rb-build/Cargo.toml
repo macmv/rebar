@@ -8,8 +8,8 @@ edition = "2024"
 [lib]
 
 [dependencies]
-itertools = "0.12.0"
-proc-macro2 = "1.0.47"
-quote = "1.0.20"
+itertools = "0.14.0"
+proc-macro2 = "1.0.103"
+quote = "1.0.41"
 ungrammar = "1.16.1"
-xshell = "0.2.5"
+xshell = "0.2.7"

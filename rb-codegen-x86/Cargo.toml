@@ -8,10 +8,10 @@ edition = "2024"
 rb-codegen.workspace = true
 rb-codegen-opt.workspace = true
 
-indexmap = "2.11.4"
+indexmap = "2.12.0"
 object = { version = "0.37.3", default-features = false, features = ["elf", "std", "write_core"] }
 smallvec = "1.15.1"
-bitflags = "2.9.4"
+bitflags = "2.10.0"
 
 [dev-dependencies]
 rb-test.workspace = true

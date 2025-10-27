@@ -9,12 +9,12 @@ edition = "2024"
 
 [dependencies]
 drop_bomb = "0.1.5"
-rowan = "0.15.15"
-thiserror = "1.0.56"
+rowan = "0.16.1"
+thiserror = "2.0.17"
 
 [build-dependencies]
 rb-build.workspace = true
 
 [dev-dependencies]
 rb-test.workspace = true
-pretty_assertions = "1.4.0"
+pretty_assertions = "1.4.1"

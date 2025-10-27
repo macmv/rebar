@@ -7,5 +7,5 @@ edition = "2024"
 
 [dependencies]
 la-arena = "0.3.1"
-line-index = "0.1.1"
+line-index = "0.1.2"
 rb-syntax.workspace = true
