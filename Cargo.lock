@@ -732,9 +732,7 @@ dependencies = [
  "rb-hir-lower",
  "rb-mir",
  "rb-mir-lower",
- "rb-syntax",
  "rb-typer",
- "rb-value",
 ]
 
 [[package]]
