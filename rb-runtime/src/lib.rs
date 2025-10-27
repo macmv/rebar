@@ -1,6 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use rb_diagnostic::{Diagnostic, Sources};
+use rb_hir::ast::Path;
 use rb_mir::{ast as mir, MirContext};
 use rb_typer::Type;
 
@@ -46,18 +47,7 @@ pub fn compile_test(
 }
 
 fn compile_diagnostics(module: rb_hir::ast::Module, span_map: rb_hir::SpanMap) -> Result<(), ()> {
-  let mut funcs = vec![];
-  let mut function_map = HashMap::new();
-  for (path, hir) in module.modules() {
-    let span_map = &span_map.modules[&path];
-    for (id, function) in hir.functions.iter() {
-      let path = path.join(function.name.clone());
-      let span_map = &span_map.functions[&id];
-      let mir_id = rb_mir::ast::UserFunctionId(funcs.len() as u64);
-      function_map.insert(path, mir_id);
-      funcs.push((mir_id, function, span_map));
-    }
-  }
+  let (typer_env, mir_ctx, function_map, functions) = build_environment(&module, &span_map);
 
   let main_func = function_map
     .get(&rb_hir::ast::Path { segments: vec!["test".into(), "".into()] })
@@ -66,12 +56,10 @@ fn compile_diagnostics(module: rb_hir::ast::Module, span_map: rb_hir::SpanMap) -
       panic!("no main function found");
     })?;
 
-  let (typer_env, mir_ctx) = build_environment(&module, &funcs);
-
   rb_diagnostic::check()?;
 
   let functions = run_parallel(
-    &funcs,
+    &functions,
     || (),
     |_, (id, function, span_map)| {
       let typer = rb_typer::Typer::check(&typer_env, function, span_map);
@@ -92,7 +80,7 @@ fn compile_diagnostics(module: rb_hir::ast::Module, span_map: rb_hir::SpanMap) -
 
   let mut functions = functions.into_iter().flatten().collect::<Vec<_>>();
 
-  let start_id = rb_mir::ast::UserFunctionId(funcs.len() as u64);
+  let start_id = rb_mir::ast::UserFunctionId(functions.len() as u64);
   functions.push(generate_start_func(main_func, start_id));
 
   // If we get to this point, all checks have passed, and we can compile to
@@ -152,39 +140,55 @@ fn compile_mir(
   compiler.finish(main_func);
 }
 
-fn build_environment(
-  module: &rb_hir::ast::Module,
-  functions: &[(rb_mir::ast::UserFunctionId, &rb_hir::ast::Function, &rb_hir::FunctionSpanMap)],
-) -> (rb_typer::Environment, rb_mir::MirContext) {
+fn build_environment<'a>(
+  module: &'a rb_hir::ast::Module,
+  span_map: &'a rb_hir::SpanMap,
+) -> (
+  rb_typer::Environment,
+  rb_mir::MirContext,
+  HashMap<Path, rb_mir::ast::UserFunctionId>,
+  Vec<(rb_mir::ast::UserFunctionId, &'a rb_hir::ast::Function, &'a rb_hir::FunctionSpanMap)>,
+) {
   let mut typer_env = rb_typer::Environment::empty();
   let mut mir_ctx = MirContext::default();
+  let mut functions = vec![];
+  let mut function_map = HashMap::new();
 
-  for (id, s) in module.structs.values().enumerate() {
-    let id = rb_mir::ast::StructId(id as u64);
+  for (path, module) in module.modules() {
+    let span_map = &span_map.modules[&path];
+    for (id, s) in module.structs.values().enumerate() {
+      let id = rb_mir::ast::StructId(id as u64);
 
-    typer_env.structs.insert(
-      s.name.clone(),
-      s.fields.iter().map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te))).collect(),
-    );
-    mir_ctx.struct_paths.insert(s.name.clone(), id);
-    mir_ctx.structs.insert(
-      id,
-      rb_mir::Struct {
-        fields: s
-          .fields
-          .iter()
-          .map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te)))
-          .collect(),
-      },
-    );
+      typer_env.structs.insert(
+        s.name.clone(),
+        s.fields.iter().map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te))).collect(),
+      );
+      mir_ctx.struct_paths.insert(s.name.clone(), id);
+      mir_ctx.structs.insert(
+        id,
+        rb_mir::Struct {
+          fields: s
+            .fields
+            .iter()
+            .map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te)))
+            .collect(),
+        },
+      );
+    }
+
+    for (hir_id, f) in module.functions.iter() {
+      let path = path.join(f.name.clone());
+      let span_map = &span_map.functions[&hir_id];
+
+      let mir_id = rb_mir::ast::UserFunctionId(functions.len() as u64);
+      functions.push((mir_id, f, span_map));
+      function_map.insert(path, mir_id);
+      rb_mir_lower::declare_user_function(&mut mir_ctx, mir_id, f, span_map);
+      typer_env.names.insert(f.name.clone(), rb_typer::type_of_function(f));
+    }
   }
 
-  for (id, f, span_map) in functions {
-    rb_mir_lower::declare_user_function(&mut mir_ctx, *id, f, span_map);
-    typer_env.names.insert(f.name.clone(), rb_typer::type_of_function(f));
-  }
-
-  (typer_env, mir_ctx)
+  (typer_env, mir_ctx, function_map, functions)
 }
 
 pub fn run_parallel<I: Send + Sync, C: Send, O: Send + Sync>(
