@@ -10,9 +10,22 @@ pub struct Module {
   pub functions: Arena<Function>,
   pub structs:   Arena<Struct>,
 
+  pub modules: Vec<(String, PartialModule)>,
+
   // If there are any statements outside of functions, they will be stored in a "main function,"
   // stored here.
   pub main_function: Option<FunctionId>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Path {
+  pub segments: Vec<String>,
+}
+
+#[derive(Debug)]
+pub enum PartialModule {
+  File(String),
+  Inline(Module),
 }
 
 #[derive(Debug, Default)]
@@ -144,6 +157,10 @@ pub enum BinaryOp {
   Lte,
   Gt,
   Gte,
+}
+
+impl Path {
+  pub const fn new() -> Self { Path { segments: vec![] } }
 }
 
 impl TypeExpr {

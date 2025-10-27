@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use rb_diagnostic::{emit, Diagnostic, Source, SourceId, Sources, Span};
+use rb_hir::ast as hir;
 use rb_mir::{ast as mir, MirContext};
 use rb_syntax::cst;
 use rb_typer::Type;
@@ -21,6 +22,92 @@ pub fn eval(src: &str) {
 
   rb_diagnostic::run_or_exit(sources.clone(), || compile_diagnostics(env, sources, id))
     .expect("error with no diagnostics emitted");
+}
+
+struct Collector {
+  module:   hir::Module,
+  errors:   Vec<Diagnostic>,
+  to_check: Vec<hir::Path>,
+}
+
+// TODO: This should live elsewhere. Maybe hir-lower?
+pub fn parse_hir(path: &std::path::Path) -> Result<hir::Module, Vec<Diagnostic>> {
+  let mut sources = Sources::new();
+  let content = std::fs::read_to_string(path).unwrap();
+  let main_id = sources.add(Source::new(path.display().to_string(), content));
+
+  let src = sources.get(main_id);
+  let res = cst::SourceFile::parse(&src.source);
+  if res.errors().is_empty() {
+    let sources_arc = Arc::new(sources);
+    let (module, _span_map, _ast_ids) =
+      rb_diagnostic::run(sources_arc.clone(), || rb_hir_lower::lower_source(res.tree(), main_id))?;
+    sources = Arc::try_unwrap(sources_arc).unwrap_or_else(|_| panic!());
+
+    let mut collector =
+      Collector { module, errors: vec![], to_check: vec![hir::Path { segments: vec![] }] };
+    while let Some(p) = collector.to_check.pop() {
+      sources = collector.check(&p, sources);
+    }
+  } else {
+    return Err(
+      res
+        .errors()
+        .into_iter()
+        .map(|e| Diagnostic::error(e.message(), Span { file: main_id, range: e.span() }))
+        .collect(),
+    );
+  };
+
+  todo!()
+}
+
+impl Collector {
+  fn check(&mut self, p: &hir::Path, mut sources: Sources) -> Sources {
+    let mut module = &mut self.module;
+    let mut path = hir::Path::new();
+    for segment in &p.segments {
+      match module.modules.iter_mut().find(|(n, _)| n == segment) {
+        Some((_, hir::PartialModule::File(_))) => unreachable!("module wasn't filled in"),
+        Some((_, hir::PartialModule::Inline(submodule))) => {
+          path.segments.push(segment.clone());
+          module = submodule;
+        }
+        None => panic!("module {segment} not found"),
+      }
+    }
+
+    for (_, module) in &mut module.modules {
+      match module {
+        hir::PartialModule::File(name) => {
+          let content = std::fs::read_to_string(name.clone()).unwrap();
+          let id = sources.add(Source::new(name.clone(), content));
+
+          let src = sources.get(id);
+          let res = cst::SourceFile::parse(&src.source);
+          let sources_arc = Arc::new(sources);
+          let res =
+            rb_diagnostic::run(sources_arc.clone(), || rb_hir_lower::lower_source(res.tree(), id));
+
+          sources = Arc::try_unwrap(sources_arc).unwrap_or_else(|_| panic!());
+
+          match res {
+            Ok((m, _, _)) => {
+              let mut p = p.clone();
+              p.segments.push(name.clone());
+              self.to_check.push(p);
+
+              *module = hir::PartialModule::Inline(m)
+            }
+            Err(e) => self.errors.extend(e),
+          }
+        }
+        hir::PartialModule::Inline(_) => {}
+      }
+    }
+
+    sources
+  }
 }
 
 pub fn run(
