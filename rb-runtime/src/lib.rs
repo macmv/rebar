@@ -72,7 +72,7 @@ fn compile_diagnostics(module: rb_hir::ast::Module, span_map: rb_hir::SpanMap) -
     })?;
 
   let mut env = RuntimeEnvironment::new();
-  let (typer_env, mir_env) = env.build(&module, &funcs);
+  let (typer_env, mir_ctx) = env.build(&module, &funcs);
 
   rb_diagnostic::check()?;
 
@@ -83,7 +83,7 @@ fn compile_diagnostics(module: rb_hir::ast::Module, span_map: rb_hir::SpanMap) -
       let typer = rb_typer::Typer::check(&typer_env, function, span_map);
 
       if rb_diagnostic::is_ok() {
-        if let Some(mut func) = rb_mir_lower::lower_function(&mir_env, &typer, function) {
+        if let Some(mut func) = rb_mir_lower::lower_function(&mir_ctx, &typer, function) {
           func.id = *id;
 
           return Some(func);
@@ -165,8 +165,9 @@ impl RuntimeEnvironment {
     &mut self,
     module: &rb_hir::ast::Module,
     functions: &[(rb_mir::ast::UserFunctionId, &rb_hir::ast::Function, &rb_hir::FunctionSpanMap)],
-  ) -> (rb_typer::Environment, rb_mir_lower::Env<'_>) {
+  ) -> (rb_typer::Environment, rb_mir::MirContext) {
     let mut typer_env = rb_typer::Environment::empty();
+    let mut mir_ctx = MirContext::default();
 
     for (id, s) in module.structs.values().enumerate() {
       let id = rb_mir::ast::StructId(id as u64);
@@ -175,8 +176,8 @@ impl RuntimeEnvironment {
         s.name.clone(),
         s.fields.iter().map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te))).collect(),
       );
-      self.mir.struct_paths.insert(s.name.clone(), id);
-      self.mir.structs.insert(
+      mir_ctx.struct_paths.insert(s.name.clone(), id);
+      mir_ctx.structs.insert(
         id,
         rb_mir::Struct {
           fields: s
@@ -188,17 +189,12 @@ impl RuntimeEnvironment {
       );
     }
 
-    let mut mir_env = self.mir_env();
     for (id, f, span_map) in functions {
-      mir_env.declare_user_function(*id, f, span_map);
+      rb_mir_lower::declare_user_function(&mut mir_ctx, *id, f, span_map);
       typer_env.names.insert(f.name.clone(), rb_typer::type_of_function(f));
     }
 
-    (typer_env, mir_env)
-  }
-
-  fn mir_env(&self) -> rb_mir_lower::Env<'_> {
-    rb_mir_lower::Env { ctx: &self.mir, items: Default::default() }
+    (typer_env, mir_ctx)
   }
 }
 

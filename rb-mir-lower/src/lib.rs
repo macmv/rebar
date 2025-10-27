@@ -6,63 +6,44 @@ use rb_diagnostic::emit;
 use rb_hir::{ast as hir, FunctionSpanMap};
 use rb_mir::{
   ast::{self as mir, UserFunctionId},
-  MirContext,
+  Item, MirContext, UserFunction,
 };
 use rb_typer::{Type, Typer};
 
-/// The environment for lowering to MIR. This stores a tree of namespaces to
-/// native IDs, that are stored directly in the MIR.
-pub struct Env<'a> {
-  pub ctx:   &'a MirContext,
-  pub items: HashMap<String, Item>,
-}
+pub fn declare_user_function(
+  ctx: &mut MirContext,
+  id: UserFunctionId,
+  function: &hir::Function,
+  span: &FunctionSpanMap,
+) {
+  let mut func = UserFunction { id, intrinsic: None };
 
-pub enum Item {
-  NativeFunction(mir::NativeFunctionId),
-  UserFunction(UserFunction),
-}
+  for attr in &function.attrs {
+    if attr.path == "rebar::intrinsic" {
+      let syscall = match function.name.as_str() {
+        "syscall1" | "syscall2" | "syscall3" | "syscall4" | "syscall5" | "syscall6" => {
+          mir::Intrinsic::Syscall
+        }
+        "slice_ptr" => mir::Intrinsic::SlicePtr,
+        "slice_len" => mir::Intrinsic::SliceLen,
+        "trap" => mir::Intrinsic::Trap,
+        _ => {
+          emit!(span.name_span.unwrap() => "unknown intrinsic {}", function.name);
+          continue;
+        }
+      };
 
-pub struct UserFunction {
-  pub id:        UserFunctionId,
-  pub intrinsic: Option<mir::Intrinsic>,
-}
-
-impl Env<'_> {
-  pub fn declare_user_function(
-    &mut self,
-    id: UserFunctionId,
-    function: &hir::Function,
-    span: &FunctionSpanMap,
-  ) {
-    let mut func = UserFunction { id, intrinsic: None };
-
-    for attr in &function.attrs {
-      if attr.path == "rebar::intrinsic" {
-        let syscall = match function.name.as_str() {
-          "syscall1" | "syscall2" | "syscall3" | "syscall4" | "syscall5" | "syscall6" => {
-            mir::Intrinsic::Syscall
-          }
-          "slice_ptr" => mir::Intrinsic::SlicePtr,
-          "slice_len" => mir::Intrinsic::SliceLen,
-          "trap" => mir::Intrinsic::Trap,
-          _ => {
-            emit!(span.name_span.unwrap() => "unknown intrinsic {}", function.name);
-            continue;
-          }
-        };
-
-        func.intrinsic = Some(syscall);
-      }
+      func.intrinsic = Some(syscall);
     }
-
-    self.items.insert(function.name.clone(), Item::UserFunction(func));
   }
+
+  ctx.items.insert(function.name.clone(), Item::UserFunction(func));
 }
 
-pub fn lower_function(env: &Env, ty: &Typer, hir: &hir::Function) -> Option<mir::Function> {
+pub fn lower_function(ctx: &MirContext, ty: &Typer, hir: &hir::Function) -> Option<mir::Function> {
   let mut mir = mir::Function::default();
 
-  let mut lower = Lower { env, ty, hir, mir: &mut mir, locals: HashMap::new() };
+  let mut lower = Lower { ctx, ty, hir, mir: &mut mir, locals: HashMap::new() };
 
   for (name, te) in hir.args.iter() {
     let ty = rb_typer::type_of_type_expr(te);
@@ -90,7 +71,7 @@ pub fn lower_function(env: &Env, ty: &Typer, hir: &hir::Function) -> Option<mir:
 }
 
 struct Lower<'a> {
-  env: &'a Env<'a>,
+  ctx: &'a MirContext,
   ty:  &'a Typer<'a>,
   hir: &'a hir::Function,
   mir: &'a mut mir::Function,
@@ -151,7 +132,7 @@ impl Lower<'_> {
       // We should probably convert it to something more useful than a string though.
       hir::Expr::Name(ref v) => match self.locals.get(v) {
         Some(local) => mir::Expr::Local(*local, self.ty.type_of_expr(expr)),
-        None => match self.env.items[v] {
+        None => match self.ctx.items[v] {
           Item::UserFunction(ref func) => {
             self.mir.deps.insert(func.id);
             mir::Expr::UserFunction(func.id, self.ty.type_of_expr(expr))
@@ -226,7 +207,7 @@ impl Lower<'_> {
 
       hir::Expr::Call(lhs, ref args) => match self.hir.exprs[lhs] {
         hir::Expr::Name(ref name) => {
-          if let Some(Item::UserFunction(func)) = self.env.items.get(name) {
+          if let Some(Item::UserFunction(func)) = self.ctx.items.get(name) {
             self.mir.deps.insert(func.id);
 
             let lhs_ty = self.ty.type_of_expr(lhs);
@@ -253,7 +234,7 @@ impl Lower<'_> {
       }
 
       hir::Expr::StructInit(ref path, ref fields) => {
-        let strct = self.env.ctx.struct_paths[path];
+        let strct = self.ctx.struct_paths[path];
 
         let fields =
           fields.iter().map(|(name, expr)| (name.clone(), self.lower_expr(*expr))).collect();

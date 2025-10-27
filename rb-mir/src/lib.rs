@@ -10,6 +10,19 @@ pub mod ast;
 pub struct MirContext {
   pub struct_paths: HashMap<String, StructId>,
   pub structs:      HashMap<StructId, Struct>,
+  pub items:        HashMap<String, Item>,
+}
+
+#[derive(Clone)]
+pub enum Item {
+  NativeFunction(ast::NativeFunctionId),
+  UserFunction(UserFunction),
+}
+
+#[derive(Clone)]
+pub struct UserFunction {
+  pub id:        ast::UserFunctionId,
+  pub intrinsic: Option<ast::Intrinsic>,
 }
 
 #[derive(Clone)]
