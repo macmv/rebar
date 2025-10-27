@@ -194,37 +194,17 @@ impl Regalloc<'_> {
           out,
         );
 
-        match (requirement, used_later) {
-          (Some(req), true) => {
-            self.active.insert(req, out);
-            self.alloc.registers.set_with(
-              out,
-              Register { size: var_to_reg_size(out.size()).unwrap(), index: req },
-              || Register::RAX,
-            );
-          }
-          (None, true) => self.allocate(loc, out),
-          (Some(req), false) => {
-            self.active.remove(&req);
-            self.alloc.registers.set_with(
-              out,
-              Register { size: var_to_reg_size(out.size()).unwrap(), index: req },
-              || Register::RAX,
-            );
-          }
-          (None, false) => {
-            let reg = self.pick_register(loc, out);
-            self.alloc.registers.set_with(
-              out,
-              Register { size: var_to_reg_size(out.size()).unwrap(), index: reg },
-              || Register::RAX,
-            );
-          }
-        }
+        let register = requirement.unwrap_or_else(|| self.pick_register(loc, out));
 
         if used_later {
+          self.active.insert(register, out);
           live_outs.insert(out);
         }
+        self.alloc.registers.set_with(
+          out,
+          Register { size: var_to_reg_size(out.size()).unwrap(), index: register },
+          || Register::RAX,
+        );
       }
 
       let loc = InstructionLocation { block, index: function.block(block).instructions.len() };
