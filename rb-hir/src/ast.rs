@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt};
 
 use la_arena::{Arena, Idx};
 
@@ -212,5 +212,17 @@ impl<'a> Iterator for ModuleIter<'a> {
     }
 
     Some((path, module))
+  }
+}
+
+impl fmt::Display for Path {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    for (i, segment) in self.segments.iter().enumerate() {
+      if i != 0 {
+        write!(f, "::")?;
+      }
+      write!(f, "{segment}")?;
+    }
+    Ok(())
   }
 }
