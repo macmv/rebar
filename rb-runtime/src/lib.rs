@@ -43,13 +43,10 @@ pub fn parse_hir(path: &std::path::Path) -> Result<hir::Module, Vec<Diagnostic>>
       while let Some(p) = collector.to_check.pop() {
         sources = collector.check(root, &p, sources);
       }
+      Ok(collector.module)
     }
-    Err(e) => {
-      return Err(e);
-    }
+    Err(e) => Err(e),
   }
-
-  todo!()
 }
 
 impl Collector {
