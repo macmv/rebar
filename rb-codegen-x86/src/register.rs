@@ -29,7 +29,7 @@ macro_rules! registers {
       )*
     }
 
-    impl fmt::Debug for Register {
+    impl fmt::Display for Register {
       fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match (self.size, self.index) {
           $(
@@ -39,6 +39,10 @@ macro_rules! registers {
       }
     }
   };
+}
+
+impl fmt::Debug for Register {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { fmt::Display::fmt(self, f) }
 }
 
 registers! {

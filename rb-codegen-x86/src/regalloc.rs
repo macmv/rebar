@@ -613,7 +613,7 @@ mod tests {
       f: &mut std::fmt::Formatter,
       var: rb_codegen::Variable,
     ) -> std::fmt::Result {
-      write!(f, "{:?}({})", self.get(var), var.id())
+      write!(f, "{}({})", self.get(var), var.id())
     }
   }
 
