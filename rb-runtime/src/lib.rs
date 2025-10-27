@@ -100,7 +100,7 @@ fn compile_diagnostics(
 
   let mut functions = functions.into_iter().flatten().collect::<Vec<_>>();
 
-  let start_id = rb_mir::ast::UserFunctionId(functions.len() as u64);
+  let start_id = rb_mir::ast::UserFunctionId(funcs.len() as u64);
   functions.push(generate_start_func(main_func, start_id));
 
   // If we get to this point, all checks have passed, and we can compile to
