@@ -93,7 +93,7 @@ impl Collector {
   }
 }
 
-fn parse_source(
+pub fn parse_source(
   path: &std::path::Path,
   mut sources: Sources,
 ) -> (Sources, Result<(hir::Module, ModuleSpanMap, Vec<AstIdMap>), Vec<Diagnostic>>) {

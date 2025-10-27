@@ -24,6 +24,32 @@ pub fn compile(path: &std::path::Path) -> (Sources, Result<(), Vec<Diagnostic>>)
   (Arc::try_unwrap(sources).unwrap_or_else(|_| panic!()), res)
 }
 
+pub fn compile_test(
+  test_path: &std::path::Path,
+  std: &std::path::Path,
+) -> (Sources, Result<(), Vec<Diagnostic>>) {
+  let (mut sources, res) = rb_hir_lower::parse_hir(std);
+  let (mut hir, mut span_map) = match res {
+    Ok(v) => v,
+    Err(diagnostics) => return (sources, Err(diagnostics)),
+  };
+
+  let (new_sources, res) = rb_hir_lower::parse_source(test_path, sources);
+  sources = new_sources;
+  let (test_module, test_span_map) = match res {
+    Ok((hir, span_map, _)) => (hir, span_map),
+    Err(diagnostics) => return (sources, Err(diagnostics)),
+  };
+
+  hir.modules.insert("test".into(), rb_hir::ast::PartialModule::Inline(test_module));
+  span_map.modules.insert(rb_hir::ast::Path { segments: vec!["test".into()] }, test_span_map);
+
+  let sources = Arc::new(sources);
+
+  let res = rb_diagnostic::run(sources.clone(), || compile_diagnostics(hir, span_map)).map(|_| ());
+  (Arc::try_unwrap(sources).unwrap_or_else(|_| panic!()), res)
+}
+
 fn compile_diagnostics(module: rb_hir::ast::Module, span_map: rb_hir::SpanMap) -> Result<(), ()> {
   let mut funcs = vec![];
   let main_func = rb_mir::ast::UserFunctionId(0);

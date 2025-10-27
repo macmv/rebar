@@ -16,6 +16,7 @@ fn main() -> ExitCode {
   let chunk_size = (files.len() / NUM_CPUS).max(1);
 
   let failed = std::sync::atomic::AtomicBool::new(false);
+  let std = Path::new("lib/std/lib.rbr");
 
   std::thread::scope(|scope| {
     for chunk in files.chunks(chunk_size) {
@@ -26,7 +27,7 @@ fn main() -> ExitCode {
           if path.extension().unwrap() == "rbr" {
             let stringified = path.display().to_string();
             if stringified.contains(f) {
-              let res = catch_unwind(|| match rb_runtime::compile(path) {
+              let res = catch_unwind(|| match rb_runtime::compile_test(path, std) {
                 (_, Ok(_)) => println!("{}... \x1b[32mok\x1b[0m", stringified),
                 (sources, Err(diagnostics)) => {
                   failed.fetch_or(true, Ordering::AcqRel);

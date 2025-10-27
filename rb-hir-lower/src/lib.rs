@@ -12,7 +12,7 @@ use rb_syntax::{cst, AstNode, SyntaxNodePtr};
 
 mod collect;
 
-pub use collect::parse_hir;
+pub use collect::{parse_hir, parse_source};
 
 pub fn lower_source(
   cst: cst::SourceFile,
