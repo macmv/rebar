@@ -1,7 +1,7 @@
 //! This module greps parser's code for specially formatted comments and turns
 //! them into tests.
 
-use crate::{tests::format_events, Event};
+use crate::{Event, tests::format_events};
 
 use super::lex_events;
 use std::{

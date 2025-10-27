@@ -1,6 +1,6 @@
 use std::num::NonZero;
 
-use rb_mir::{ast::StructId, MirContext};
+use rb_mir::{MirContext, ast::StructId};
 use rb_typer::Type;
 
 mod arg;
@@ -116,7 +116,7 @@ impl ValueType {
       Type::Function(..) => todo!("function types to values"),
 
       // This requires some type of MIR-context to resolve this.
-      Type::Struct(ref path) => {
+      Type::Struct(path) => {
         let id = ctx.struct_paths[path];
         ValueType::Struct(id)
       }

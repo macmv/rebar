@@ -1,7 +1,7 @@
-use rb_diagnostic::{emit, Span};
+use rb_diagnostic::{Span, emit};
 use rb_hir::ast as hir;
 
-use crate::{ty::VType, Typer};
+use crate::{Typer, ty::VType};
 
 enum TypeError {
   NotSubtype(VType, VType),

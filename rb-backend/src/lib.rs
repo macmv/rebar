@@ -4,7 +4,7 @@ use rb_codegen::{
   Condition, Function, FunctionBuilder, FunctionId, InstructionInput, Math, Signature,
   TerminatorInstruction, Variable, VariableSize::*,
 };
-use rb_mir::{ast as mir, MirContext};
+use rb_mir::{MirContext, ast as mir};
 
 mod r_value;
 // mod slot;
@@ -186,7 +186,7 @@ impl FuncBuilder<'_> {
 
       mir::Expr::Call(function, ref sig_ty, ref args) => {
         let arg_types = match sig_ty {
-          Type::Function(ref args, _) => args,
+          Type::Function(args, _) => args,
           _ => unreachable!(),
         };
 

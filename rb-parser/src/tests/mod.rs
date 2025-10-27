@@ -1,4 +1,4 @@
-use crate::{format::format_events, EntryPoint, Event, Lexer};
+use crate::{EntryPoint, Event, Lexer, format::format_events};
 use rb_test::Expect;
 
 mod inline;

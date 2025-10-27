@@ -3,10 +3,10 @@
 use std::collections::HashMap;
 
 use rb_diagnostic::emit;
-use rb_hir::{ast as hir, FunctionSpanMap};
+use rb_hir::{FunctionSpanMap, ast as hir};
 use rb_mir::{
-  ast::{self as mir, UserFunctionId},
   Item, MirContext, UserFunction,
+  ast::{self as mir, UserFunctionId},
 };
 use rb_typer::{Type, Typer};
 

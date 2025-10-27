@@ -1,6 +1,6 @@
 //! Some high level functions to wrap `scalarc_parser`.
 
-use crate::{node::Rebar, SyntaxError};
+use crate::{SyntaxError, node::Rebar};
 use rb_parser::{Event, SyntaxKind};
 use rowan::{GreenNode, GreenNodeBuilder, Language, TextSize};
 

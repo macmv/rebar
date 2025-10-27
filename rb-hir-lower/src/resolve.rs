@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use rb_diagnostic::emit;
 use rb_hir::{
-  ast::{self as hir, Path},
   SpanMap,
+  ast::{self as hir, Path},
 };
 
 enum Item {

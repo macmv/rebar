@@ -1,12 +1,12 @@
 use parking_lot::RwLock;
-use rb_diagnostic::{emit, Diagnostic, Source, Sources, Span};
-use rb_syntax::{cst, TextSize};
+use rb_diagnostic::{Diagnostic, Source, Sources, Span, emit};
+use rb_syntax::{TextSize, cst};
 use rl_analysis::{Analysis, AnalysisHost, FileId};
 use std::{collections::HashMap, error::Error, path::PathBuf, sync::Arc};
 
 use crossbeam_channel::{Receiver, Select, Sender};
 use lsp_server::ErrorCode;
-use lsp_types::{notification::Notification, Url};
+use lsp_types::{Url, notification::Notification};
 
 use crate::files::Files;
 

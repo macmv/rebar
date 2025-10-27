@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use rb_diagnostic::{Diagnostic, Source, Sources};
-use rb_hir::{ast as hir, ModuleSpanMap, SpanMap};
+use rb_hir::{ModuleSpanMap, SpanMap, ast as hir};
 use rb_syntax::cst;
 
 use crate::AstIdMap;

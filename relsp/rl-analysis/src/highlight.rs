@@ -1,7 +1,7 @@
-use rb_hir::{ast as hir, FunctionSpanMap, ModuleSpanMap};
+use rb_hir::{FunctionSpanMap, ModuleSpanMap, ast as hir};
 use rb_hir_lower::AstIdMap;
 use rb_syntax::{
-  cst, AstNode, NodeOrToken, Parse, SyntaxKind::*, SyntaxNodePtr, TextRange, TextSize,
+  AstNode, NodeOrToken, Parse, SyntaxKind::*, SyntaxNodePtr, TextRange, TextSize, cst,
 };
 
 #[derive(Debug, Clone)]

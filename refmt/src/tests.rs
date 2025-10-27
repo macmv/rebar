@@ -1,6 +1,6 @@
-use crate::fmt::{format_opts, Formatter};
+use crate::fmt::{Formatter, format_opts};
 use rb_syntax::cst;
-use rb_test::{expect, Expect};
+use rb_test::{Expect, expect};
 
 #[track_caller]
 fn check(input: &str, expected: Expect) {

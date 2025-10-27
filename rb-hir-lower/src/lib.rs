@@ -3,12 +3,12 @@
 
 use std::collections::HashMap;
 
-use rb_diagnostic::{emit, SourceId, Span};
+use rb_diagnostic::{SourceId, Span, emit};
 use rb_hir::{
-  ast::{self as hir, Path, StringInterp},
   FunctionSpanMap, ModuleSpanMap,
+  ast::{self as hir, Path, StringInterp},
 };
-use rb_syntax::{cst, AstNode, SyntaxNodePtr};
+use rb_syntax::{AstNode, SyntaxNodePtr, cst};
 
 mod collect;
 mod resolve;

@@ -25,11 +25,7 @@ fn op_bp(t: SyntaxKind) -> Option<(u8, u8)> {
 
   let is_right_assoc = false;
 
-  if is_right_assoc {
-    Some((prec, prec))
-  } else {
-    Some((prec, prec + 1))
-  }
+  if is_right_assoc { Some((prec, prec)) } else { Some((prec, prec + 1)) }
 }
 
 fn expr_bp(p: &mut Parser, min_bp: u8, cond: bool) {

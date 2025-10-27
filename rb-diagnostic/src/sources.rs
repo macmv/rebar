@@ -32,7 +32,7 @@ impl Sources {
 
   pub fn add(&mut self, source: Source) -> SourceId { self.sources.alloc(source) }
   pub fn get(&self, id: SourceId) -> &Source { &self.sources[id] }
-  pub fn all(&self) -> impl Iterator<Item = SourceId> {
+  pub fn all(&self) -> impl Iterator<Item = SourceId> + use<> {
     (0..self.sources.len()).map(|i| SourceId::from_raw(RawIdx::from_u32(i as u32)))
   }
 }

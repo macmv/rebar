@@ -2,7 +2,7 @@
 //!
 //! TODO: Move to another crate.
 
-use rb_syntax::{cst, AstNode, NodeOrToken, SyntaxKind, SyntaxKind::*, SyntaxNode, SyntaxToken, T};
+use rb_syntax::{AstNode, NodeOrToken, SyntaxKind, SyntaxKind::*, SyntaxNode, SyntaxToken, T, cst};
 
 pub struct Formatter {
   pub max_line_length: u32,
@@ -130,11 +130,7 @@ impl FormatterContext<'_> {
 
       (T![fn], _) => {
         // extern "syscall" fn...
-        if self.before(token).kind() == STRING {
-          (Space, Space)
-        } else {
-          (None, Space)
-        }
+        if self.before(token).kind() == STRING { (Space, Space) } else { (None, Space) }
       }
       (T![->], _) => (Space, Space),
       (T![mod] | T![use] | T![let] | T![if] | T![fn] | T![extern] | T![struct], _) => (None, Space),

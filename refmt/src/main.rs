@@ -1,4 +1,4 @@
-use rb_diagnostic::{emit, Source, Sources, Span};
+use rb_diagnostic::{Source, Sources, Span, emit};
 use rb_syntax::cst;
 use std::{
   io::{self, Read},

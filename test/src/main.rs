@@ -60,11 +60,7 @@ fn main() -> ExitCode {
     }
   });
 
-  if failed.into_inner() {
-    ExitCode::FAILURE
-  } else {
-    ExitCode::SUCCESS
-  }
+  if failed.into_inner() { ExitCode::FAILURE } else { ExitCode::SUCCESS }
 }
 
 fn gather_files(dir: &Path) -> Vec<PathBuf> {

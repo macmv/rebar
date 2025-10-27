@@ -1,6 +1,6 @@
 //! The actual rebar parser.
 
-use crate::{syntax_kind::SyntaxKind::*, Parser};
+use crate::{Parser, syntax_kind::SyntaxKind::*};
 
 mod expr;
 mod stmt;

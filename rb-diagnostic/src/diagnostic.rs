@@ -2,7 +2,7 @@ use line_index::LineCol;
 use rb_syntax::{TextRange, TextSize};
 use std::fmt::{Display, Write};
 
-use crate::{sources::SourceId, Sources};
+use crate::{Sources, sources::SourceId};
 
 pub struct Diagnostic {
   pub message: String,

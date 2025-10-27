@@ -11,7 +11,7 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use xshell::{cmd, Shell};
+use xshell::{Shell, cmd};
 
 fn ensure_rustfmt(sh: &Shell) {
   let version = cmd!(sh, "rustup run nightly rustfmt --version").read().unwrap_or_default();

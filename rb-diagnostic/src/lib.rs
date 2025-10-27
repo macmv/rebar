@@ -25,11 +25,7 @@ pub fn run<T>(sources: Arc<Sources>, f: impl FnOnce() -> T) -> Result<T, Vec<Dia
   let errors = Context::run(|ctx| ctx.take_errors());
   Context::cleanup();
 
-  if errors.is_empty() {
-    Ok(res)
-  } else {
-    Err(errors)
-  }
+  if errors.is_empty() { Ok(res) } else { Err(errors) }
 }
 
 pub fn run_both<T>(sources: Arc<Sources>, f: impl FnOnce() -> T) -> (T, Vec<Diagnostic>) {
@@ -49,13 +45,7 @@ pub fn emit(diagnostic: Diagnostic) {
   });
 }
 
-pub fn check() -> Result<(), ()> {
-  if is_ok() {
-    Ok(())
-  } else {
-    Err(())
-  }
-}
+pub fn check() -> Result<(), ()> { if is_ok() { Ok(()) } else { Err(()) } }
 pub fn is_ok() -> bool { Context::run(|ctx| ctx.is_ok()) }
 
 #[macro_export]
