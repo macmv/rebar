@@ -137,7 +137,7 @@ impl FormatterContext<'_> {
         }
       }
       (T![->], _) => (Space, Space),
-      (T![let] | T![if] | T![fn] | T![extern] | T![struct], _) => (None, Space),
+      (T![mod] | T![use] | T![let] | T![if] | T![fn] | T![extern] | T![struct], _) => (None, Space),
       (T![else], _) => (Space, None),
 
       (_, BINARY_OP) => {
