@@ -165,7 +165,7 @@ impl RuntimeEnvironment {
 
   fn build(
     &mut self,
-    files: &[(rb_hir::ast::SourceFile, rb_hir::SpanMap)],
+    files: &[(rb_hir::ast::Module, rb_hir::SpanMap)],
     functions: &[(rb_mir::ast::UserFunctionId, &rb_hir::ast::Function, &rb_hir::FunctionSpanMap)],
   ) -> (rb_typer::Environment, rb_mir_lower::Env<'_>) {
     let mut typer_env = rb_typer::Environment::empty();

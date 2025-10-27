@@ -6,7 +6,7 @@ pub type FunctionId = Idx<Function>;
 pub type StructId = Idx<Struct>;
 
 #[derive(Debug, Default)]
-pub struct SourceFile {
+pub struct Module {
   pub functions: Arena<Function>,
   pub structs:   Arena<Struct>,
 

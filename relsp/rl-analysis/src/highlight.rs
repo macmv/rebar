@@ -59,7 +59,7 @@ struct Highlighter<'a> {
 impl Highlight {
   pub fn from_ast(
     cst: Parse<cst::SourceFile>,
-    file: hir::SourceFile,
+    file: hir::Module,
     span_map: &SpanMap,
     ast_id_maps: &[AstIdMap],
   ) -> Highlight {
