@@ -348,15 +348,19 @@ impl Regalloc<'_> {
         while let Some(&new_v) = self.rehomes.get(v) {
           *v = new_v;
         }
-
-        live_outs.remove(v);
-        if !self.is_used_later(block_after_instr, &block.terminator, *v) {
-          self.free(*v);
-        }
       }
 
       if let Some(new_var) = self.satisfy_requirement(loc, input, prev, requirement) {
         *input = InstructionInput::Var(new_var);
+      }
+    }
+
+    for input in &instr.input {
+      if let InstructionInput::Var(v) = input {
+        live_outs.remove(v);
+        if !self.is_used_later(block_after_instr, &block.terminator, *v) {
+          self.free(*v);
+        }
       }
     }
 
