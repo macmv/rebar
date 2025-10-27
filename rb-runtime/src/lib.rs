@@ -6,11 +6,6 @@ use rb_typer::Type;
 
 const NUM_CPUS: usize = 32;
 
-#[derive(Default)]
-pub struct RuntimeEnvironment {
-  pub mir: MirContext,
-}
-
 pub fn compile(path: &std::path::Path) -> (Sources, Result<(), Vec<Diagnostic>>) {
   let (sources, res) = rb_hir_lower::parse_hir(path);
   let (hir, span_map) = match res {
@@ -71,8 +66,7 @@ fn compile_diagnostics(module: rb_hir::ast::Module, span_map: rb_hir::SpanMap) -
       panic!("no main function found");
     })?;
 
-  let mut env = RuntimeEnvironment::new();
-  let (typer_env, mir_ctx) = env.build(&module, &funcs);
+  let (typer_env, mir_ctx) = build_environment(&module, &funcs);
 
   rb_diagnostic::check()?;
 
@@ -105,7 +99,7 @@ fn compile_diagnostics(module: rb_hir::ast::Module, span_map: rb_hir::SpanMap) -
   // cranelift IR. Collect all the functions, split them into chunks, and compile
   // them on a thread pool.
 
-  compile_mir(env, functions, start_id);
+  compile_mir(mir_ctx, functions, start_id);
 
   Ok(())
 }
@@ -138,11 +132,11 @@ fn generate_start_func(
 }
 
 fn compile_mir(
-  env: RuntimeEnvironment,
+  mir_ctx: MirContext,
   functions: Vec<rb_mir::ast::Function>,
   main_func: rb_mir::ast::UserFunctionId,
 ) {
-  let mut compiler = rb_backend::Compiler::new(env.mir.clone());
+  let mut compiler = rb_backend::Compiler::new(mir_ctx);
 
   for func in &functions {
     compiler.declare_function(func);
@@ -158,44 +152,39 @@ fn compile_mir(
   compiler.finish(main_func);
 }
 
-impl RuntimeEnvironment {
-  pub fn new() -> Self { RuntimeEnvironment::default() }
+fn build_environment(
+  module: &rb_hir::ast::Module,
+  functions: &[(rb_mir::ast::UserFunctionId, &rb_hir::ast::Function, &rb_hir::FunctionSpanMap)],
+) -> (rb_typer::Environment, rb_mir::MirContext) {
+  let mut typer_env = rb_typer::Environment::empty();
+  let mut mir_ctx = MirContext::default();
 
-  fn build(
-    &mut self,
-    module: &rb_hir::ast::Module,
-    functions: &[(rb_mir::ast::UserFunctionId, &rb_hir::ast::Function, &rb_hir::FunctionSpanMap)],
-  ) -> (rb_typer::Environment, rb_mir::MirContext) {
-    let mut typer_env = rb_typer::Environment::empty();
-    let mut mir_ctx = MirContext::default();
+  for (id, s) in module.structs.values().enumerate() {
+    let id = rb_mir::ast::StructId(id as u64);
 
-    for (id, s) in module.structs.values().enumerate() {
-      let id = rb_mir::ast::StructId(id as u64);
-
-      typer_env.structs.insert(
-        s.name.clone(),
-        s.fields.iter().map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te))).collect(),
-      );
-      mir_ctx.struct_paths.insert(s.name.clone(), id);
-      mir_ctx.structs.insert(
-        id,
-        rb_mir::Struct {
-          fields: s
-            .fields
-            .iter()
-            .map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te)))
-            .collect(),
-        },
-      );
-    }
-
-    for (id, f, span_map) in functions {
-      rb_mir_lower::declare_user_function(&mut mir_ctx, *id, f, span_map);
-      typer_env.names.insert(f.name.clone(), rb_typer::type_of_function(f));
-    }
-
-    (typer_env, mir_ctx)
+    typer_env.structs.insert(
+      s.name.clone(),
+      s.fields.iter().map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te))).collect(),
+    );
+    mir_ctx.struct_paths.insert(s.name.clone(), id);
+    mir_ctx.structs.insert(
+      id,
+      rb_mir::Struct {
+        fields: s
+          .fields
+          .iter()
+          .map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te)))
+          .collect(),
+      },
+    );
   }
+
+  for (id, f, span_map) in functions {
+    rb_mir_lower::declare_user_function(&mut mir_ctx, *id, f, span_map);
+    typer_env.names.insert(f.name.clone(), rb_typer::type_of_function(f));
+  }
+
+  (typer_env, mir_ctx)
 }
 
 pub fn run_parallel<I: Send + Sync, C: Send, O: Send + Sync>(
