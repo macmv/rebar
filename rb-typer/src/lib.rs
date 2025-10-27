@@ -212,20 +212,33 @@ impl<'a> Typer<'a> {
         ret
       }
 
-      hir::Expr::Name(ref name) => match self.locals.get(name) {
-        Some(ty) => ty.clone(),
-        None => match self.local_functions.get(name) {
-          Some(ty) => ty.clone().into(),
-          None => match self.env.names.get(&Path::new().join(name.clone())) {
+      hir::Expr::Name(ref path) => {
+        if let Some(ident) = path.as_single() {
+          match self.locals.get(ident) {
+            Some(ty) => ty.clone(),
+            None => match self.local_functions.get(ident) {
+              Some(ty) => ty.clone().into(),
+              None => match self.env.names.get(&path) {
+                Some(ty) => VType::from(ty.clone()),
+                None => {
+                  emit!(self.span(expr) => "undeclared name `{path}`");
+
+                  VType::Var(self.fresh_var(self.span(expr), String::new()))
+                }
+              },
+            },
+          }
+        } else {
+          match self.env.names.get(&path) {
             Some(ty) => VType::from(ty.clone()),
             None => {
-              emit!(self.span(expr) => "undeclared name {name:?}");
+              emit!(self.span(expr) => "undeclared name `{path}`");
 
               VType::Var(self.fresh_var(self.span(expr), String::new()))
             }
-          },
-        },
-      },
+          }
+        }
+      }
 
       hir::Expr::Block(ref block) => {
         // FIXME: Make a new scope here for the block.

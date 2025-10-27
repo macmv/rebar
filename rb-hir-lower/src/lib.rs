@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use rb_diagnostic::{emit, SourceId, Span};
 use rb_hir::{
-  ast::{self as hir, StringInterp},
+  ast::{self as hir, Path, StringInterp},
   FunctionSpanMap, ModuleSpanMap,
 };
 use rb_syntax::{cst, AstNode, SyntaxNodePtr};
@@ -294,14 +294,13 @@ impl FunctionLower<'_, '_> {
       }
 
       cst::Expr::PathExpr(ref path) => {
-        if path.path().unwrap().ident_tokens().count() != 1 {
-          todo!("parse paths");
+        let mut p = Path::new();
+
+        for tok in path.path().unwrap().ident_tokens() {
+          p.push(tok.text().to_string());
         }
 
-        let ident = path.path().unwrap().ident_tokens().next().unwrap();
-        let name = ident.text().to_string();
-
-        hir::Expr::Name(name)
+        hir::Expr::Name(p)
       }
 
       cst::Expr::Block(ref block) => {

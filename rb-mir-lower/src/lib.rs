@@ -130,16 +130,22 @@ impl Lower<'_> {
 
       // HIR should have fully qualified names, and the typer should get the type of this name.
       // We should probably convert it to something more useful than a string though.
-      hir::Expr::Name(ref v) => match self.locals.get(v) {
-        Some(local) => mir::Expr::Local(*local, self.ty.type_of_expr(expr)),
-        None => match self.ctx.items[v] {
-          Item::UserFunction(ref func) => {
-            self.mir.deps.insert(func.id);
-            mir::Expr::UserFunction(func.id, self.ty.type_of_expr(expr))
+      hir::Expr::Name(ref v) => {
+        if let Some(ident) = v.as_single() {
+          match self.locals.get(ident) {
+            Some(local) => mir::Expr::Local(*local, self.ty.type_of_expr(expr)),
+            None => match self.ctx.items[ident] {
+              Item::UserFunction(ref func) => {
+                self.mir.deps.insert(func.id);
+                mir::Expr::UserFunction(func.id, self.ty.type_of_expr(expr))
+              }
+              Item::NativeFunction(id) => mir::Expr::Native(id, self.ty.type_of_expr(expr)),
+            },
           }
-          Item::NativeFunction(id) => mir::Expr::Native(id, self.ty.type_of_expr(expr)),
-        },
-      },
+        } else {
+          todo!("multi-segment names in mir lowering")
+        }
+      }
 
       hir::Expr::Block(ref block) => {
         let mut stmts = vec![];
@@ -207,7 +213,7 @@ impl Lower<'_> {
 
       hir::Expr::Call(lhs, ref args) => match self.hir.exprs[lhs] {
         hir::Expr::Name(ref name) => {
-          if let Some(Item::UserFunction(func)) = self.ctx.items.get(name) {
+          if let Some(Item::UserFunction(func)) = self.ctx.items.get(name.as_single().unwrap()) {
             self.mir.deps.insert(func.id);
 
             let lhs_ty = self.ty.type_of_expr(lhs);

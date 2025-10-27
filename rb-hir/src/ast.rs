@@ -59,7 +59,7 @@ pub struct Struct {
 #[derive(Debug)]
 pub enum Expr {
   Literal(Literal),
-  Name(String),
+  Name(Path),
 
   String(Vec<StringInterp>),
   Array(Vec<ExprId>),
@@ -163,6 +163,15 @@ pub enum BinaryOp {
 
 impl Path {
   pub const fn new() -> Self { Path { segments: vec![] } }
+
+  pub fn as_single(&self) -> Option<&str> {
+    match self.segments.as_slice() {
+      [segment] => Some(segment),
+      _ => None,
+    }
+  }
+
+  pub fn push(&mut self, segment: String) { self.segments.push(segment); }
 
   pub fn join(&self, segment: String) -> Self {
     let mut new_path = self.clone();
