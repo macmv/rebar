@@ -6,7 +6,7 @@ use ast::{ExprId, FunctionId, StmtId};
 use rb_diagnostic::Span;
 
 #[derive(Default)]
-pub struct SpanMap {
+pub struct ModuleSpanMap {
   pub functions: HashMap<FunctionId, FunctionSpanMap>,
 }
 

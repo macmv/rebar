@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use rb_diagnostic::{Diagnostic, Source, Sources};
-use rb_hir::{ast as hir, SpanMap};
+use rb_hir::{ast as hir, ModuleSpanMap};
 use rb_syntax::cst;
 
 use crate::AstIdMap;
@@ -79,7 +79,7 @@ impl Collector {
 fn parse_source(
   path: &std::path::Path,
   mut sources: Sources,
-) -> (Sources, Result<(hir::Module, SpanMap, Vec<AstIdMap>), Vec<Diagnostic>>) {
+) -> (Sources, Result<(hir::Module, ModuleSpanMap, Vec<AstIdMap>), Vec<Diagnostic>>) {
   let content = std::fs::read_to_string(&path).unwrap();
   let id = sources.add(Source::new(path.display().to_string(), content));
 

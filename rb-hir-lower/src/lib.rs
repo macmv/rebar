@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use rb_diagnostic::{emit, SourceId, Span};
 use rb_hir::{
   ast::{self as hir, StringInterp},
-  FunctionSpanMap, SpanMap,
+  FunctionSpanMap, ModuleSpanMap,
 };
 use rb_syntax::{cst, AstNode, SyntaxNodePtr};
 
@@ -17,9 +17,9 @@ pub use collect::parse_hir;
 pub fn lower_source(
   cst: cst::SourceFile,
   source: SourceId,
-) -> (hir::Module, SpanMap, Vec<AstIdMap>) {
+) -> (hir::Module, ModuleSpanMap, Vec<AstIdMap>) {
   let mut out = hir::Module::default();
-  let mut span_map = SpanMap::default();
+  let mut span_map = ModuleSpanMap::default();
   let mut ast_id_maps = vec![];
 
   let mut lower =
@@ -33,7 +33,7 @@ pub fn lower_source(
 struct ModuleLower<'a> {
   source: SourceId,
 
-  span_map:    &'a mut SpanMap,
+  span_map:    &'a mut ModuleSpanMap,
   ast_id_maps: &'a mut Vec<AstIdMap>,
   out:         &'a mut hir::Module,
 }

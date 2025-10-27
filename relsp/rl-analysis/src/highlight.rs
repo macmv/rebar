@@ -1,4 +1,4 @@
-use rb_hir::{ast as hir, FunctionSpanMap, SpanMap};
+use rb_hir::{ast as hir, FunctionSpanMap, ModuleSpanMap};
 use rb_hir_lower::AstIdMap;
 use rb_syntax::{
   cst, AstNode, NodeOrToken, Parse, SyntaxKind::*, SyntaxNodePtr, TextRange, TextSize,
@@ -60,7 +60,7 @@ impl Highlight {
   pub fn from_ast(
     cst: Parse<cst::SourceFile>,
     file: hir::Module,
-    span_map: &SpanMap,
+    span_map: &ModuleSpanMap,
     ast_id_maps: &[AstIdMap],
   ) -> Highlight {
     let mut hl = Highlight { tokens: vec![] };
