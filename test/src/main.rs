@@ -20,8 +20,6 @@ fn main() -> ExitCode {
 
   let failed = std::sync::atomic::AtomicBool::new(false);
 
-  rb_runtime::parse_hir(Path::new("lib/std/lib.rbr")).unwrap_or_else(|_| panic!());
-
   let mut std = Sources::new();
   for src in std::fs::read_dir("lib/std").unwrap() {
     let src = src.unwrap();
