@@ -7,6 +7,13 @@ fn kill(pid: i64, sig: i64) -> i64 { syscall3(62, pid, sig) }
 
 fn abort() { kill(getpid(), 6) }
 
+fn assert(cond: bool) {
+  if !cond {
+    write(1, "assertion failed\n")
+    abort()
+  }
+}
+
 fn assert_eq(a: i64, b: i64) {
   if a != b {
     write(1, "assertion failed\n")
