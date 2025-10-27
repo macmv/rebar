@@ -399,6 +399,16 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
             _ => unreachable!(),
           };
 
+          if math == Math::Idiv || math == Math::Irem {
+            let InstructionOutput::Var(out) = inst.output[0];
+            let size = reg.get(out).size;
+
+            if size != RegisterSize::Bit8 {
+              // Sign-extend eax into edx:eax
+              builder.instr(encode_sized(size, Opcode::CQO, Opcode::CQO));
+            }
+          }
+
           match (inst.output[0], inst.input[0], inst.input[1]) {
             (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
               debug_assert_eq!(reg.get(v).size, reg.get(a).size, "mul must have the same size");

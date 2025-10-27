@@ -244,6 +244,7 @@ impl Opcode {
   pub const CMP_A_IMM8: Opcode = Opcode::new([0x3c]);
   pub const CMP_RM32: Opcode = Opcode::new([0x3b]);
   pub const CMP_RM8: Opcode = Opcode::new([0x3a]);
+  pub const CQO: Opcode = Opcode::new([0x99]);
   pub const INT3: Opcode = Opcode::new([0xcc]);
   pub const JA: Opcode = Opcode::new([0x77]);
   pub const JAE: Opcode = Opcode::new([0x73]);
