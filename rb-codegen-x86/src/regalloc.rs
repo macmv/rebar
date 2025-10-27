@@ -194,22 +194,32 @@ impl Regalloc<'_> {
           out,
         );
 
-        if let Some(req) = requirement {
-          self.active.insert(req, out);
-          self.alloc.registers.set_with(
-            out,
-            Register { size: var_to_reg_size(out.size()).unwrap(), index: req },
-            || Register::RAX,
-          );
-        } else if used_later {
-          self.allocate(loc, out);
-        } else {
-          let reg = self.pick_register(loc, out);
-          self.alloc.registers.set_with(
-            out,
-            Register { size: var_to_reg_size(out.size()).unwrap(), index: reg },
-            || Register::RAX,
-          );
+        match (requirement, used_later) {
+          (Some(req), true) => {
+            self.active.insert(req, out);
+            self.alloc.registers.set_with(
+              out,
+              Register { size: var_to_reg_size(out.size()).unwrap(), index: req },
+              || Register::RAX,
+            );
+          }
+          (None, true) => self.allocate(loc, out),
+          (Some(req), false) => {
+            self.active.remove(&req);
+            self.alloc.registers.set_with(
+              out,
+              Register { size: var_to_reg_size(out.size()).unwrap(), index: req },
+              || Register::RAX,
+            );
+          }
+          (None, false) => {
+            let reg = self.pick_register(loc, out);
+            self.alloc.registers.set_with(
+              out,
+              Register { size: var_to_reg_size(out.size()).unwrap(), index: reg },
+              || Register::RAX,
+            );
+          }
         }
 
         if used_later {
@@ -651,10 +661,7 @@ mod tests {
           syscall rax(2) = rax(0), rdi(1)
           mov rdi(7) = rdi(1)
           mov rdi(3) = 0x02
-          mov rbx(10) = rax(2)
-          mov rax(8) = rax(0)
-          syscall rax(4) = rax(8), rdi(3)
-          mov rax(9) = rax(4)
+          syscall rax(4) = rax(0), rdi(3)
           mov rax(5) = 0x03
           syscall rax(6) = rax(5), rdi(7)
           trap
@@ -677,14 +684,12 @@ mod tests {
           mov rax(3) = 0x00
           mov rdi(4) = 0x01
           syscall rax(0) = rax(3), rdi(4)
-          mov rcx(5) = rax(0)
-          mov rax(6) = 0x00
-          mov rdi(7) = 0x02
-          syscall rax(1) = rax(6), rdi(7)
-          mov rdx(8) = rax(1)
-          mov rax(9) = 0x00
-          mov rdi(10) = 0x03
-          syscall rax(2) = rax(9), rdi(10)
+          mov rax(5) = 0x00
+          mov rdi(6) = 0x02
+          syscall rax(1) = rax(5), rdi(6)
+          mov rax(7) = 0x00
+          mov rdi(8) = 0x03
+          syscall rax(2) = rax(7), rdi(8)
           trap
       "#
       ],
