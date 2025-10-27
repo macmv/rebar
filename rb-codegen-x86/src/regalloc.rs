@@ -602,10 +602,20 @@ fn is_used_later_in_block(after: &[Instruction], var: Variable) -> bool {
 #[cfg(test)]
 mod tests {
   use rb_codegen::{Variable, VariableSize};
-  use rb_codegen_opt::parse;
+  use rb_codegen_opt::{VariableDisplay, parse};
   use rb_test::expect;
 
   use crate::regalloc::{Register, VariableRegisters};
+
+  impl VariableDisplay for VariableRegisters {
+    fn write_variable(
+      &self,
+      f: &mut std::fmt::Formatter,
+      var: rb_codegen::Variable,
+    ) -> std::fmt::Result {
+      write!(f, "{:?}({})", self.get(var), var.id())
+    }
+  }
 
   macro_rules! v {
     ($size:tt $index:expr) => {
@@ -637,28 +647,22 @@ mod tests {
     let regs = VariableRegisters::pass(&mut function.function);
 
     // FIXME: r7 gets clobbered by r3!
-    function.check(expect![@r#"
-      block 0:
-        mov r0 = 0x01
-        mov r1 = 0x00
-        syscall r2 = r0, r1
-        mov r7 = r1
-        mov r3 = 0x02
-        syscall r4 = r0, r3
-        mov r5 = 0x03
-        syscall r6 = r5, r7
-        trap
-    "#
-    ]);
-
-    assert_eq!(regs.get(v!(r 0)), Register::RAX);
-    assert_eq!(regs.get(v!(r 1)), Register::RDI);
-    assert_eq!(regs.get(v!(r 2)), Register::RCX);
-    assert_eq!(regs.get(v!(r 3)), Register::RDI);
-    assert_eq!(regs.get(v!(r 4)), Register::RAX);
-    assert_eq!(regs.get(v!(r 5)), Register::RAX);
-    assert_eq!(regs.get(v!(r 6)), Register::RAX);
-    assert_eq!(regs.get(v!(r 7)), Register::RDI);
+    function.check_annotated(
+      expect![@r#"
+        block 0:
+          mov rax(0) = 0x01
+          mov rdi(1) = 0x00
+          syscall rcx(2) = rax(0), rdi(1)
+          mov rdi(7) = rdi(1)
+          mov rdi(3) = 0x02
+          syscall rax(4) = rax(0), rdi(3)
+          mov rax(5) = 0x03
+          syscall rax(6) = rax(5), rdi(7)
+          trap
+      "#
+      ],
+      &regs,
+    );
   }
 
   #[test]
