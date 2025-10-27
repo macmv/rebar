@@ -1,15 +1,19 @@
 use std::collections::HashMap;
 
-use rb_hir::ast::{self as hir, Path};
+use rb_diagnostic::emit;
+use rb_hir::{
+  ast::{self as hir, Path},
+  SpanMap,
+};
 
 enum Item {
   Module { children: HashMap<String, Item> },
   Function,
 }
 
-pub fn resolve_hir(hir: &mut hir::Module) {
+pub fn resolve_hir(hir: &mut hir::Module, span_map: &SpanMap) {
   let root = collect_module(hir);
-  let _ = resolve_module(hir, &root, Path::new(), &root);
+  let _ = resolve_module(hir, &root, span_map, Path::new(), &root);
 }
 
 fn collect_module(hir: &hir::Module) -> Item {
@@ -38,6 +42,7 @@ fn collect_module(hir: &hir::Module) -> Item {
 fn resolve_module(
   hir: &mut hir::Module,
   root: &Item,
+  span_map: &SpanMap,
   current: Path,
   item: &Item,
 ) -> Result<(), ()> {
@@ -46,13 +51,16 @@ fn resolve_module(
       hir::PartialModule::File => panic!("module wasn't filled in"),
       hir::PartialModule::Inline(submodule) => {
         let child_item = item.get(name)?;
-        let _ = resolve_module(submodule, root, current.join(name.clone()), child_item);
+        let _ = resolve_module(submodule, root, span_map, current.join(name.clone()), child_item);
       }
     }
   }
 
-  for function in hir.functions.values_mut() {
-    for expr in function.exprs.values_mut() {
+  let span_map = &span_map.modules[&current];
+
+  for (id, function) in hir.functions.iter_mut() {
+    let span_map = &span_map.functions[&id];
+    for (id, expr) in function.exprs.iter_mut() {
       match expr {
         hir::Expr::Name(p) => {
           if root.resolve(p).is_ok() {
@@ -62,6 +70,8 @@ fn resolve_module(
             if root.resolve(&abs).is_ok() {
               // relative path
               *p = abs;
+            } else {
+              emit!(span_map[id] => format!("unresolved name `{p}`"));
             }
           }
         }

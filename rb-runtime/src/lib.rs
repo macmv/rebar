@@ -17,7 +17,7 @@ pub fn compile(path: &std::path::Path) -> (Sources, Result<(), Vec<Diagnostic>>)
   let sources = Arc::new(sources);
 
   let res = rb_diagnostic::run(sources.clone(), || {
-    rb_hir_lower::resolve_hir(&mut hir);
+    rb_hir_lower::resolve_hir(&mut hir, &span_map);
     compile_diagnostics(hir, span_map)
   })
   .map(|_| ());
@@ -44,12 +44,10 @@ pub fn compile_test(
   hir.modules.insert("test".into(), rb_hir::ast::PartialModule::Inline(test_module));
   span_map.modules.insert(rb_hir::ast::Path { segments: vec!["test".into()] }, test_span_map);
 
-  rb_hir_lower::resolve_hir(&mut hir);
-
   let sources = Arc::new(sources);
 
   let res = rb_diagnostic::run(sources.clone(), || {
-    rb_hir_lower::resolve_hir(&mut hir);
+    rb_hir_lower::resolve_hir(&mut hir, &span_map);
     compile_diagnostics(hir, span_map)
   })
   .map(|_| ());
