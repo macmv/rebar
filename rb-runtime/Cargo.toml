@@ -12,5 +12,4 @@ rb-typer.workspace = true
 rb-mir-lower.workspace = true
 rb-mir.workspace = true
 rb-value.workspace = true
-rb-gc.workspace = true
 rb-backend.workspace = true
