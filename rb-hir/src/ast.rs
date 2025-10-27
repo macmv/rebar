@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use la_arena::{Arena, Idx};
 
 pub type ExprId = Idx<Expr>;
@@ -10,7 +12,7 @@ pub struct Module {
   pub functions: Arena<Function>,
   pub structs:   Arena<Struct>,
 
-  pub modules: Vec<(String, PartialModule)>,
+  pub modules: BTreeMap<String, PartialModule>,
 
   // If there are any statements outside of functions, they will be stored in a "main function,"
   // stored here.
@@ -24,7 +26,7 @@ pub struct Path {
 
 #[derive(Debug)]
 pub enum PartialModule {
-  File(String),
+  File,
   Inline(Module),
 }
 
@@ -187,8 +189,8 @@ impl<'a> Iterator for ModuleIter<'a> {
     let path = self.stack.pop()?;
     let mut module = self.root;
     for segment in &path.segments {
-      match module.modules.iter().find(|(n, _)| n == segment) {
-        Some((_, PartialModule::Inline(submodule))) => {
+      match module.modules.get(segment) {
+        Some(PartialModule::Inline(submodule)) => {
           module = submodule;
         }
         _ => panic!(),

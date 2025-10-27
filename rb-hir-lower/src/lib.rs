@@ -208,7 +208,14 @@ impl FunctionLower<'_, '_> {
       cst::Stmt::Mod(ref module) => {
         let name = module.ident_token().unwrap().to_string();
 
-        self.source.out.modules.push((name.clone(), hir::PartialModule::File(name)));
+        let prev = self.source.out.modules.insert(name, hir::PartialModule::File);
+
+        if prev.is_some() {
+          emit!(
+            Span { file: self.source.source, range: module.ident_token().unwrap().text_range() } =>
+            "module already defined"
+          );
+        }
 
         hir::Stmt::Struct
       }

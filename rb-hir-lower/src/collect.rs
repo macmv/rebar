@@ -40,9 +40,9 @@ impl Collector {
     let mut path = hir::Path::new();
     let mut file_path = root.to_path_buf();
     for segment in &p.segments {
-      match module.modules.iter_mut().find(|(n, _)| n == segment) {
-        Some((_, hir::PartialModule::File(_))) => unreachable!("module wasn't filled in"),
-        Some((_, hir::PartialModule::Inline(submodule))) => {
+      match module.modules.get_mut(segment) {
+        Some(hir::PartialModule::File) => unreachable!("module wasn't filled in"),
+        Some(hir::PartialModule::Inline(submodule)) => {
           path.segments.push(segment.clone());
           file_path.push(segment);
           module = submodule;
@@ -51,9 +51,9 @@ impl Collector {
       }
     }
 
-    for (_, module) in &mut module.modules {
+    for (name, module) in &mut module.modules {
       match module {
-        hir::PartialModule::File(name) => {
+        hir::PartialModule::File => {
           let (new_sources, res) = parse_source(&file_path.join(format!("{name}.rbr")), sources);
           sources = new_sources;
 
