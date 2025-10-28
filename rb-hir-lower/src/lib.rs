@@ -11,9 +11,11 @@ use rb_hir::{
 use rb_syntax::{AstNode, SyntaxNodePtr, cst};
 
 mod collect;
+pub mod fs;
 mod resolve;
 
 pub use collect::{parse_hir, parse_source};
+pub use fs::FileSystem;
 pub use resolve::resolve_hir;
 
 pub fn lower_source(
