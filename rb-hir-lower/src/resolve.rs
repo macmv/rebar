@@ -76,14 +76,14 @@ fn resolve_function(
   let Some(ref body) = function.body else { return };
 
   let mut expr = 0;
-  let mut locals = HashMap::<&str, hir::LocalId>::new();
+  let mut locals = HashMap::<String, hir::LocalId>::new();
 
   for (arg, ty) in &function.args {
     let id = function.locals.alloc(hir::Local { name: arg.to_string(), ty: Some(ty.clone()) });
-    locals.insert(arg, id);
+    locals.insert(arg.clone(), id);
   }
 
-  let mut walk_until = |locals: &HashMap<&str, hir::LocalId>, e: hir::ExprId| {
+  let mut walk_until = |locals: &HashMap<String, hir::LocalId>, e: hir::ExprId| {
     let mut id = hir::ExprId::from_raw(expr.into());
     while id != e {
       match &mut function.exprs[id] {
@@ -117,11 +117,12 @@ fn resolve_function(
   for &item in body {
     match function.stmts[item] {
       hir::Stmt::Expr(e) => walk_until(&locals, e),
-      hir::Stmt::Let(ref name, e) => {
+      hir::Stmt::Let(ref name, ref mut id, e) => {
         walk_until(&locals, e);
 
         let local = function.locals.alloc(hir::Local { name: name.to_string(), ty: None });
-        locals.insert(name, local);
+        *id = Some(local);
+        locals.insert(name.clone(), local);
       }
 
       _ => {}

@@ -34,7 +34,7 @@ pub struct Typer<'a> {
   //
   // TODO: This is probably wrong on a few levels, need a wrapper struct for typing each block.
   local_functions: HashMap<String, Type>,
-  locals:          HashMap<String, VType>,
+  locals:          HashMap<hir::LocalId, VType>,
 }
 
 pub fn type_of_function(func: &hir::Function) -> Type {
@@ -77,10 +77,12 @@ impl<'a> Typer<'a> {
   ) -> Self {
     let mut typer = Typer::new(env, function, span_map);
 
-    for (arg, ty) in &function.args {
-      let ty = type_of_type_expr(ty);
+    for (id, local) in function.locals.iter() {
+      if let Some(ref ty) = local.ty {
+        let ty = type_of_type_expr(ty);
 
-      typer.locals.insert(arg.clone(), ty.into());
+        typer.locals.insert(id, ty.into());
+      }
     }
 
     for &item in function.body.iter().flatten() {
@@ -148,9 +150,9 @@ impl<'a> Typer<'a> {
       hir::Stmt::Expr(expr) => {
         self.type_expr(expr);
       }
-      hir::Stmt::Let(ref name, expr) => {
+      hir::Stmt::Let(_, ref id, expr) => {
         let res = self.type_expr(expr);
-        self.locals.insert(name.clone(), res);
+        self.locals.insert(id.unwrap(), res);
       }
       hir::Stmt::FunctionDef(_) => {}
       hir::Stmt::Struct => {}
