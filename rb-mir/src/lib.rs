@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use ast::StructId;
+use rb_hir::ast::Path;
 use rb_typer::Type;
 
 pub mod ast;
@@ -10,7 +11,7 @@ pub mod ast;
 pub struct MirContext {
   pub struct_paths: HashMap<String, StructId>,
   pub structs:      HashMap<StructId, Struct>,
-  pub items:        HashMap<String, Item>,
+  pub items:        HashMap<Path, Item>,
 }
 
 #[derive(Clone)]

@@ -3,7 +3,10 @@
 use std::collections::HashMap;
 
 use rb_diagnostic::emit;
-use rb_hir::{FunctionSpanMap, ast as hir};
+use rb_hir::{
+  FunctionSpanMap,
+  ast::{self as hir, Path},
+};
 use rb_mir::{
   Item, MirContext, UserFunction,
   ast::{self as mir, UserFunctionId},
@@ -13,6 +16,7 @@ use rb_typer::{Type, Typer};
 pub fn declare_user_function(
   ctx: &mut MirContext,
   id: UserFunctionId,
+  path: Path,
   function: &hir::Function,
   span: &FunctionSpanMap,
 ) {
@@ -37,7 +41,7 @@ pub fn declare_user_function(
     }
   }
 
-  ctx.items.insert(function.name.clone(), Item::UserFunction(func));
+  ctx.items.insert(path, Item::UserFunction(func));
 }
 
 pub fn lower_function(ctx: &MirContext, ty: &Typer, hir: &hir::Function) -> Option<mir::Function> {
@@ -128,24 +132,13 @@ impl Lower<'_> {
         mir::Expr::Array(exprs, ty)
       }
 
-      // HIR should have fully qualified names, and the typer should get the type of this name.
-      // We should probably convert it to something more useful than a string though.
-      hir::Expr::Name(ref v) => {
-        if let Some(ident) = v.as_single() {
-          match self.locals.get(ident) {
-            Some(local) => mir::Expr::Local(*local, self.ty.type_of_expr(expr)),
-            None => match self.ctx.items[ident] {
-              Item::UserFunction(ref func) => {
-                self.mir.deps.insert(func.id);
-                mir::Expr::UserFunction(func.id, self.ty.type_of_expr(expr))
-              }
-              Item::NativeFunction(id) => mir::Expr::Native(id, self.ty.type_of_expr(expr)),
-            },
-          }
-        } else {
-          todo!("multi-segment names in mir lowering")
+      hir::Expr::Name(ref v) => match self.ctx.items[v] {
+        Item::UserFunction(ref func) => {
+          self.mir.deps.insert(func.id);
+          mir::Expr::UserFunction(func.id, self.ty.type_of_expr(expr))
         }
-      }
+        Item::NativeFunction(id) => mir::Expr::Native(id, self.ty.type_of_expr(expr)),
+      },
 
       hir::Expr::Block(ref block) => {
         let mut stmts = vec![];
@@ -213,7 +206,7 @@ impl Lower<'_> {
 
       hir::Expr::Call(lhs, ref args) => match self.hir.exprs[lhs] {
         hir::Expr::Name(ref name) => {
-          if let Some(Item::UserFunction(func)) = self.ctx.items.get(name.as_single().unwrap()) {
+          if let Some(Item::UserFunction(func)) = self.ctx.items.get(name) {
             self.mir.deps.insert(func.id);
 
             let lhs_ty = self.ty.type_of_expr(lhs);
