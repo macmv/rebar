@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt, panic::UnwindSafe, sync::Arc};
+use std::{collections::HashMap, fmt, panic::UnwindSafe, path::PathBuf, sync::Arc};
 
 pub mod highlight;
 
@@ -26,6 +26,10 @@ impl AnalysisHost {
   pub fn new() -> Self { AnalysisHost::default() }
   pub fn snapshot(&self) -> Analysis { Analysis { db: self.db.clone() } }
 
+  pub fn create_file(&mut self, file_id: FileId, path: &std::path::Path, text: String) {
+    self.db.create_file(file_id, path, Arc::from(text));
+  }
+
   pub fn change_file(&mut self, file_id: FileId, new_text: String) {
     self.db.set_file_text(file_id, Arc::from(new_text));
   }
@@ -46,6 +50,7 @@ impl Analysis {
 struct RootDatabase {
   pub(crate) storage: salsa::Storage<Self>,
 
+  paths: HashMap<std::path::PathBuf, FileId>,
   files: HashMap<FileId, File>,
 }
 
@@ -55,12 +60,17 @@ impl salsa::Database for RootDatabase {}
 #[salsa::db]
 impl SourceDatabase for RootDatabase {
   fn file_text(&self, file: FileId) -> File { self.files.get(&file).unwrap().clone() }
+  fn create_file(&mut self, file: FileId, path: &std::path::Path, text: Arc<str>) {
+    self.paths.insert(path.to_path_buf(), file);
+    self.files.insert(file, File::new(self, file, path.to_path_buf(), text));
+  }
   fn set_file_text(&mut self, file: FileId, text: Arc<str>) {
-    if self.files.contains_key(&file) {
-      self.files.get(&file).unwrap().set_text(self).to(text);
-    } else {
-      self.files.insert(file, File::new(self, file, text));
-    }
+    self
+      .files
+      .get(&file)
+      .unwrap_or_else(|| panic!("file {file:?} not found"))
+      .set_text(self)
+      .to(text);
   }
 }
 
@@ -73,12 +83,15 @@ impl fmt::Debug for RootDatabase {
 #[salsa::db]
 trait SourceDatabase: salsa::Database {
   fn file_text(&self, file: FileId) -> File;
+  fn create_file(&mut self, file: FileId, path: &std::path::Path, text: Arc<str>);
   fn set_file_text(&mut self, file: FileId, text: Arc<str>);
 }
 
 #[salsa::input]
 struct File {
   id:   FileId,
+  #[returns(ref)]
+  path: PathBuf,
   #[returns(ref)]
   text: Arc<str>,
 }

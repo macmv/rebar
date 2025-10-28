@@ -171,11 +171,10 @@ impl GlobalState {
       if let std::collections::hash_map::Entry::Vacant(e) = self.file_to_source_root.entry(file_id)
       {
         e.insert(None);
-        // TODO
-        // self.analysis_host.add_file(file_id);
+        self.host.create_file(file_id, files.id_to_path(file_id), files.read(file_id));
+      } else {
+        self.host.change_file(file_id, files.read(file_id));
       }
-
-      self.host.change_file(file_id, files.read(file_id));
     }
 
     let snap = self.host.snapshot();
