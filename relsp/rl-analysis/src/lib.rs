@@ -5,7 +5,9 @@ pub mod highlight;
 mod file;
 pub use file::FileId;
 
-use salsa::{Cancelled, Setter};
+use rb_diagnostic::{Diagnostic, Span};
+use rb_syntax::{Parse, cst};
+use salsa::{Accumulator, Cancelled, Setter};
 
 #[derive(Default)]
 pub struct AnalysisHost {
@@ -89,4 +91,28 @@ struct LineIndex<'db> {
 #[salsa::tracked]
 fn line_index(db: &dyn SourceDatabase, file: File) -> LineIndex<'_> {
   LineIndex::new(db, Arc::new(::line_index::LineIndex::new(&file.text(db))))
+}
+
+#[salsa::tracked]
+struct ParseCst<'db> {
+  #[tracked]
+  parsed: Parse<cst::SourceFile>,
+}
+
+#[salsa::accumulator]
+struct DiagnosticAcc(Diagnostic);
+
+#[salsa::tracked]
+fn parse_cst(db: &dyn SourceDatabase, file: File) -> ParseCst<'_> {
+  let source = file.text(db);
+  let res = cst::SourceFile::parse(source);
+
+  for _error in res.errors() {
+    /*
+    DiagnosticAcc(Diagnostic::error(error.message(), Span { file: (), range: error.span() }))
+      .accumulate(db);
+    */
+  }
+
+  ParseCst::new(db, res)
 }
