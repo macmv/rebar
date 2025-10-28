@@ -103,6 +103,7 @@ struct ParseCst<'db> {
 // Like a `rb-diagnostic::Diagnostic`, but it doesn't need to be rendered to a
 // source.
 #[salsa::accumulator]
+#[allow(unused)]
 struct DiagnosticAcc {
   pub message: String,
   pub file:    FileId,
