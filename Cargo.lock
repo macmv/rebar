@@ -885,7 +885,6 @@ dependencies = [
  "line-index",
  "log",
  "parking_lot",
- "rb-diagnostic",
  "rb-hir",
  "rb-hir-lower",
  "rb-syntax",

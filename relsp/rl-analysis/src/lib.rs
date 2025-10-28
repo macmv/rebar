@@ -5,8 +5,7 @@ pub mod highlight;
 mod file;
 pub use file::FileId;
 
-use rb_diagnostic::{Diagnostic, Span};
-use rb_syntax::{Parse, cst};
+use rb_syntax::{Parse, TextRange, cst};
 use salsa::{Accumulator, Cancelled, Setter};
 
 #[derive(Default)]
@@ -99,19 +98,27 @@ struct ParseCst<'db> {
   parsed: Parse<cst::SourceFile>,
 }
 
+// Like a `rb-diagnostic::Diagnostic`, but it doesn't need to be rendered to a
+// source.
 #[salsa::accumulator]
-struct DiagnosticAcc(Diagnostic);
+struct DiagnosticAcc {
+  pub message: String,
+  pub file:    FileId,
+  pub range:   TextRange,
+}
 
 #[salsa::tracked]
 fn parse_cst(db: &dyn SourceDatabase, file: File) -> ParseCst<'_> {
   let source = file.text(db);
   let res = cst::SourceFile::parse(source);
 
-  for _error in res.errors() {
-    /*
-    DiagnosticAcc(Diagnostic::error(error.message(), Span { file: (), range: error.span() }))
-      .accumulate(db);
-    */
+  for error in res.errors() {
+    DiagnosticAcc {
+      message: error.message().to_string(),
+      file:    file.id(db),
+      range:   error.span(),
+    }
+    .accumulate(db);
   }
 
   ParseCst::new(db, res)
