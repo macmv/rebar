@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use rb_diagnostic::emit;
 use rb_hir::{
-  SpanMap,
+  FunctionSpanMap, SpanMap,
   ast::{self as hir, Path},
 };
 
@@ -60,10 +60,38 @@ fn resolve_module(
 
   for (id, function) in hir.functions.iter_mut() {
     let span_map = &span_map.functions[&id];
-    for (id, expr) in function.exprs.iter_mut() {
-      match expr {
+
+    resolve_function(function, span_map, root, &current);
+  }
+
+  Ok(())
+}
+
+fn resolve_function(
+  function: &mut hir::Function,
+  span_map: &FunctionSpanMap,
+  root: &Item,
+  current: &Path,
+) {
+  let Some(ref body) = function.body else { return };
+
+  let mut expr = 0;
+  let mut locals = HashSet::<&str>::new();
+
+  for (arg, _) in &function.args {
+    locals.insert(arg);
+  }
+
+  let mut walk_until = |locals: &HashSet<&str>, e: hir::ExprId| {
+    let mut id = hir::ExprId::from_raw(expr.into());
+    while id != e {
+      match &mut function.exprs[id] {
         hir::Expr::Name(p) => {
-          if root.contains(p) {
+          if let Some(ident) = p.as_single()
+            && locals.contains(ident)
+          {
+            // local variable
+          } else if root.contains(p) {
             // absolute path
           } else {
             let abs = current.concat(p);
@@ -78,10 +106,24 @@ fn resolve_module(
 
         _ => {}
       }
+
+      expr += 1;
+      id = hir::ExprId::from_raw(expr.into());
+    }
+  };
+
+  for &item in body {
+    match function.stmts[item] {
+      hir::Stmt::Expr(e) => walk_until(&locals, e),
+      hir::Stmt::Let(ref name, e) => {
+        walk_until(&locals, e);
+
+        locals.insert(name);
+      }
+
+      _ => {}
     }
   }
-
-  Ok(())
 }
 
 impl Item {
