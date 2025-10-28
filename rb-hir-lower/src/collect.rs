@@ -4,9 +4,10 @@ use rb_diagnostic::{Diagnostic, Source, Sources};
 use rb_hir::{ModuleSpanMap, SpanMap, ast as hir};
 use rb_syntax::cst;
 
-use crate::AstIdMap;
+use crate::{AstIdMap, FileSystem};
 
-struct Collector {
+struct Collector<'a, F: FileSystem> {
+  fs:       &'a F,
   module:   hir::Module,
   span_map: SpanMap,
 
@@ -15,13 +16,15 @@ struct Collector {
 }
 
 pub fn parse_hir(
+  fs: &impl FileSystem,
   path: &std::path::Path,
 ) -> (Sources, Result<(hir::Module, SpanMap), Vec<Diagnostic>>) {
-  let (mut sources, res) = parse_source(path, Sources::new());
+  let (mut sources, res) = parse_source(fs, path, Sources::new());
 
   match res {
     Ok((module, span_map, _)) => {
       let mut collector = Collector {
+        fs,
         module,
         span_map: SpanMap { modules: HashMap::new() },
         errors: vec![],
@@ -47,7 +50,7 @@ pub fn parse_hir(
   }
 }
 
-impl Collector {
+impl<F: FileSystem> Collector<'_, F> {
   fn check(&mut self, root: &std::path::Path, p: &hir::Path, mut sources: Sources) -> Sources {
     let mut module = &mut self.module;
     let mut path = hir::Path::new();
@@ -67,7 +70,8 @@ impl Collector {
     for (name, module) in &mut module.modules {
       match module {
         hir::PartialModule::File => {
-          let (new_sources, res) = parse_source(&file_path.join(format!("{name}.rbr")), sources);
+          let (new_sources, res) =
+            parse_source(self.fs, &file_path.join(format!("{name}.rbr")), sources);
           sources = new_sources;
 
           match res {
@@ -94,10 +98,11 @@ impl Collector {
 }
 
 pub fn parse_source(
+  fs: &impl crate::FileSystem,
   path: &std::path::Path,
   mut sources: Sources,
 ) -> (Sources, Result<(hir::Module, ModuleSpanMap, Vec<AstIdMap>), Vec<Diagnostic>>) {
-  let content = std::fs::read_to_string(&path).unwrap();
+  let content = fs.read_to_string(&path).unwrap();
   let id = sources.add(Source::new(path.display().to_string(), content));
 
   let src = sources.get(id);

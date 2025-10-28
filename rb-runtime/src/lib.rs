@@ -8,7 +8,7 @@ use rb_typer::Type;
 const NUM_CPUS: usize = 32;
 
 pub fn compile(path: &std::path::Path) -> (Sources, Result<(), Vec<Diagnostic>>) {
-  let (sources, res) = rb_hir_lower::parse_hir(path);
+  let (sources, res) = rb_hir_lower::parse_hir(&rb_hir_lower::fs::Native, path);
   let (mut hir, span_map) = match res {
     Ok(v) => v,
     Err(diagnostics) => return (sources, Err(diagnostics)),
@@ -28,13 +28,14 @@ pub fn compile_test(
   test_path: &std::path::Path,
   std: &std::path::Path,
 ) -> (Sources, Result<(), Vec<Diagnostic>>) {
-  let (mut sources, res) = rb_hir_lower::parse_hir(std);
+  let (mut sources, res) = rb_hir_lower::parse_hir(&rb_hir_lower::fs::Native, std);
   let (mut hir, mut span_map) = match res {
     Ok(v) => v,
     Err(diagnostics) => return (sources, Err(diagnostics)),
   };
 
-  let (new_sources, res) = rb_hir_lower::parse_source(test_path, sources);
+  let (new_sources, res) =
+    rb_hir_lower::parse_source(&rb_hir_lower::fs::Native, test_path, sources);
   sources = new_sources;
   let (test_module, test_span_map) = match res {
     Ok((hir, span_map, _)) => (hir, span_map),
