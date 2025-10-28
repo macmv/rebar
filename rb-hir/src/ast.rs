@@ -8,7 +8,7 @@ pub type LocalId = Idx<Local>;
 pub type FunctionId = Idx<Function>;
 pub type StructId = Idx<Struct>;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct Module {
   pub functions: Arena<Function>,
   pub structs:   Arena<Struct>,
@@ -25,13 +25,13 @@ pub struct Path {
   pub segments: Vec<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum PartialModule {
   File,
   Inline(Module),
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct Function {
   pub name: String,
 
@@ -47,19 +47,19 @@ pub struct Function {
   pub body: Option<Vec<StmtId>>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Attribute {
   pub path: String,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub struct Struct {
   pub name: String,
 
   pub fields: Vec<(String, TypeExpr)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Expr {
   Literal(Literal),
   Local(LocalId),
@@ -82,19 +82,19 @@ pub enum Expr {
   Assign { lhs: ExprId, rhs: ExprId },
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Local {
   pub name: String,
   pub ty:   Option<TypeExpr>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StringInterp {
   Literal(String),
   Expr(ExprId),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeExpr {
   Primitive(PrimitiveType),
   Struct(String),
@@ -116,7 +116,7 @@ pub enum PrimitiveType {
   U64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Stmt {
   Expr(ExprId),
 
@@ -129,27 +129,27 @@ pub enum Stmt {
   Struct,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct FunctionDef {
   pub name: String,
   pub args: Vec<(String, TypeExpr)>,
   pub ret:  Option<TypeExpr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Literal {
   Nil,
   Bool(bool),
   Int(i64),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum UnaryOp {
   Neg,
   Not,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum BinaryOp {
   Add,
   Sub,

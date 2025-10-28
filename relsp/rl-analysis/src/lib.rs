@@ -5,6 +5,8 @@ pub mod highlight;
 mod file;
 pub use file::FileId;
 
+use rb_diagnostic::SourceId;
+use rb_hir::ast as hir;
 use rb_syntax::{Parse, TextRange, cst};
 use salsa::{Accumulator, Cancelled, Setter};
 
@@ -122,4 +124,35 @@ fn parse_cst(db: &dyn SourceDatabase, file: File) -> ParseCst<'_> {
   }
 
   ParseCst::new(db, res)
+}
+
+#[salsa::tracked]
+struct UnresolvedHir<'db> {
+  #[tracked]
+  #[returns(ref)]
+  hir: hir::Module,
+}
+
+#[salsa::tracked]
+fn hir_unresolved(db: &dyn SourceDatabase, file: File) -> UnresolvedHir<'_> {
+  let cst = parse_cst(db, file);
+  let parsed = cst.parsed(db);
+  if parsed.errors().is_empty() {
+    let ((hir, _, _), diagnostics) = rb_diagnostic::run_both(Arc::new(Default::default()), || {
+      rb_hir_lower::lower_source(parsed.tree(), SourceId::from_raw(0.into()))
+    });
+
+    for diagnostic in diagnostics {
+      DiagnosticAcc {
+        message: diagnostic.message,
+        file:    file.id(db),
+        range:   diagnostic.span.range,
+      }
+      .accumulate(db);
+    }
+
+    UnresolvedHir::new(db, hir)
+  } else {
+    UnresolvedHir::new(db, Default::default())
+  }
 }
