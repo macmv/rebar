@@ -74,6 +74,18 @@ impl SourceDatabase for RootDatabase {
   }
 }
 
+impl rb_hir_lower::FileSystem for RootDatabase {
+  fn read_to_string(&self, path: &std::path::Path) -> std::io::Result<String> {
+    let file_id = self.paths.get(path).ok_or_else(|| {
+      std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        format!("file not found: {}", path.display()),
+      )
+    })?;
+    Ok(self.file_text(*file_id).text(self).to_string())
+  }
+}
+
 impl fmt::Debug for RootDatabase {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     f.debug_struct("RootDatabase").finish()
