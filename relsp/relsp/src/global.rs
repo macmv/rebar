@@ -1,5 +1,6 @@
 use parking_lot::RwLock;
 use rb_diagnostic::{Diagnostic, Source, Sources, Span, emit};
+use rb_hir::SpanMap;
 use rb_syntax::{TextSize, cst};
 use rl_analysis::{Analysis, AnalysisHost, FileId};
 use std::{collections::HashMap, error::Error, path::PathBuf, sync::Arc};
@@ -417,8 +418,20 @@ fn check(src: &str) -> Vec<Diagnostic> {
     }
   });
 
-  let hir = match res {
+  let mut hir = match res {
     Ok(hir) => hir,
+    Err(errs) => return errs,
+  };
+
+  let mut span_map = SpanMap::default();
+  span_map.modules.insert(rb_hir::ast::Path { segments: vec![] }, hir.1);
+  let res = rb_diagnostic::run(sources.clone(), || {
+    rb_hir_lower::resolve_hir(&mut hir.0, &span_map);
+  });
+  let span_map = span_map.modules.into_values().next().unwrap();
+
+  match res {
+    Ok(_) => {}
     Err(errs) => return errs,
   };
 
@@ -432,7 +445,7 @@ fn check(src: &str) -> Vec<Diagnostic> {
   }
 
   let res = rb_diagnostic::run(sources, || {
-    let (hir, span_map, _) = hir;
+    let hir = hir.0;
 
     for (idx, function) in hir.functions {
       let span_map = &span_map.functions[&idx];
