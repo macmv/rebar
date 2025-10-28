@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use rb_diagnostic::emit;
 use rb_hir::{
@@ -76,21 +76,23 @@ fn resolve_function(
   let Some(ref body) = function.body else { return };
 
   let mut expr = 0;
-  let mut locals = HashSet::<&str>::new();
+  let mut locals = HashMap::<&str, hir::LocalId>::new();
 
-  for (arg, _) in &function.args {
-    locals.insert(arg);
+  for (arg, ty) in &function.args {
+    let id = function.locals.alloc(hir::Local { name: arg.to_string(), ty: Some(ty.clone()) });
+    locals.insert(arg, id);
   }
 
-  let mut walk_until = |locals: &HashSet<&str>, e: hir::ExprId| {
+  let mut walk_until = |locals: &HashMap<&str, hir::LocalId>, e: hir::ExprId| {
     let mut id = hir::ExprId::from_raw(expr.into());
     while id != e {
       match &mut function.exprs[id] {
         hir::Expr::Name(p) => {
           if let Some(ident) = p.as_single()
-            && locals.contains(ident)
+            && let Some(&local) = locals.get(ident)
           {
             // local variable
+            function.exprs[id] = hir::Expr::Local(local);
           } else if root.contains(p) {
             // absolute path
           } else {
@@ -118,7 +120,8 @@ fn resolve_function(
       hir::Stmt::Let(ref name, e) => {
         walk_until(&locals, e);
 
-        locals.insert(name);
+        let local = function.locals.alloc(hir::Local { name: name.to_string(), ty: None });
+        locals.insert(name, local);
       }
 
       _ => {}

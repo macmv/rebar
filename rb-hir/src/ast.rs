@@ -4,6 +4,7 @@ use la_arena::{Arena, Idx};
 
 pub type ExprId = Idx<Expr>;
 pub type StmtId = Idx<Stmt>;
+pub type LocalId = Idx<Local>;
 pub type FunctionId = Idx<Function>;
 pub type StructId = Idx<Struct>;
 
@@ -38,8 +39,10 @@ pub struct Function {
   pub args:  Vec<(String, TypeExpr)>,
   pub ret:   Option<TypeExpr>,
 
-  pub exprs: Arena<Expr>,
-  pub stmts: Arena<Stmt>,
+  pub exprs:  Arena<Expr>,
+  pub stmts:  Arena<Stmt>,
+  // Filled in by HIR resolution.
+  pub locals: Arena<Local>,
 
   pub body: Option<Vec<StmtId>>,
 }
@@ -59,6 +62,7 @@ pub struct Struct {
 #[derive(Debug)]
 pub enum Expr {
   Literal(Literal),
+  Local(LocalId),
   Name(Path),
 
   String(Vec<StringInterp>),
@@ -76,6 +80,12 @@ pub enum Expr {
   If { cond: ExprId, then: ExprId, els: Option<ExprId> },
 
   Assign { lhs: ExprId, rhs: ExprId },
+}
+
+#[derive(Debug)]
+pub struct Local {
+  pub name: String,
+  pub ty:   Option<TypeExpr>,
 }
 
 #[derive(Clone, Debug)]
