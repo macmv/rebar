@@ -227,6 +227,8 @@ impl<'a> Typer<'a> {
         }
       }
 
+      hir::Expr::Local(id) => self.locals[&id].clone(),
+
       hir::Expr::Block(ref block) => {
         // FIXME: Make a new scope here for the block.
         for &stmt in block {

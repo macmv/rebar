@@ -49,12 +49,14 @@ pub fn lower_function(ctx: &MirContext, ty: &Typer, hir: &hir::Function) -> Opti
 
   let mut lower = Lower { ctx, ty, hir, mir: &mut mir, locals: HashMap::new() };
 
-  for (name, te) in hir.args.iter() {
-    let ty = rb_typer::type_of_type_expr(te);
+  for (hir_id, local) in hir.locals.iter() {
+    if let Some(ref ty) = local.ty {
+      let ty = rb_typer::type_of_type_expr(ty);
 
-    lower.mir.params.push(ty.clone());
-    let id = lower.next_var_id(ty);
-    lower.locals.insert(name.clone(), id);
+      lower.mir.params.push(ty.clone());
+      let id = lower.next_var_id(ty);
+      lower.locals.insert(hir_id, id);
+    }
   }
 
   if let Some(ret) = &hir.ret {
@@ -80,8 +82,7 @@ struct Lower<'a> {
   hir: &'a hir::Function,
   mir: &'a mut mir::Function,
 
-  // TODO: This should be a stack of scopes.
-  locals: HashMap<String, mir::VarId>,
+  locals: HashMap<hir::LocalId, mir::VarId>,
 }
 
 impl Lower<'_> {
@@ -94,11 +95,11 @@ impl Lower<'_> {
   fn lower_stmt(&mut self, stmt: hir::StmtId) -> Option<mir::StmtId> {
     let stmt = match self.hir.stmts[stmt] {
       hir::Stmt::Expr(expr) => mir::Stmt::Expr(self.lower_expr(expr)),
-      hir::Stmt::Let(ref name, _, expr) => {
+      hir::Stmt::Let(_, hir_id, expr) => {
         let mir_expr = self.lower_expr(expr);
         let ty = self.ty.type_of_expr(expr);
         let id = self.next_var_id(ty.clone());
-        self.locals.insert(name.clone(), id);
+        self.locals.insert(hir_id.unwrap(), id);
         mir::Stmt::Let(id, ty, mir_expr)
       }
       hir::Stmt::FunctionDef(_) | hir::Stmt::Struct => return None,
@@ -139,6 +140,8 @@ impl Lower<'_> {
         }
         Item::NativeFunction(id) => mir::Expr::Native(id, self.ty.type_of_expr(expr)),
       },
+
+      hir::Expr::Local(id) => mir::Expr::Local(self.locals[&id], self.ty.type_of_expr(expr)),
 
       hir::Expr::Block(ref block) => {
         let mut stmts = vec![];
