@@ -1,12 +1,11 @@
-use std::{fmt, panic::UnwindSafe, sync::Arc};
+use std::{collections::HashMap, fmt, panic::UnwindSafe, sync::Arc};
 
 pub mod highlight;
 
 mod file;
 pub use file::FileId;
 
-use line_index::LineIndex;
-use salsa::{Cancelled, ParallelDatabase};
+use salsa::{Cancelled, Setter};
 
 #[derive(Default)]
 pub struct AnalysisHost {
@@ -15,23 +14,23 @@ pub struct AnalysisHost {
 
 /// A snapshot of analysis at a point in time.
 pub struct Analysis {
-  db: salsa::Snapshot<RootDatabase>,
+  db: RootDatabase,
 }
 
 pub type Cancellable<T> = Result<T, Cancelled>;
 
 impl AnalysisHost {
   pub fn new() -> Self { AnalysisHost::default() }
-  pub fn snapshot(&self) -> Analysis { Analysis { db: self.db.snapshot() } }
+  pub fn snapshot(&self) -> Analysis { Analysis { db: self.db.clone() } }
 
   pub fn change_file(&mut self, file_id: FileId, new_text: String) {
-    self.db.set_file_text(file_id, new_text.into());
+    self.db.set_file_text(file_id, Arc::from(new_text));
   }
 }
 
 impl Analysis {
-  pub fn line_index(&self, file: FileId) -> Cancellable<Arc<LineIndex>> {
-    self.with_db(|db| db.line_index(file))
+  pub fn line_index(&self, file: FileId) -> Cancellable<Arc<::line_index::LineIndex>> {
+    self.with_db(|db| line_index(db, db.file_text(file)).index(db))
   }
 
   fn with_db<T>(&self, f: impl FnOnce(&RootDatabase) -> T + UnwindSafe) -> Cancellable<T> {
@@ -39,16 +38,26 @@ impl Analysis {
   }
 }
 
-#[salsa::database(SourceDatabaseStorage, LineIndexDatabaseStorage)]
-#[derive(Default)]
-pub struct RootDatabase {
+#[salsa::db]
+#[derive(Default, Clone)]
+struct RootDatabase {
   pub(crate) storage: salsa::Storage<Self>,
+
+  files: HashMap<FileId, File>,
 }
 
+#[salsa::db]
 impl salsa::Database for RootDatabase {}
-impl salsa::ParallelDatabase for RootDatabase {
-  fn snapshot(&self) -> salsa::Snapshot<Self> {
-    salsa::Snapshot::new(RootDatabase { storage: self.storage.snapshot() })
+
+#[salsa::db]
+impl SourceDatabase for RootDatabase {
+  fn file_text(&self, file: FileId) -> File { self.files.get(&file).unwrap().clone() }
+  fn set_file_text(&mut self, file: FileId, text: Arc<str>) {
+    if self.files.contains_key(&file) {
+      self.files.get(&file).unwrap().set_text(self).to(text);
+    } else {
+      self.files.insert(file, File::new(self, file, text));
+    }
   }
 }
 
@@ -58,19 +67,26 @@ impl fmt::Debug for RootDatabase {
   }
 }
 
-#[salsa::query_group(LineIndexDatabaseStorage)]
-pub trait LineIndexDatabase: SourceDatabase {
-  fn line_index(&self, file_id: FileId) -> Arc<LineIndex>;
+#[salsa::db]
+trait SourceDatabase: salsa::Database {
+  fn file_text(&self, file: FileId) -> File;
+  fn set_file_text(&mut self, file: FileId, text: Arc<str>);
 }
 
-#[salsa::query_group(SourceDatabaseStorage)]
-pub trait SourceDatabase: std::fmt::Debug {
-  /// Returns the current content of the file.
-  #[salsa::input]
-  fn file_text(&self, file_id: FileId) -> Arc<str>;
+#[salsa::input]
+struct File {
+  id:   FileId,
+  #[returns(ref)]
+  text: Arc<str>,
 }
 
-fn line_index(db: &dyn LineIndexDatabase, file_id: FileId) -> Arc<LineIndex> {
-  let text = db.file_text(file_id);
-  Arc::new(LineIndex::new(&text))
+#[salsa::tracked]
+struct LineIndex<'db> {
+  #[tracked]
+  index: Arc<::line_index::LineIndex>,
+}
+
+#[salsa::tracked]
+fn line_index(db: &dyn SourceDatabase, file: File) -> LineIndex<'_> {
+  LineIndex::new(db, Arc::new(::line_index::LineIndex::new(&file.text(db))))
 }
