@@ -146,6 +146,7 @@ pub fn stmt(p: &mut Parser) {
 
   match p.current() {
     T![nl] => p.eat(T![nl]),
+    EOF => p.eat(EOF),
     T!['}'] => {}
     _ => {
       // test err
