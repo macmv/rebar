@@ -24,6 +24,9 @@ pub struct Environment {
   pub names:   HashMap<Path, Type>,
   pub structs: HashMap<Path, Vec<(String, Type)>>,
 
+  // A map of structs to what traits they implement.
+  pub impls:  HashMap<Path, Vec<Path>>,
+  // A map of traits to their definitions.
   pub traits: HashMap<Path, TraitImpls>,
 }
 
@@ -61,14 +64,19 @@ pub(crate) enum VType {
 
 impl Environment {
   pub fn empty() -> Self {
-    Environment { names: HashMap::new(), structs: HashMap::new(), traits: HashMap::new() }
+    Environment {
+      names:   HashMap::new(),
+      structs: HashMap::new(),
+      impls:   HashMap::new(),
+      traits:  HashMap::new(),
+    }
   }
 
   pub fn mini() -> Self {
     let mut env = Environment::empty();
 
-    env.traits.insert(
-      Path::from(["std", "op", "Add"]),
+    env.add_impls(
+      &Path::from(["std", "op", "Add"]),
       TraitImpls {
         trait_def: TraitDef {
           functions: HashMap::from([(
@@ -87,10 +95,39 @@ impl Environment {
 
     env
   }
+
+  pub fn add_impls(&mut self, for_trait: &Path, impls: TraitImpls) {
+    for t in &impls.impls {
+      self.impls.entry(t.clone()).or_default().push(for_trait.clone());
+    }
+
+    self.traits.insert(for_trait.clone(), impls);
+  }
+
+  pub fn impl_type(&self, ty: &Path, method: &str) -> Option<&Type> {
+    self.impls.get(ty)?.iter().filter_map(|t| self.traits[t].trait_def.functions.get(method)).next()
+  }
+
+  pub fn function_type(&self, path: &Path) -> Option<&Type> { self.names.get(path) }
 }
 
 impl Type {
   pub const fn unit() -> Self { Type::Tuple(vec![]) }
+
+  pub(crate) fn resolve_self(&self, slf: &VType) -> VType {
+    match self {
+      Type::SelfT => slf.clone(),
+      Type::Primitive(p) => VType::Primitive(*p),
+      Type::Array(ty) => VType::Array(Box::new(ty.resolve_self(slf))),
+      Type::Tuple(types) => VType::Tuple(types.iter().map(|ty| ty.resolve_self(slf)).collect()),
+      Type::Function(args, ret) => VType::Function(
+        args.iter().map(|ty| ty.resolve_self(slf)).collect(),
+        Box::new(ret.resolve_self(slf)),
+      ),
+      Type::Union(types) => VType::Union(types.iter().map(|ty| ty.resolve_self(slf)).collect()),
+      Type::Struct(name) => VType::Struct(name.clone()),
+    }
+  }
 }
 
 impl From<Type> for VType {

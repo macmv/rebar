@@ -254,21 +254,59 @@ impl<'a> Typer<'a> {
         VType::Array(Box::new(VType::Var(v)))
       }
 
-      hir::Expr::Call(lhs_expr, ref args) => {
-        let lhs = self.type_expr(lhs_expr);
+      hir::Expr::Call(lhs_expr, ref args) => match self.function.exprs[lhs_expr] {
+        hir::Expr::Field(lhs, ref method) => {
+          let lhs = self.type_expr(lhs);
 
-        let ret =
-          VType::Var(self.fresh_var(self.span(expr), format!("return type of calling {:?}", lhs)));
+          // We must have a concrete type by the time we resolve methods.
+          if let Some(path) = self.resolve_type(&lhs) {
+            if let Some(signature) = self.env.impl_type(&path, &method) {
+              let ret = VType::Var(
+                self.fresh_var(self.span(expr), format!("return type of calling {:?}", lhs)),
+              );
 
-        let call_type = VType::Function(
-          args.iter().map(|&arg| self.type_expr(arg)).collect(),
-          Box::new(ret.clone()),
-        );
+              // This is an impl method, so fill in `self` with the type we're calling it on.
+              let signature = signature.resolve_self(&lhs);
 
-        self.constrain(&lhs, &call_type, self.span(lhs_expr));
+              let call_type = VType::Function(
+                std::iter::once(lhs.clone())
+                  .chain(args.iter().map(|&arg| self.type_expr(arg)))
+                  .collect(),
+                Box::new(ret.clone()),
+              );
 
-        ret
-      }
+              self.constrain(&call_type, &signature.clone().into(), self.span(lhs_expr));
+
+              lhs
+            } else {
+              emit!(self.span(expr) => "method {} not found for type {}", method, self.display_type(&lhs));
+
+              Type::unit().into()
+            }
+          } else {
+            emit!(self.span(expr) => "could not resolve concrete type for {}", self.display_type(&lhs));
+
+            Type::unit().into()
+          }
+        }
+
+        _ => {
+          let lhs = self.type_expr(lhs_expr);
+
+          let ret = VType::Var(
+            self.fresh_var(self.span(expr), format!("return type of calling {:?}", lhs)),
+          );
+
+          let call_type = VType::Function(
+            args.iter().map(|&arg| self.type_expr(arg)).collect(),
+            Box::new(ret.clone()),
+          );
+
+          self.constrain(&lhs, &call_type, self.span(lhs_expr));
+
+          ret
+        }
+      },
 
       hir::Expr::Name(ref path) => {
         if let Some(ident) = path.as_single()
@@ -436,6 +474,23 @@ impl<'a> Typer<'a> {
     self.exprs.insert(expr, ty.clone());
     ty
   }
+
+  fn resolve_type(&self, ty: &VType) -> Option<hir::Path> {
+    match self.lower_type(ty) {
+      Type::Primitive(hir::PrimitiveType::I8) => Some(hir::Path::from(["i8"])),
+      Type::Primitive(hir::PrimitiveType::I16) => Some(hir::Path::from(["i16"])),
+      Type::Primitive(hir::PrimitiveType::I32) => Some(hir::Path::from(["i32"])),
+      Type::Primitive(hir::PrimitiveType::I64) => Some(hir::Path::from(["i64"])),
+      Type::Primitive(hir::PrimitiveType::U8) => Some(hir::Path::from(["u8"])),
+      Type::Primitive(hir::PrimitiveType::U16) => Some(hir::Path::from(["u16"])),
+      Type::Primitive(hir::PrimitiveType::U32) => Some(hir::Path::from(["u32"])),
+      Type::Primitive(hir::PrimitiveType::U64) => Some(hir::Path::from(["u64"])),
+
+      Type::Struct(path) => Some(path.clone()),
+
+      _ => None,
+    }
+  }
 }
 
 #[cfg(test)]
@@ -562,6 +617,33 @@ mod tests {
           |
         4 |       let c = a < b
           |                   ^
+      "#],
+    );
+  }
+
+  #[test]
+  fn trait_resolution() {
+    check(
+      r#"
+      let a: i32 = 3
+      let b = a.add(1)
+      "#,
+      expect![@r#"
+        a: i32
+        b: i32
+      "#],
+    );
+
+    check(
+      r#"
+      let a: i32 = 3
+      let b = 4
+      let c = a.add(b)
+      "#,
+      expect![@r#"
+        a: i32
+        b: i32
+        c: i32
       "#],
     );
   }
