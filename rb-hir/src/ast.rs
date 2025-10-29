@@ -172,6 +172,12 @@ pub enum BinaryOp {
   Gte,
 }
 
+impl<const N: usize> From<[&str; N]> for Path {
+  fn from(value: [&str; N]) -> Self {
+    Path { segments: value.iter().map(|s| s.to_string()).collect() }
+  }
+}
+
 impl Path {
   pub const fn new() -> Self { Path { segments: vec![] } }
 

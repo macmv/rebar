@@ -444,7 +444,7 @@ fn check_inner(body: &str, verbose: bool, expected: rb_test::Expect) {
   let mut out = String::new();
   let mut debug = String::new();
   let res = rb_diagnostic::run(sources.clone(), || {
-    let env = Environment::empty();
+    let env = Environment::mini();
     let typer = crate::Typer::check(&env, &body, &span_map);
 
     for (id, local) in body.locals.iter() {

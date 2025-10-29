@@ -23,6 +23,19 @@ pub enum Type {
 pub struct Environment {
   pub names:   HashMap<Path, Type>,
   pub structs: HashMap<Path, Vec<(String, Type)>>,
+
+  pub traits: HashMap<Path, TraitImpls>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TraitImpls {
+  pub trait_def: TraitDef,
+  pub impls:     Vec<Path>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TraitDef {
+  pub functions: HashMap<String, Type>,
 }
 
 /// A type with variables in it. Internal to the typer.
@@ -47,7 +60,33 @@ pub(crate) enum VType {
 }
 
 impl Environment {
-  pub fn empty() -> Self { Environment { names: HashMap::new(), structs: HashMap::new() } }
+  pub fn empty() -> Self {
+    Environment { names: HashMap::new(), structs: HashMap::new(), traits: HashMap::new() }
+  }
+
+  pub fn mini() -> Self {
+    let mut env = Environment::empty();
+
+    env.traits.insert(
+      Path::from(["std", "op", "Add"]),
+      TraitImpls {
+        trait_def: TraitDef {
+          functions: HashMap::from([(
+            "add".to_string(),
+            Type::Function(vec![Type::SelfT, Type::SelfT], Box::new(Type::SelfT)),
+          )]),
+        },
+        impls:     vec![
+          Path::from(["i8"]),
+          Path::from(["i16"]),
+          Path::from(["i32"]),
+          Path::from(["i64"]),
+        ],
+      },
+    );
+
+    env
+  }
 }
 
 impl Type {
