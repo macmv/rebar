@@ -151,8 +151,12 @@ impl<'a> Typer<'a> {
       hir::Stmt::Expr(expr) => {
         self.type_expr(expr);
       }
-      hir::Stmt::Let(_, ref id, expr) => {
+      hir::Stmt::Let(_, ref id, ref te, expr) => {
         let res = self.type_expr(expr);
+        if let Some(te) = te {
+          let ty = type_of_type_expr(te);
+          self.constrain(&res, &VType::from(ty), self.span(expr));
+        }
         self.locals.insert(id.unwrap(), res);
       }
       hir::Stmt::FunctionDef(_) => {}

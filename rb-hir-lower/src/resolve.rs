@@ -117,10 +117,10 @@ fn resolve_function(
   for &item in body {
     match function.stmts[item] {
       hir::Stmt::Expr(e) => walk_until(&locals, e),
-      hir::Stmt::Let(ref name, ref mut id, e) => {
+      hir::Stmt::Let(ref name, ref mut id, ref te, e) => {
         walk_until(&locals, e);
 
-        let local = function.locals.alloc(hir::Local { name: name.to_string(), ty: None });
+        let local = function.locals.alloc(hir::Local { name: name.to_string(), ty: te.clone() });
         *id = Some(local);
         locals.insert(name.clone(), local);
       }

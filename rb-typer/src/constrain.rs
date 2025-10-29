@@ -184,9 +184,9 @@ mod tests {
   use crate::Environment;
 
   fn check(body: &str, expected: Expect) {
-    let (body, span_map) = rb_hir_lower::parse_body(body);
+    let (sources, body, span_map) = rb_hir_lower::parse_body(body);
     let env = Environment::empty();
-    let typer = crate::Typer::check(&env, &body, &span_map);
+    let typer = rb_diagnostic::run_or_exit(sources, || crate::Typer::check(&env, &body, &span_map));
 
     let mut out = String::new();
     for (id, local) in body.locals.iter() {

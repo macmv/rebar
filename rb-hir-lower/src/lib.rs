@@ -220,7 +220,9 @@ impl FunctionLower<'_, '_> {
         let name = let_stmt.ident_token().unwrap().to_string();
         let expr = self.expr_opt(let_stmt.expr());
 
-        hir::Stmt::Let(name, None, expr)
+        let te = let_stmt.ty().map(|ty| type_expr(self.source.source, &ty));
+
+        hir::Stmt::Let(name, None, te, expr)
       }
 
       // TODO: Allow inner defs to capture local variables.

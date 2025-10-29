@@ -122,8 +122,7 @@ pub enum PrimitiveType {
 pub enum Stmt {
   Expr(ExprId),
 
-  // TODO: Add type literals for explicit types.
-  Let(String, Option<LocalId>, ExprId),
+  Let(String, Option<LocalId>, Option<TypeExpr>, ExprId),
 
   FunctionDef(FunctionDef),
 
