@@ -323,6 +323,17 @@ mod tests {
     check(
       "
       let a: i32 = 3
+      let b = a
+      ",
+      expect![@r#"
+        a: i32
+        b: i32
+      "#],
+    );
+
+    check(
+      "
+      let a: i32 = 3
       let b: i8 = a
       ",
       expect![@r#"

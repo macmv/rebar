@@ -111,7 +111,10 @@ impl<'a> Typer<'a> {
   fn lower_type(&self, ty: &VType) -> Type {
     match ty {
       VType::Primitive(lit) => Type::Primitive(*lit),
+
+      // Integers default to i64.
       VType::Integer => Type::Primitive(hir::PrimitiveType::I64),
+
       VType::Array(ty) => Type::Array(Box::new(self.lower_type(ty))),
       VType::Tuple(tys) => Type::Tuple(tys.iter().map(|t| self.lower_type(t)).collect()),
       VType::Function(args, ret) => Type::Function(
@@ -119,65 +122,44 @@ impl<'a> Typer<'a> {
         Box::new(self.lower_type(ret)),
       ),
 
-      // TODO: Render type variables correctly.
-      VType::Var(v) => {
-        let var = &self.variables[*v];
-
-        if var.values.is_empty() {
-          // TODO: This is super wrong. I think I need polarity and annealing.
-          if var.uses.is_empty() {
-            Type::unit()
-          } else {
-            let mut ty = var.uses.iter().next().unwrap().clone();
-
-            for t in var.uses.iter() {
-              let t = t.clone();
-              match (ty.clone(), t.clone()) {
-                (a, b) if a == b => {}
-
-                // ew
-                (VType::Primitive(hir::PrimitiveType::I8), VType::Integer) => {}
-                (VType::Primitive(hir::PrimitiveType::I16), VType::Integer) => {}
-                (VType::Primitive(hir::PrimitiveType::I32), VType::Integer) => {}
-                (VType::Primitive(hir::PrimitiveType::I64), VType::Integer) => {}
-                (VType::Primitive(hir::PrimitiveType::U8), VType::Integer) => {}
-                (VType::Primitive(hir::PrimitiveType::U16), VType::Integer) => {}
-                (VType::Primitive(hir::PrimitiveType::U32), VType::Integer) => {}
-                (VType::Primitive(hir::PrimitiveType::U64), VType::Integer) => {}
-
-                (VType::Integer, VType::Primitive(hir::PrimitiveType::I8)) => ty = t,
-                (VType::Integer, VType::Primitive(hir::PrimitiveType::I16)) => ty = t,
-                (VType::Integer, VType::Primitive(hir::PrimitiveType::I32)) => ty = t,
-                (VType::Integer, VType::Primitive(hir::PrimitiveType::I64)) => ty = t,
-                (VType::Integer, VType::Primitive(hir::PrimitiveType::U8)) => ty = t,
-                (VType::Integer, VType::Primitive(hir::PrimitiveType::U16)) => ty = t,
-                (VType::Integer, VType::Primitive(hir::PrimitiveType::U32)) => ty = t,
-                (VType::Integer, VType::Primitive(hir::PrimitiveType::U64)) => ty = t,
-
-                _ => {
-                  emit!(var.span => "cannot unify types {} and {}", self.display_type(&ty), self.display_type(&t));
-                }
-              }
-            }
-
-            self.lower_type(&ty)
-          }
-        } else if var.values.len() == 1 {
-          self.lower_type(var.values.iter().next().unwrap())
-        } else {
-          let mut types = vec![];
-          for ty in &var.values {
-            types.push(self.lower_type(ty));
-          }
-          // TODO: Need to sort types.
-          // types.sort_unstable();
-          Type::Union(types)
-        }
-      }
+      VType::Var(v) => self.anneal(*v),
 
       VType::Union(tys) => Type::Union(tys.iter().map(|ty| self.lower_type(ty)).collect()),
 
       VType::Struct(path) => Type::Struct(path.clone()),
+    }
+  }
+
+  fn anneal(&self, v: VarId) -> Type {
+    use hir::PrimitiveType::*;
+
+    let var = &self.variables[v];
+
+    match (
+      var.values.iter().collect::<Vec<_>>().as_slice(),
+      var.uses.iter().collect::<Vec<_>>().as_slice(),
+    ) {
+      ([a], []) => self.lower_type(&a),
+      ([a], [b]) if a == b => self.lower_type(&a),
+
+      ([VType::Integer], [VType::Primitive(I8)]) => I8.into(),
+      ([VType::Integer], [VType::Primitive(I16)]) => I16.into(),
+      ([VType::Integer], [VType::Primitive(I32)]) => I32.into(),
+      ([VType::Integer], [VType::Primitive(I64)]) => I64.into(),
+      ([VType::Integer], [VType::Primitive(U8)]) => U8.into(),
+      ([VType::Integer], [VType::Primitive(U16)]) => U16.into(),
+      ([VType::Integer], [VType::Primitive(U32)]) => U32.into(),
+      ([VType::Integer], [VType::Primitive(U64)]) => U64.into(),
+
+      // Unions?
+      (_, [u1, u2]) => {
+        emit!(var.span => "cannot unify types {} and {}", self.display_type(&u1), self.display_type(&u2));
+        Type::unit()
+      }
+      (_, uses) => {
+        emit!(var.span => "cannot unify types {uses:?}");
+        Type::unit()
+      }
     }
   }
 
@@ -214,7 +196,7 @@ impl<'a> Typer<'a> {
         hir::Literal::Int(_) => {
           let v = self.fresh_var(self.span(expr), "integer".to_string());
 
-          self.constrain(&VType::Var(v), &VType::Integer, self.span(expr));
+          self.constrain(&VType::Integer, &VType::Var(v), self.span(expr));
 
           VType::Var(v)
         }
