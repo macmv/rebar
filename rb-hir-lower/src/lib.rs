@@ -506,6 +506,8 @@ fn type_expr(source: SourceId, cst: &cst::Type) -> hir::TypeExpr {
       todo!("unions!");
       // hir::TypeExpr::Union(vec![lhs, rhs])
     }
+
+    cst::Type::NeverType(_) => hir::PrimitiveType::Never.into(),
   }
 }
 

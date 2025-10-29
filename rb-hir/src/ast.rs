@@ -114,6 +114,8 @@ pub enum PrimitiveType {
   U16,
   U32,
   U64,
+
+  Never,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

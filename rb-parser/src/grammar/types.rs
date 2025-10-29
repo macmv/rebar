@@ -62,6 +62,13 @@ fn atom_type(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
       Some(m.complete(p, NAME_TYPE))
     }
 
+    // test ok
+    // fn bar() -> ! {}
+    T![!] => {
+      p.eat(T![!]);
+      Some(m.complete(p, NEVER_TYPE))
+    }
+
     _ => {
       m.abandon(p);
       p.error("expected type");

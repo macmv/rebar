@@ -10,7 +10,7 @@ fn getpid() -> i64 { intrinsics::syscall1(39) }
 fn exit(code: i64) { intrinsics::syscall2(60, code) }
 fn kill(pid: i64, sig: i64) -> i64 { intrinsics::syscall3(62, pid, sig) }
 
-fn abort() { kill(getpid(), 6) }
+fn abort() -> ! { kill(getpid(), 6) }
 
 fn assert(cond: bool) {
   if !cond {

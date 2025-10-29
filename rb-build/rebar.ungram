@@ -58,10 +58,11 @@ ParenExpr = '(' Expr ')'
 ArrayExpr = '[' Expr* ']'
 Block = '{' Stmt* '}'
 
-Type = NameType | BinaryType
+Type = NameType | BinaryType | NeverType
 
 NameType = 'ident' | 'nil'
 BinaryType = Type TypeOp Type
+NeverType = '!'
 
 CallExpr = Expr '(' ArgList ')'
 ArgList = Expr (',' Expr)*
