@@ -33,7 +33,7 @@ fn main() -> ExitCode {
                   failed.fetch_or(true, Ordering::AcqRel);
                   println!("{}... \x1b[31mfail\x1b[0m", stringified);
                   for d in diagnostics {
-                    println!("{}", d.render(&sources));
+                    println!("{}", d.render_with_color(&sources));
                   }
                 }
               });
