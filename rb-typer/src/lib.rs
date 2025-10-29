@@ -124,7 +124,44 @@ impl<'a> Typer<'a> {
         let var = &self.variables[*v];
 
         if var.values.is_empty() {
-          Type::unit()
+          // TODO: This is super wrong. I think I need polarity and annealing.
+          if var.uses.is_empty() {
+            Type::unit()
+          } else {
+            let mut ty = var.uses.iter().next().unwrap().clone();
+
+            for t in var.uses.iter() {
+              let t = t.clone();
+              match (ty.clone(), t.clone()) {
+                (a, b) if a == b => {}
+
+                // ew
+                (VType::Primitive(hir::PrimitiveType::I8), VType::Integer) => {}
+                (VType::Primitive(hir::PrimitiveType::I16), VType::Integer) => {}
+                (VType::Primitive(hir::PrimitiveType::I32), VType::Integer) => {}
+                (VType::Primitive(hir::PrimitiveType::I64), VType::Integer) => {}
+                (VType::Primitive(hir::PrimitiveType::U8), VType::Integer) => {}
+                (VType::Primitive(hir::PrimitiveType::U16), VType::Integer) => {}
+                (VType::Primitive(hir::PrimitiveType::U32), VType::Integer) => {}
+                (VType::Primitive(hir::PrimitiveType::U64), VType::Integer) => {}
+
+                (VType::Integer, VType::Primitive(hir::PrimitiveType::I8)) => ty = t,
+                (VType::Integer, VType::Primitive(hir::PrimitiveType::I16)) => ty = t,
+                (VType::Integer, VType::Primitive(hir::PrimitiveType::I32)) => ty = t,
+                (VType::Integer, VType::Primitive(hir::PrimitiveType::I64)) => ty = t,
+                (VType::Integer, VType::Primitive(hir::PrimitiveType::U8)) => ty = t,
+                (VType::Integer, VType::Primitive(hir::PrimitiveType::U16)) => ty = t,
+                (VType::Integer, VType::Primitive(hir::PrimitiveType::U32)) => ty = t,
+                (VType::Integer, VType::Primitive(hir::PrimitiveType::U64)) => ty = t,
+
+                _ => {
+                  emit!(var.span => "cannot unify types {} and {}", self.display_type(&ty), self.display_type(&t));
+                }
+              }
+            }
+
+            self.lower_type(&ty)
+          }
         } else if var.values.len() == 1 {
           self.lower_type(var.values.iter().next().unwrap())
         } else {
@@ -174,7 +211,13 @@ impl<'a> Typer<'a> {
       hir::Expr::Literal(ref lit) => match lit {
         hir::Literal::Nil => VType::Tuple(vec![]),
         hir::Literal::Bool(_) => VType::Primitive(hir::PrimitiveType::Bool),
-        hir::Literal::Int(_) => VType::Integer,
+        hir::Literal::Int(_) => {
+          let v = self.fresh_var(self.span(expr), "integer".to_string());
+
+          self.constrain(&VType::Var(v), &VType::Integer, self.span(expr));
+
+          VType::Var(v)
+        }
       },
 
       hir::Expr::String(ref segments) => {

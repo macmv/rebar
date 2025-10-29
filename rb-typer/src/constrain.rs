@@ -71,7 +71,7 @@ impl Typer<'_> {
     buf
   }
 
-  fn display_type<'a>(&'a self, ty: &'a VType) -> VTypeDisplay<'a> {
+  pub(crate) fn display_type<'a>(&'a self, ty: &'a VType) -> VTypeDisplay<'a> {
     VTypeDisplay { typer: self, vtype: ty }
   }
 }
@@ -194,7 +194,7 @@ impl Constrain<'_, '_> {
   }
 }
 
-struct VTypeDisplay<'a> {
+pub(crate) struct VTypeDisplay<'a> {
   typer: &'a Typer<'a>,
   vtype: &'a VType,
 }
@@ -281,15 +281,20 @@ mod tests {
 
   fn check(body: &str, expected: Expect) {
     let (sources, body, span_map) = rb_hir_lower::parse_body(body);
-    let env = Environment::empty();
-    let typer = rb_diagnostic::run_or_exit(sources, || crate::Typer::check(&env, &body, &span_map));
+    rb_diagnostic::run_or_exit(sources, || {
+      let env = Environment::empty();
+      let typer = crate::Typer::check(&env, &body, &span_map);
 
-    let mut out = String::new();
-    for (id, local) in body.locals.iter() {
-      let ty = typer.type_of_local(id);
-      writeln!(out, "{}: {}", local.name, ty).unwrap();
-    }
-    expected.assert_eq(&out);
+      let mut out = String::new();
+      for (id, local) in body.locals.iter() {
+        let ty = typer.type_of_local(id);
+        writeln!(out, "{}: {}", local.name, ty).unwrap();
+      }
+      if !rb_diagnostic::is_ok() {
+        return;
+      }
+      expected.assert_eq(&out);
+    });
   }
 
   #[test]
@@ -311,6 +316,7 @@ mod tests {
     check(
       "
       let a: i32 = 3
+      let b: i8 = a
       ",
       expect![@r#"
         a: i32
