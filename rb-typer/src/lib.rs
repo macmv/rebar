@@ -448,11 +448,17 @@ impl<'a> Typer<'a> {
 }
 
 #[cfg(test)]
-fn check(body: &str, expected: rb_test::Expect) {
+fn check(body: &str, expected: rb_test::Expect) { check_inner(body, false, expected); }
+#[cfg(test)]
+fn check_v(body: &str, expected: rb_test::Expect) { check_inner(body, true, expected); }
+
+#[cfg(test)]
+fn check_inner(body: &str, verbose: bool, expected: rb_test::Expect) {
   use std::fmt::Write;
 
   let (sources, body, span_map) = rb_hir_lower::parse_body(body);
   let mut out = String::new();
+  let mut debug = String::new();
   let res = rb_diagnostic::run(sources.clone(), || {
     let env = Environment::empty();
     let typer = crate::Typer::check(&env, &body, &span_map);
@@ -462,31 +468,29 @@ fn check(body: &str, expected: rb_test::Expect) {
       writeln!(out, "{}: {}", local.name, ty).unwrap();
     }
 
-    /*
-    writeln!(out).unwrap();
+    if verbose {
+      writeln!(debug).unwrap();
 
-    for (v, var) in typer.variables.iter() {
-      writeln!(out, "v{} ({}):", v.into_raw().into_u32(), var.description).unwrap();
-      for v in var.values.keys() {
-        writeln!(out, "  + {:?}", v).unwrap();
-      }
-      for u in var.uses.keys() {
-        writeln!(out, "  - {:?}", u).unwrap();
+      for (v, var) in typer.variables.iter() {
+        writeln!(debug, "v{} ({}):", v.into_raw().into_u32(), var.description).unwrap();
+        for v in var.values.keys() {
+          writeln!(debug, "  + {:?}", v).unwrap();
+        }
+        for u in var.uses.keys() {
+          writeln!(debug, "  - {:?}", u).unwrap();
+        }
       }
     }
-
-    println!("{out}");
-    */
   });
 
   match res {
-    Ok(()) => expected.assert_eq(&out),
+    Ok(()) => expected.assert_eq(&format!("{out}{debug}")),
     Err(e) => {
       let mut out = String::new();
       for e in e {
         write!(out, "{}", e.render(&sources)).unwrap();
       }
-      expected.assert_eq(&out);
+      expected.assert_eq(&format!("{out}{debug}"));
     }
   }
 }
@@ -554,7 +558,7 @@ mod tests {
 
   #[test]
   fn check_comparison() {
-    check(
+    check_v(
       r#"
       let a: i32 = 3
       let b: i8 = 4
@@ -564,6 +568,18 @@ mod tests {
         a: i32
         b: i8
         c: bool
+
+        v0 (integer):
+          + Integer
+          - Primitive(I32)
+        v1 (integer):
+          + Integer
+          - Primitive(I8)
+        v2 (return type of binary op Lt):
+          + Primitive(Bool)
+        v3 (arg for Lt):
+          + Primitive(I32)
+          + Primitive(I8)
       "#],
     );
   }
