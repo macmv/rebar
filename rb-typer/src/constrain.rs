@@ -1,3 +1,5 @@
+use std::fmt;
+
 use rb_diagnostic::{Span, emit};
 use rb_hir::ast as hir;
 
@@ -37,8 +39,11 @@ impl Typer<'_> {
 
     match e {
       TypeError::NotSubtype(v, u) => {
-        // TODO: Need display-only type
-        buf.push_str(&format!("{} is not a subtype of {}", self.lower_type(v), self.lower_type(u)));
+        buf.push_str(&format!(
+          "{} is not a subtype of {}",
+          self.display_type(v),
+          self.display_type(u)
+        ));
         buf.push('\n');
       }
       TypeError::UnresolvedUnion(v, u, errors) => {
@@ -64,6 +69,10 @@ impl Typer<'_> {
     }
 
     buf
+  }
+
+  fn display_type<'a>(&'a self, ty: &'a VType) -> VTypeDisplay<'a> {
+    VTypeDisplay { typer: self, vtype: ty }
   }
 }
 
@@ -174,6 +183,84 @@ impl Constrain<'_, '_> {
       Ok(())
     } else {
       Err(TypeError::UnresolvedUnion(v.clone(), u.clone(), tmp.errors))
+    }
+  }
+}
+
+struct VTypeDisplay<'a> {
+  typer: &'a Typer<'a>,
+  vtype: &'a VType,
+}
+
+impl fmt::Display for VTypeDisplay<'_> {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self.vtype {
+      VType::Primitive(lit) => write!(f, "{lit}"),
+      VType::Integer => write!(f, "integer"),
+      VType::Array(ty) => {
+        write!(f, "array<")?;
+        write!(f, "{}", self.typer.display_type(ty))?;
+        write!(f, ">")
+      }
+      VType::Tuple(tys) => {
+        write!(f, "(")?;
+        for (i, ty) in tys.iter().enumerate() {
+          if i != 0 {
+            write!(f, ", ")?;
+          }
+          write!(f, "{}", self.typer.display_type(ty))?;
+        }
+        write!(f, ")")
+      }
+
+      VType::Function(args, ret) => {
+        write!(f, "fn(")?;
+        for (i, ty) in args.iter().enumerate() {
+          if i != 0 {
+            write!(f, ", ")?;
+          }
+          write!(f, "{}", self.typer.display_type(ty))?;
+        }
+        write!(f, ") -> {}", self.typer.display_type(ret))
+      }
+
+      // TODO: Render type variables correctly.
+      VType::Var(v) => {
+        let var = &self.typer.variables[*v];
+
+        if var.values.is_empty() {
+          write!(f, "()")
+        } else if var.values.len() == 1 {
+          write!(f, "{}", self.typer.display_type(var.values.iter().next().unwrap()))
+        } else {
+          let mut types = vec![];
+          for ty in &var.values {
+            types.push(self.typer.display_type(ty));
+          }
+          // TODO: Need to sort types.
+          // types.sort_unstable();
+
+          for (i, t) in types.iter().enumerate() {
+            if i != 0 {
+              write!(f, " | ")?;
+            }
+            write!(f, "{}", t)?;
+          }
+          Ok(())
+        }
+      }
+
+      VType::Union(tys) => {
+        for (i, t) in tys.iter().enumerate() {
+          if i != 0 {
+            write!(f, " | ")?;
+          }
+          write!(f, "{}", self.typer.display_type(t))?;
+        }
+        Ok(())
+      }
+
+      VType::Struct(path) => write!(f, "{path}"),
     }
   }
 }
