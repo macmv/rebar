@@ -196,10 +196,12 @@ impl<'a> Typer<'a> {
       hir::Stmt::Let(_, ref id, ref te, expr) => {
         let res = self.type_expr(expr);
         if let Some(te) = te {
-          let ty = type_of_type_expr(te);
-          self.constrain(&res, &VType::from(ty), self.span(expr));
+          let ty = VType::from(type_of_type_expr(te));
+          self.constrain(&res, &ty, self.span(expr));
+          self.locals.insert(id.unwrap(), ty);
+        } else {
+          self.locals.insert(id.unwrap(), res);
         }
-        self.locals.insert(id.unwrap(), res);
       }
       hir::Stmt::FunctionDef(_) => {}
       hir::Stmt::Struct => {}
@@ -502,11 +504,8 @@ mod tests {
       let b = a + 1
       ",
       expect![@r#"
-        error: cannot unify types i32 and i64
-         --> inline.rbr:2:20
-          |
-        2 |       let a: i32 = 3
-          |                    ^
+        a: i32
+        b: i32
       "#],
     );
   }
