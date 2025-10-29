@@ -47,7 +47,7 @@ Escape = '\\' 'ident'
 Interpolation = '#' '{' Expr '}'
 
 PathExpr = Path
-FieldExpr = Expr '.' Name
+FieldExpr = Expr '.' 'ident'
 PrefixExpr = PrefixOp Expr
 PostfixExpr = PostfixOp Expr
 BinaryExpr = Expr BinaryOp Expr

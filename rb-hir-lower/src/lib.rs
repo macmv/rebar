@@ -392,6 +392,13 @@ impl FunctionLower<'_, '_> {
         hir::Expr::Index(lhs, rhs)
       }
 
+      cst::Expr::FieldExpr(ref expr) => {
+        let lhs = self.expr_opt(expr.expr());
+        let field = expr.ident_token().unwrap().text().to_string();
+
+        hir::Expr::Field(lhs, field)
+      }
+
       cst::Expr::CallExpr(ref expr) => {
         let lhs = self.expr_opt(expr.expr());
 

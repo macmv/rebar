@@ -384,6 +384,14 @@ impl<'a> Typer<'a> {
         elem
       }
 
+      hir::Expr::Field(lhs, _) => {
+        let lhs = self.type_expr(lhs);
+
+        // TODO
+
+        lhs
+      }
+
       hir::Expr::If { cond, then, els } => {
         let cond_ty = self.type_expr(cond);
 

@@ -225,6 +225,16 @@ fn postfix_expr(p: &mut Parser, mut lhs: CompletedMarker) -> CompletedMarker {
   loop {
     lhs = match p.current() {
       // test ok
+      // foo.bar()
+      // foo.baz[3]
+      T![.] => {
+        let m = lhs.precede(p);
+        p.eat(T![.]);
+        p.expect(T![ident]);
+        m.complete(p, FIELD_EXPR)
+      }
+
+      // test ok
       // hi(3)
       // hello(2, 3)(4)
       T!['('] => {

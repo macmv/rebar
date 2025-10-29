@@ -72,6 +72,7 @@ pub enum Expr {
   UnaryOp(ExprId, UnaryOp),
   BinaryOp(ExprId, BinaryOp, ExprId),
   Index(ExprId, ExprId),
+  Field(ExprId, String),
   StructInit(Path, Vec<(String, ExprId)>),
 
   // TODO: Is this really needed?
