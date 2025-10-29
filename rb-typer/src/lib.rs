@@ -461,6 +461,7 @@ fn check(body: &str, expected: rb_test::Expect) {
       writeln!(out, "{}: {}", local.name, ty).unwrap();
     }
 
+    /*
     writeln!(out).unwrap();
 
     for (v, var) in typer.variables.iter() {
@@ -474,6 +475,7 @@ fn check(body: &str, expected: rb_test::Expect) {
     }
 
     println!("{out}");
+    */
   });
 
   match res {
