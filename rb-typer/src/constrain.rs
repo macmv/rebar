@@ -165,7 +165,14 @@ impl Constrain<'_, '_> {
         });
       }
 
+      (VType::Integer, VType::Primitive(hir::PrimitiveType::I8)) => {}
+      (VType::Integer, VType::Primitive(hir::PrimitiveType::I16)) => {}
+      (VType::Integer, VType::Primitive(hir::PrimitiveType::I32)) => {}
       (VType::Integer, VType::Primitive(hir::PrimitiveType::I64)) => {}
+      (VType::Integer, VType::Primitive(hir::PrimitiveType::U8)) => {}
+      (VType::Integer, VType::Primitive(hir::PrimitiveType::U16)) => {}
+      (VType::Integer, VType::Primitive(hir::PrimitiveType::U32)) => {}
+      (VType::Integer, VType::Primitive(hir::PrimitiveType::U64)) => {}
 
       (v, u) => self.error(TypeError::NotSubtype(v.clone(), u.clone())),
     }
