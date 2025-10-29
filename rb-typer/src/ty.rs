@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt};
 
-use indexmap::IndexSet;
+use indexmap::IndexMap;
 use la_arena::Idx;
 use rb_diagnostic::Span;
 use rb_hir::ast::{self as hir, Path};
@@ -78,8 +78,8 @@ pub type VarId = Idx<TypeVar>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeVar {
-  pub values: IndexSet<VType>,
-  pub uses:   IndexSet<VType>,
+  pub values: IndexMap<VType, Span>,
+  pub uses:   IndexMap<VType, Span>,
 
   pub span:        Span,
   pub description: String,
@@ -87,7 +87,7 @@ pub struct TypeVar {
 
 impl TypeVar {
   pub fn new(span: Span, description: String) -> Self {
-    TypeVar { values: IndexSet::new(), uses: IndexSet::new(), span, description }
+    TypeVar { values: IndexMap::new(), uses: IndexMap::new(), span, description }
   }
 }
 

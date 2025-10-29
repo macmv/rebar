@@ -135,10 +135,10 @@ impl<'a> Typer<'a> {
 
     let var = &self.variables[v];
 
-    match (
-      var.values.iter().collect::<Vec<_>>().as_slice(),
-      var.uses.iter().collect::<Vec<_>>().as_slice(),
-    ) {
+    let values = var.values.keys().collect::<Vec<_>>();
+    let uses = var.uses.keys().collect::<Vec<_>>();
+
+    match (values.as_slice(), uses.as_slice()) {
       ([a], []) => self.lower_type(&a),
       ([a], [b]) if a == b => self.lower_type(&a),
 

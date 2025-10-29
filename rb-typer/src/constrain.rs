@@ -96,8 +96,8 @@ impl Constrain<'_, '_> {
         let sp = self.typer.variables[*v].span;
         self.ctx(format!("constraining {desc} to {u:?}"), Some(sp), |c| {
           let vvar = &mut c.typer.variables[*v];
-          if vvar.uses.insert(u.clone()) {
-            for v0 in vvar.values.clone() {
+          if vvar.uses.insert(u.clone(), span).is_none() {
+            for v0 in vvar.values.clone().keys() {
               c.constrain(&v0, u, span);
             }
           }
@@ -108,8 +108,8 @@ impl Constrain<'_, '_> {
         let sp = self.typer.variables[*u].span;
         self.ctx(format!("constraining {v:?} to {desc}"), Some(sp), |c| {
           let uvar = &mut c.typer.variables[*u];
-          if uvar.values.insert(v.clone()) {
-            for u0 in uvar.uses.clone() {
+          if uvar.values.insert(v.clone(), span).is_none() {
+            for u0 in uvar.uses.clone().keys() {
               c.constrain(v, &u0, span);
             }
           }
@@ -238,10 +238,10 @@ impl fmt::Display for VTypeDisplay<'_> {
         if var.values.is_empty() {
           write!(f, "()")
         } else if var.values.len() == 1 {
-          write!(f, "{}", self.typer.display_type(var.values.iter().next().unwrap()))
+          write!(f, "{}", self.typer.display_type(var.values.keys().next().unwrap()))
         } else {
           let mut types = vec![];
-          for ty in &var.values {
+          for ty in var.values.keys() {
             types.push(self.typer.display_type(ty));
           }
           // TODO: Need to sort types.
