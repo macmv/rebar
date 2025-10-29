@@ -180,12 +180,17 @@ impl Constrain<'_, '_> {
 mod tests {
   use rb_test::{Expect, expect};
 
+  use crate::Environment;
+
   fn check(body: &str, expected: Expect) {
-    let body = rb_hir_lower::parse_body(body);
+    let (body, span_map) = rb_hir_lower::parse_body(body);
+    let env = Environment::empty();
+    let typer = crate::Typer::check(&env, &body, &span_map);
 
     let mut out = String::new();
-    for local in body.locals.values() {
-      out.push_str(&format!("{}: {:?}\n", local.name, local.ty));
+    for (id, local) in body.locals.iter() {
+      let ty = typer.type_of_local(id);
+      out.push_str(&format!("{}: {:?}\n", local.name, ty));
     }
     expected.assert_eq(&out);
   }
@@ -198,8 +203,8 @@ mod tests {
       let b = 3
       ",
       expect![@r#"
-        a: None
-        b: None
+        a: Primitive(I64)
+        b: Primitive(I64)
       "#],
     );
   }

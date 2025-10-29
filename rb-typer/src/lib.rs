@@ -4,7 +4,7 @@ use la_arena::Arena;
 use rb_diagnostic::{Span, emit};
 use rb_hir::{
   FunctionSpanMap,
-  ast::{self as hir, ExprId, StmtId},
+  ast::{self as hir, ExprId, LocalId, StmtId},
 };
 use ty::{TypeVar, VType, VarId};
 
@@ -106,6 +106,7 @@ impl<'a> Typer<'a> {
   }
 
   pub fn type_of_expr(&self, expr: ExprId) -> Type { self.lower_type(&self.exprs[&expr]) }
+  pub fn type_of_local(&self, local: LocalId) -> Type { self.lower_type(&self.locals[&local]) }
 
   fn lower_type(&self, ty: &VType) -> Type {
     match ty {

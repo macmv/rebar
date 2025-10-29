@@ -19,7 +19,7 @@ pub use fs::FileSystem;
 pub use resolve::resolve_hir;
 
 #[cfg(feature = "test")]
-pub fn parse_body(body: &str) -> hir::Function {
+pub fn parse_body(body: &str) -> (hir::Function, FunctionSpanMap) {
   use rb_diagnostic::{Source, Sources};
   use std::sync::Arc;
 
@@ -48,8 +48,13 @@ pub fn parse_body(body: &str) -> hir::Function {
     let mut span_map = SpanMap::default();
     span_map.modules.insert(Path::new(), module_span_map);
     crate::resolve_hir(&mut module, &span_map);
+    let mut module_span_map = span_map.modules.remove(&Path::new()).unwrap();
 
-    module.functions[module.main_function.unwrap()].clone()
+    let function = module.functions[module.main_function.unwrap()].clone();
+    let function_span_map =
+      module_span_map.functions.remove(&module.main_function.unwrap()).unwrap();
+
+    (function, function_span_map)
   })
 }
 
