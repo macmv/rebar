@@ -90,7 +90,7 @@ impl Context {
     match *self.diagnostics.lock() {
       Some(ref mut diagnostics) => diagnostics.push(diagnostic),
       None => {
-        eprintln!("{}", diagnostic.render(self.sources()));
+        eprintln!("{}", diagnostic.render_with_color(self.sources()));
       }
     }
   }
