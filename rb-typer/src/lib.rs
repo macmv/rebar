@@ -521,6 +521,22 @@ mod tests {
   }
 
   #[test]
+  fn unify_equality() {
+    check(
+      "
+      let a: i32 = 3
+      let b = 4
+      let c = a == b
+      ",
+      expect![@r#"
+        a: i32
+        b: i32
+        c: bool
+      "#],
+    );
+  }
+
+  #[test]
   fn unify_comparison() {
     check(
       "
@@ -531,6 +547,22 @@ mod tests {
       expect![@r#"
         a: i32
         b: i32
+        c: bool
+      "#],
+    );
+  }
+
+  #[test]
+  fn check_comparison() {
+    check(
+      r#"
+      let a: i32 = 3
+      let b: i8 = 4
+      let c = a < b
+      "#,
+      expect![@r#"
+        a: i32
+        b: i8
         c: bool
       "#],
     );
