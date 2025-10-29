@@ -74,8 +74,11 @@ impl Diagnostic {
 
       let start =
         u32::from(source.line_index.offset(LineCol { line: pos.line, col: 0 }).unwrap()) as usize;
-      let end = u32::from(source.line_index.offset(LineCol { line: pos.line + 1, col: 0 }).unwrap())
-        as usize;
+      let end = source
+        .line_index
+        .offset(LineCol { line: pos.line + 1, col: 0 })
+        .map(|o| u32::from(o) as usize)
+        .unwrap_or(source.source.len());
 
       let line_str = &source.source[start..end].trim_end();
 
