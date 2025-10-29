@@ -115,6 +115,7 @@ impl<'a> Typer<'a> {
 
   fn lower_type(&self, ty: &VType) -> Type {
     match ty {
+      VType::SelfT => Type::SelfT,
       VType::Primitive(lit) => Type::Primitive(*lit),
 
       // Integers default to i64.

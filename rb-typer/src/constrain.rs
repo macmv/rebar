@@ -276,6 +276,7 @@ pub(crate) struct VTypeDisplay<'a> {
 impl fmt::Display for VTypeDisplay<'_> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self.vtype {
+      VType::SelfT => write!(f, "Self"),
       VType::Primitive(lit) => write!(f, "{lit}"),
       VType::Integer => write!(f, "integer"),
       VType::Array(ty) => {

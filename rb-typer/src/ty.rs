@@ -8,6 +8,7 @@ use rb_hir::ast::{self as hir, Path};
 /// A rendered type. This is the result of typechecking.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
+  SelfT,
   Primitive(hir::PrimitiveType),
   Array(Box<Type>),
   Tuple(Vec<Type>),
@@ -27,6 +28,7 @@ pub struct Environment {
 /// A type with variables in it. Internal to the typer.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum VType {
+  SelfT,
   Integer,
   Primitive(hir::PrimitiveType),
 
@@ -55,6 +57,7 @@ impl Type {
 impl From<Type> for VType {
   fn from(ty: Type) -> Self {
     match ty {
+      Type::SelfT => VType::SelfT,
       Type::Primitive(lit) => VType::Primitive(lit),
       Type::Array(ty) => VType::Array(Box::new((*ty).into())),
       Type::Tuple(types) => VType::Tuple(types.into_iter().map(Into::into).collect()),
@@ -94,6 +97,7 @@ impl TypeVar {
 impl fmt::Display for Type {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
+      Type::SelfT => write!(f, "Self"),
       Type::Primitive(p) => write!(f, "{p}"),
       Type::Array(ty) => write!(f, "Array[{}]", ty),
       Type::Tuple(types) => {
