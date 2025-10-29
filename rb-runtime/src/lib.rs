@@ -223,7 +223,7 @@ pub fn run_parallel<I: Send + Sync, C: Send, O: Send + Sync>(
     results.push(Vec::with_capacity(chunk_size));
   }
 
-  std::thread::scope(|scope| {
+  rb_diagnostic::scope(|scope| {
     for (chunk, out) in input.chunks(chunk_size).zip(results.iter_mut()) {
       let mut ctx = ctx();
 

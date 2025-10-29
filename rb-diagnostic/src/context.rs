@@ -31,6 +31,19 @@ impl Context {
     Context { error: AtomicBool::new(false), diagnostics: Mutex::new(None), sources }
   }
 
+  pub fn overwrite_thread(self: Arc<Self>) {
+    CONTEXT.with(|c| {
+      let mut c = c.borrow_mut();
+
+      if c.is_some() {
+        panic!("context already initialized");
+      }
+
+      *c = Some(self);
+    });
+  }
+  pub fn clone_for_thread(self: &Arc<Self>) -> Arc<Self> { Arc::clone(self) }
+
   pub fn is_ok(&self) -> bool { !self.error.load(std::sync::atomic::Ordering::SeqCst) }
 
   pub fn enable_error_collection(&self) { *self.diagnostics.lock() = Some(vec![]); }
@@ -64,7 +77,7 @@ impl Context {
     });
   }
 
-  pub fn run<T>(f: impl FnOnce(&Context) -> T) -> T {
+  pub fn run<T>(f: impl FnOnce(&Arc<Context>) -> T) -> T {
     CONTEXT.with(|c| {
       let c = c.borrow_mut();
       f(c.as_ref().expect("context not initialized"))

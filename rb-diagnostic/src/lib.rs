@@ -39,6 +39,37 @@ pub fn run_both<T>(sources: Arc<Sources>, f: impl FnOnce() -> T) -> (T, Vec<Diag
   (res, errors)
 }
 
+#[repr(transparent)]
+pub struct Scope<'scope, 'env: 'scope> {
+  scope: std::thread::Scope<'scope, 'env>,
+}
+
+pub fn scope<'env, F, T>(f: F) -> T
+where
+  F: for<'scope> FnOnce(&'scope Scope<'scope, 'env>) -> T,
+{
+  std::thread::scope(|scope| {
+    // SAFETY: It's `repr(transparent)`, with all the same lifetimes.
+    let scope =
+      unsafe { std::mem::transmute::<&std::thread::Scope<'_, 'env>, &Scope<'_, 'env>>(scope) };
+    f(scope)
+  })
+}
+
+impl<'scope> Scope<'scope, '_> {
+  pub fn spawn<F, T>(&'scope self, f: F) -> std::thread::ScopedJoinHandle<'scope, T>
+  where
+    F: FnOnce() -> T + Send + 'scope,
+    T: Send + 'scope,
+  {
+    let clone = Context::run(|ctx| ctx.clone_for_thread());
+    self.scope.spawn(|| {
+      clone.overwrite_thread();
+      f()
+    })
+  }
+}
+
 pub fn emit(diagnostic: Diagnostic) {
   Context::run(|ctx| {
     ctx.error(diagnostic);
