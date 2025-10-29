@@ -337,14 +337,6 @@ impl<'a> Typer<'a> {
         let lhs = self.type_expr(lhs_expr);
         let rhs = self.type_expr(rhs_expr);
 
-        let ret =
-          VType::Var(self.fresh_var(self.span(expr), format!("return type of binary op {op:?}")));
-
-        // TODO: Need to handle impls right here.
-        self.constrain(&rhs, &lhs, self.span(rhs_expr));
-
-        let call_type = VType::Function(vec![lhs, rhs], Box::new(ret.clone()));
-
         match op {
           hir::BinaryOp::Add
           | hir::BinaryOp::Sub
@@ -356,40 +348,27 @@ impl<'a> Typer<'a> {
           | hir::BinaryOp::Xor
           | hir::BinaryOp::ShiftLeft
           | hir::BinaryOp::ShiftRight => {
-            let t = VType::Var(self.fresh_var(self.span(expr), format!("arg for {op:?}")));
+            self.constrain(&lhs, &VType::Integer, self.span(rhs_expr));
+            self.constrain(&rhs, &lhs, self.span(rhs_expr));
 
-            self.constrain(&VType::Integer, &t, self.span(expr));
-            self.constrain(
-              &VType::Function(vec![t.clone(), t.clone()], Box::new(t)),
-              &call_type,
-              self.span(expr),
-            );
+            lhs
           }
 
           hir::BinaryOp::Eq | hir::BinaryOp::Neq => {
-            let arg = VType::Var(self.fresh_var(self.span(expr), format!("arg for {op:?}")));
+            self.constrain(&lhs, &rhs, self.span(rhs_expr));
 
-            self.constrain(
-              &VType::Function(vec![arg.clone(), arg], Box::new(hir::PrimitiveType::Bool.into())),
-              &call_type,
-              self.span(expr),
-            );
+            hir::PrimitiveType::Bool.into()
           }
 
           hir::BinaryOp::Lt | hir::BinaryOp::Lte | hir::BinaryOp::Gt | hir::BinaryOp::Gte => {
-            let t = VType::Var(self.fresh_var(self.span(expr), format!("arg for {op:?}")));
+            self.constrain(&lhs, &VType::Integer, self.span(rhs_expr));
+            self.constrain(&rhs, &lhs, self.span(rhs_expr));
 
-            self.constrain(
-              &VType::Function(vec![t.clone(), t], Box::new(hir::PrimitiveType::Bool.into())),
-              &call_type,
-              self.span(expr),
-            );
+            hir::PrimitiveType::Bool.into()
           }
 
           _ => unimplemented!("binary op {op:?}"),
         }
-
-        ret
       }
 
       hir::Expr::Index(lhs, rhs) => {

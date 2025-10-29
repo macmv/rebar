@@ -170,6 +170,8 @@ impl Constrain<'_, '_> {
         });
       }
 
+      // All integers get coalesced to `integer`. This is what makes integer literals
+      // turn into any concrete integer type.
       (VType::Integer, VType::Primitive(hir::PrimitiveType::I8)) => {}
       (VType::Integer, VType::Primitive(hir::PrimitiveType::I16)) => {}
       (VType::Integer, VType::Primitive(hir::PrimitiveType::I32)) => {}
@@ -178,6 +180,18 @@ impl Constrain<'_, '_> {
       (VType::Integer, VType::Primitive(hir::PrimitiveType::U16)) => {}
       (VType::Integer, VType::Primitive(hir::PrimitiveType::U32)) => {}
       (VType::Integer, VType::Primitive(hir::PrimitiveType::U64)) => {}
+
+      // All primitive integers are subtypes of `integer`.
+      //
+      // TODO: This should get removed once we have number impls.
+      (VType::Primitive(hir::PrimitiveType::I8), VType::Integer) => {}
+      (VType::Primitive(hir::PrimitiveType::I16), VType::Integer) => {}
+      (VType::Primitive(hir::PrimitiveType::I32), VType::Integer) => {}
+      (VType::Primitive(hir::PrimitiveType::I64), VType::Integer) => {}
+      (VType::Primitive(hir::PrimitiveType::U8), VType::Integer) => {}
+      (VType::Primitive(hir::PrimitiveType::U16), VType::Integer) => {}
+      (VType::Primitive(hir::PrimitiveType::U32), VType::Integer) => {}
+      (VType::Primitive(hir::PrimitiveType::U64), VType::Integer) => {}
 
       (v, u) => self.error(TypeError::NotSubtype(v.clone(), u.clone())),
     }
@@ -389,16 +403,11 @@ mod tests {
       let b: i8 = a
       ",
       expect![@r#"
-        error: cannot unify types i32 and i8
-         --> inline.rbr:2:20
+        error: i32 is not a subtype of i8
+         --> inline.rbr:3:19
           |
-        2 |       let a: i32 = 3
-          |                    ^
-        error: cannot unify types i32 and i8
-         --> inline.rbr:2:20
-          |
-        2 |       let a: i32 = 3
-          |                    ^
+        3 |       let b: i8 = a
+          |                   ^
       "#],
     );
   }
