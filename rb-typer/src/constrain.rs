@@ -297,7 +297,7 @@ mod tests {
       Err(e) => {
         let mut out = String::new();
         for e in e {
-          writeln!(out, "{}", e.render(&sources)).unwrap();
+          write!(out, "{}", e.render(&sources)).unwrap();
         }
         expected.assert_eq(&out);
       }
@@ -326,7 +326,16 @@ mod tests {
       let b: i8 = a
       ",
       expect![@r#"
-        a: i32
+        error: cannot unify types i8 and i32
+         --> inline.rbr:2:20
+          |
+        2 |       let a: i32 = 3
+          |                    ^
+        error: cannot unify types i8 and i32
+         --> inline.rbr:2:20
+          |
+        2 |       let a: i32 = 3
+          |                    ^
       "#],
     );
   }
