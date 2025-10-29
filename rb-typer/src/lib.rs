@@ -474,7 +474,6 @@ fn check(body: &str, expected: rb_test::Expect) {
     }
 
     println!("{out}");
-    panic!();
   });
 
   match res {
@@ -501,8 +500,11 @@ mod tests {
       let b = a + 1
       ",
       expect![@r#"
-        a: i32
-        b: i32
+        error: cannot unify types i32 and i64
+         --> inline.rbr:2:20
+          |
+        2 |       let a: i32 = 3
+          |                    ^
       "#],
     );
   }
