@@ -262,7 +262,7 @@ impl<'a> Typer<'a> {
           if let Some(path) = self.resolve_type(&lhs) {
             if let Some(signature) = self.env.impl_type(&path, &method) {
               let ret = VType::Var(
-                self.fresh_var(self.span(expr), format!("return type of calling {:?}", lhs)),
+                self.fresh_var(self.span(expr), format!("return type of calling {path}::{method}")),
               );
 
               // This is an impl method, so fill in `self` with the type we're calling it on.
@@ -275,9 +275,9 @@ impl<'a> Typer<'a> {
                 Box::new(ret.clone()),
               );
 
-              self.constrain(&call_type, &signature.clone().into(), self.span(lhs_expr));
+              self.constrain(&signature.clone().into(), &call_type, self.span(lhs_expr));
 
-              lhs
+              ret
             } else {
               emit!(self.span(expr) => "method {} not found for type {}", method, self.display_type(&lhs));
 
@@ -634,7 +634,7 @@ mod tests {
       "#],
     );
 
-    check(
+    check_v(
       r#"
       let a: i32 = 3
       let b = 4
@@ -644,6 +644,15 @@ mod tests {
         a: i32
         b: i32
         c: i32
+
+        v0 (integer):
+          + Integer
+          - Primitive(I32)
+        v1 (integer):
+          + Integer
+          - Primitive(I32)
+        v2 (return type of calling i32::add):
+          + Primitive(I32)
       "#],
     );
   }
