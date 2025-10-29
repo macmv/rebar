@@ -27,13 +27,28 @@ pub fn parse_body(body: &str) -> hir::Function {
   let id = sources.add(Source::new("inline.rbr".to_string(), body.to_string()));
   let sources_arc = Arc::new(sources);
   rb_diagnostic::run_or_exit(sources_arc, || {
+    use rb_hir::SpanMap;
+
     let res = cst::SourceFile::parse(&body);
     if !res.errors().is_empty() {
       for error in res.errors() {
         emit!(Span { file: id, range: error.span() } => error.message());
       }
     }
-    let (module, _, _) = crate::lower_source(res.tree(), id);
+
+    if !rb_diagnostic::is_ok() {
+      return Default::default();
+    }
+
+    let (mut module, module_span_map, _) = crate::lower_source(res.tree(), id);
+    if !rb_diagnostic::is_ok() {
+      return Default::default();
+    }
+
+    let mut span_map = SpanMap::default();
+    span_map.modules.insert(Path::new(), module_span_map);
+    crate::resolve_hir(&mut module, &span_map);
+
     module.functions[module.main_function.unwrap()].clone()
   })
 }
