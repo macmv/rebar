@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use indexmap::IndexSet;
 use la_arena::Arena;
 use rb_diagnostic::{Span, emit};
 use rb_hir::{
@@ -12,6 +13,10 @@ mod constrain;
 mod ty;
 
 pub use ty::{Environment, Type};
+
+#[cfg(test)]
+#[macro_use]
+extern crate rb_test;
 
 /// A typechecker for a function body.
 ///
@@ -135,8 +140,26 @@ impl<'a> Typer<'a> {
 
     let var = &self.variables[v];
 
-    let values = var.values.keys().collect::<Vec<_>>();
-    let uses = var.uses.keys().collect::<Vec<_>>();
+    let values = var
+      .values
+      .keys()
+      .map(|t| match t {
+        VType::Var(v) => VType::from(self.anneal(*v)),
+        t => t.clone(),
+      })
+      .collect::<IndexSet<_>>();
+
+    let uses = var
+      .uses
+      .keys()
+      .map(|t| match t {
+        VType::Var(v) => VType::from(self.anneal(*v)),
+        t => t.clone(),
+      })
+      .filter(|t| !values.contains(t))
+      .collect::<Vec<_>>();
+
+    let values = values.into_iter().collect::<Vec<_>>();
 
     match (values.as_slice(), uses.as_slice()) {
       ([a], []) => self.lower_type(&a),
@@ -420,5 +443,52 @@ impl<'a> Typer<'a> {
 
     self.exprs.insert(expr, ty.clone());
     ty
+  }
+}
+
+#[cfg(test)]
+fn check(body: &str, expected: rb_test::Expect) {
+  use std::fmt::Write;
+
+  let (sources, body, span_map) = rb_hir_lower::parse_body(body);
+  let mut out = String::new();
+  let res = rb_diagnostic::run(sources.clone(), || {
+    let env = Environment::empty();
+    let typer = crate::Typer::check(&env, &body, &span_map);
+
+    for (id, local) in body.locals.iter() {
+      let ty = typer.type_of_local(id);
+      writeln!(out, "{}: {}", local.name, ty).unwrap();
+    }
+  });
+
+  match res {
+    Ok(()) => expected.assert_eq(&out),
+    Err(e) => {
+      let mut out = String::new();
+      for e in e {
+        write!(out, "{}", e.render(&sources)).unwrap();
+      }
+      expected.assert_eq(&out);
+    }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn unify_addition() {
+    check(
+      "
+      let a: i32 = 3
+      let b = a + 1
+      ",
+      expect![@r#"
+        a: i32
+        b: i32
+      "#],
+    );
   }
 }

@@ -274,35 +274,7 @@ impl fmt::Display for VTypeDisplay<'_> {
 
 #[cfg(test)]
 mod tests {
-  use rb_test::{Expect, expect};
-  use std::fmt::Write;
-
-  use crate::Environment;
-
-  fn check(body: &str, expected: Expect) {
-    let (sources, body, span_map) = rb_hir_lower::parse_body(body);
-    let mut out = String::new();
-    let res = rb_diagnostic::run(sources.clone(), || {
-      let env = Environment::empty();
-      let typer = crate::Typer::check(&env, &body, &span_map);
-
-      for (id, local) in body.locals.iter() {
-        let ty = typer.type_of_local(id);
-        writeln!(out, "{}: {}", local.name, ty).unwrap();
-      }
-    });
-
-    match res {
-      Ok(()) => expected.assert_eq(&out),
-      Err(e) => {
-        let mut out = String::new();
-        for e in e {
-          write!(out, "{}", e.render(&sources)).unwrap();
-        }
-        expected.assert_eq(&out);
-      }
-    }
-  }
+  use crate::check;
 
   #[test]
   fn it_works() {
@@ -347,20 +319,6 @@ mod tests {
           |
         2 |       let a: i32 = 3
           |                    ^
-      "#],
-    );
-  }
-
-  #[test]
-  fn unify_addition() {
-    check(
-      "
-      let a: i32 = 3
-      let b = a + 1
-      ",
-      expect![@r#"
-        a: i32
-        b: i32
       "#],
     );
   }
