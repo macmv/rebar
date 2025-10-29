@@ -811,6 +811,8 @@ dependencies = [
  "la-arena",
  "rb-diagnostic",
  "rb-hir",
+ "rb-hir-lower",
+ "rb-test",
 ]
 
 [[package]]

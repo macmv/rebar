@@ -175,3 +175,16 @@ impl Constrain<'_, '_> {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use rb_test::{Expect, expect};
+
+  fn check(body: &str, _expected: Expect) {
+    let body = rb_hir_lower::parse_body(body);
+    dbg!(&body);
+  }
+
+  #[test]
+  fn it_works() { check("let a = 1 + 2", expect![@"a: i32"]); }
+}

@@ -18,6 +18,26 @@ pub use collect::{parse_hir, parse_source};
 pub use fs::FileSystem;
 pub use resolve::resolve_hir;
 
+#[cfg(feature = "test")]
+pub fn parse_body(body: &str) -> hir::Function {
+  use rb_diagnostic::{Source, Sources};
+  use std::sync::Arc;
+
+  let mut sources = Sources::new();
+  let id = sources.add(Source::new("inline.rbr".to_string(), body.to_string()));
+  let sources_arc = Arc::new(sources);
+  rb_diagnostic::run_or_exit(sources_arc, || {
+    let res = cst::SourceFile::parse(&body);
+    if !res.errors().is_empty() {
+      for error in res.errors() {
+        emit!(Span { file: id, range: error.span() } => error.message());
+      }
+    }
+    let (module, _, _) = crate::lower_source(res.tree(), id);
+    module.functions[module.main_function.unwrap()].clone()
+  })
+}
+
 pub fn lower_source(
   cst: cst::SourceFile,
   source: SourceId,
