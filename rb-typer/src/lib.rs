@@ -460,6 +460,21 @@ fn check(body: &str, expected: rb_test::Expect) {
       let ty = typer.type_of_local(id);
       writeln!(out, "{}: {}", local.name, ty).unwrap();
     }
+
+    writeln!(out).unwrap();
+
+    for (v, var) in typer.variables.iter() {
+      writeln!(out, "v{} ({}):", v.into_raw().into_u32(), var.description).unwrap();
+      for v in var.values.keys() {
+        writeln!(out, "  + {:?}", v).unwrap();
+      }
+      for u in var.uses.keys() {
+        writeln!(out, "  - {:?}", u).unwrap();
+      }
+    }
+
+    println!("{out}");
+    panic!();
   });
 
   match res {
