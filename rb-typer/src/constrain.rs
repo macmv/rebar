@@ -326,12 +326,12 @@ mod tests {
       let b: i8 = a
       ",
       expect![@r#"
-        error: cannot unify types i8 and i32
+        error: cannot unify types i32 and i8
          --> inline.rbr:2:20
           |
         2 |       let a: i32 = 3
           |                    ^
-        error: cannot unify types i8 and i32
+        error: cannot unify types i32 and i8
          --> inline.rbr:2:20
           |
         2 |       let a: i32 = 3

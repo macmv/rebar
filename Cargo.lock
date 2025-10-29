@@ -809,6 +809,7 @@ dependencies = [
 name = "rb-typer"
 version = "0.1.0"
 dependencies = [
+ "indexmap",
  "la-arena",
  "rb-diagnostic",
  "rb-hir",
