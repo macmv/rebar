@@ -3,7 +3,10 @@ use std::fmt;
 use rb_diagnostic::{Span, emit};
 use rb_hir::ast as hir;
 
-use crate::{Typer, ty::VType};
+use crate::{
+  Typer,
+  ty::{TypeVar, VType},
+};
 
 enum TypeError {
   NotSubtype(VType, VType),
@@ -96,7 +99,7 @@ impl Constrain<'_, '_> {
         let sp = self.typer.variables[*v].span;
         self.ctx(format!("constraining {desc} to {u:?}"), Some(sp), |c| {
           let vvar = &mut c.typer.variables[*v];
-          if vvar.uses.insert(u.clone(), span).is_none() {
+          if vvar.add_use(u, span) {
             for v0 in vvar.values.clone().keys() {
               c.constrain(&v0, u, span);
             }
@@ -108,7 +111,7 @@ impl Constrain<'_, '_> {
         let sp = self.typer.variables[*u].span;
         self.ctx(format!("constraining {v:?} to {desc}"), Some(sp), |c| {
           let uvar = &mut c.typer.variables[*u];
-          if uvar.values.insert(v.clone(), span).is_none() {
+          if uvar.add_value(v, span) {
             for u0 in uvar.uses.clone().keys() {
               c.constrain(v, &u0, span);
             }
@@ -194,6 +197,61 @@ impl Constrain<'_, '_> {
   }
 }
 
+impl TypeVar {
+  pub fn add_value(&mut self, v: &VType, span: Span) -> bool {
+    if self.values.contains_key(v) {
+      return false;
+    }
+
+    if self.values.keys().any(|existing| is_subtype(existing, v)) {
+      return false;
+    }
+
+    if let Some(i) = self.values.keys().position(|existing| is_subtype(v, existing)) {
+      self.values.replace_index(i, v.clone()).unwrap();
+      return true;
+    }
+
+    self.values.insert(v.clone(), span);
+    true
+  }
+
+  pub fn add_use(&mut self, u: &VType, span: Span) -> bool {
+    if self.uses.contains_key(u) {
+      return false;
+    }
+
+    if self.uses.keys().any(|existing| is_subtype(existing, u)) {
+      return false;
+    }
+
+    if let Some(i) = self.uses.keys().position(|existing| is_subtype(u, existing)) {
+      self.uses.replace_index(i, u.clone()).unwrap();
+      return true;
+    }
+
+    self.uses.insert(u.clone(), span);
+    true
+  }
+}
+
+fn is_subtype(a: &VType, b: &VType) -> bool {
+  match (a, b) {
+    (a, b) if a == b => true,
+
+    (VType::Primitive(hir::PrimitiveType::I8), VType::Integer) => true,
+    (VType::Primitive(hir::PrimitiveType::I16), VType::Integer) => true,
+    (VType::Primitive(hir::PrimitiveType::I32), VType::Integer) => true,
+    (VType::Primitive(hir::PrimitiveType::I64), VType::Integer) => true,
+    (VType::Primitive(hir::PrimitiveType::U8), VType::Integer) => true,
+    (VType::Primitive(hir::PrimitiveType::U16), VType::Integer) => true,
+    (VType::Primitive(hir::PrimitiveType::U32), VType::Integer) => true,
+    (VType::Primitive(hir::PrimitiveType::U64), VType::Integer) => true,
+
+    _ => false,
+  }
+}
+
 pub(crate) struct VTypeDisplay<'a> {
   typer: &'a Typer<'a>,
   vtype: &'a VType,
@@ -274,7 +332,27 @@ impl fmt::Display for VTypeDisplay<'_> {
 
 #[cfg(test)]
 mod tests {
+  use rb_hir::ast::PrimitiveType;
+
+  use super::*;
   use crate::check;
+
+  #[test]
+  fn add_value_works() {
+    let mut v = TypeVar::new(Span::blank(), "test".to_string());
+
+    v.add_value(&VType::Integer, Span::blank());
+    v.add_value(&PrimitiveType::I32.into(), Span::blank());
+
+    assert_eq!(v.values.keys().collect::<Vec<_>>(), [&PrimitiveType::I32.into()]);
+
+    let mut v = TypeVar::new(Span::blank(), "test".to_string());
+
+    v.add_value(&PrimitiveType::I32.into(), Span::blank());
+    v.add_value(&VType::Integer, Span::blank());
+
+    assert_eq!(v.values.keys().collect::<Vec<_>>(), [&PrimitiveType::I32.into()]);
+  }
 
   #[test]
   fn it_works() {

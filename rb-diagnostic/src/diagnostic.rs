@@ -21,6 +21,11 @@ pub struct Span {
 }
 
 impl Span {
+  /// Only for tests.
+  pub fn blank() -> Self {
+    Span { file: SourceId::from_raw(0.into()), range: TextRange::empty(TextSize::from(0u32)) }
+  }
+
   pub fn at_offset(&self, offset: u32, len: u32) -> Self {
     let offset = self.range.start() + TextSize::new(offset);
     Span { file: self.file, range: TextRange::at(offset, TextSize::new(len)) }
