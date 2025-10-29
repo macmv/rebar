@@ -167,12 +167,13 @@ fn build_environment<'a>(
     let span_map = &span_map.modules[&path];
     for (id, s) in module.structs.values().enumerate() {
       let id = rb_mir::ast::StructId(id as u64);
+      let struct_path = path.join(s.name.clone());
 
       typer_env.structs.insert(
-        s.name.clone(),
+        struct_path.clone(),
         s.fields.iter().map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te))).collect(),
       );
-      mir_ctx.struct_paths.insert(s.name.clone(), id);
+      mir_ctx.struct_paths.insert(struct_path, id);
       mir_ctx.structs.insert(
         id,
         rb_mir::Struct {

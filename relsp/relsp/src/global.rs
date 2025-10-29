@@ -1,6 +1,6 @@
 use parking_lot::RwLock;
 use rb_diagnostic::{Diagnostic, Source, Sources, Span, emit};
-use rb_hir::SpanMap;
+use rb_hir::{SpanMap, ast::Path};
 use rb_syntax::{TextSize, cst};
 use rl_analysis::{Analysis, AnalysisHost, FileId};
 use std::{collections::HashMap, error::Error, path::PathBuf, sync::Arc};
@@ -438,7 +438,7 @@ fn check(src: &str) -> Vec<Diagnostic> {
 
   for s in hir.0.structs.values() {
     typer_env.structs.insert(
-      s.name.clone(),
+      Path::new().join(s.name.clone()),
       s.fields.iter().map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te))).collect(),
     );
   }

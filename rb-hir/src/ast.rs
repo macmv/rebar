@@ -72,7 +72,7 @@ pub enum Expr {
   UnaryOp(ExprId, UnaryOp),
   BinaryOp(ExprId, BinaryOp, ExprId),
   Index(ExprId, ExprId),
-  StructInit(String, Vec<(String, ExprId)>),
+  StructInit(Path, Vec<(String, ExprId)>),
 
   // TODO: Is this really needed?
   Paren(ExprId),
@@ -97,7 +97,7 @@ pub enum StringInterp {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeExpr {
   Primitive(PrimitiveType),
-  Struct(String),
+  Struct(Path),
   Tuple(Vec<TypeExpr>),
 }
 

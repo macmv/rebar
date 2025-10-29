@@ -15,13 +15,13 @@ pub enum Type {
   Function(Vec<Type>, Box<Type>),
   Union(Vec<Type>),
 
-  Struct(String),
+  Struct(Path),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
   pub names:   HashMap<Path, Type>,
-  pub structs: HashMap<String, Vec<(String, Type)>>,
+  pub structs: HashMap<Path, Vec<(String, Type)>>,
 }
 
 /// A type with variables in it. Internal to the typer.
@@ -41,8 +41,7 @@ pub(crate) enum VType {
 
   Var(VarId),
 
-  // FIXME: Replace with resolved Path.
-  Struct(String),
+  Struct(Path),
 }
 
 impl Environment {

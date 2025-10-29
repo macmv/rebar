@@ -414,8 +414,10 @@ impl FunctionLower<'_, '_> {
       },
 
       cst::Expr::StructExpr(ref expr) => {
-        // TODO: Names should get resolved here.
-        let name = expr.path().unwrap().ident_tokens().next().unwrap().text().to_string();
+        let mut p = Path::new();
+        for tok in expr.path().unwrap().ident_tokens() {
+          p.push(tok.text().to_string());
+        }
 
         let mut fields = Vec::with_capacity(expr.field_inits().size_hint().0);
         for field in expr.field_inits() {
@@ -425,7 +427,7 @@ impl FunctionLower<'_, '_> {
           fields.push((name, expr));
         }
 
-        hir::Expr::StructInit(name, fields)
+        hir::Expr::StructInit(p, fields)
       }
 
       _ => unimplemented!("lowering for {:?}", cst),

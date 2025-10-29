@@ -9,7 +9,7 @@ pub mod ast;
 // Global context needed in the JIT, that is produced by `rb-mir-lower`.
 #[derive(Default, Clone)]
 pub struct MirContext {
-  pub struct_paths: HashMap<String, StructId>,
+  pub struct_paths: HashMap<Path, StructId>,
   pub structs:      HashMap<StructId, Struct>,
   pub items:        HashMap<Path, Item>,
 }
