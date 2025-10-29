@@ -374,11 +374,10 @@ impl<'a> Typer<'a> {
           }
 
           hir::BinaryOp::Lt | hir::BinaryOp::Lte | hir::BinaryOp::Gt | hir::BinaryOp::Gte => {
+            let t = VType::Var(self.fresh_var(self.span(expr), format!("arg for {op:?}")));
+
             self.constrain(
-              &VType::Function(
-                vec![VType::Integer, VType::Integer],
-                Box::new(hir::PrimitiveType::Bool.into()),
-              ),
+              &VType::Function(vec![t.clone(), t], Box::new(hir::PrimitiveType::Bool.into())),
               &call_type,
               self.span(expr),
             );
@@ -500,12 +499,39 @@ mod tests {
   fn unify_addition() {
     check(
       "
+      let a: i8 = 3
+      let b = a + 1
+      ",
+      expect![@r#"
+        a: i8
+        b: i8
+      "#],
+    );
+
+    check(
+      "
       let a: i32 = 3
       let b = a + 1
       ",
       expect![@r#"
         a: i32
         b: i32
+      "#],
+    );
+  }
+
+  #[test]
+  fn unify_comparison() {
+    check(
+      "
+      let a: i32 = 3
+      let b = 4
+      let c = a < b
+      ",
+      expect![@r#"
+        a: i32
+        b: i32
+        c: bool
       "#],
     );
   }
