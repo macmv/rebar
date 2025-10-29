@@ -328,11 +328,11 @@ impl<'a> Typer<'a> {
           | hir::BinaryOp::Xor
           | hir::BinaryOp::ShiftLeft
           | hir::BinaryOp::ShiftRight => {
+            let t = VType::Var(self.fresh_var(self.span(expr), format!("arg for {op:?}")));
+
+            self.constrain(&VType::Integer, &t, self.span(expr));
             self.constrain(
-              &VType::Function(
-                vec![hir::PrimitiveType::I64.into(), hir::PrimitiveType::I64.into()],
-                Box::new(hir::PrimitiveType::I64.into()),
-              ),
+              &VType::Function(vec![t.clone(), t.clone()], Box::new(t)),
               &call_type,
               self.span(expr),
             );

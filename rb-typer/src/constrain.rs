@@ -350,4 +350,18 @@ mod tests {
       "#],
     );
   }
+
+  #[test]
+  fn unify_addition() {
+    check(
+      "
+      let a: i32 = 3
+      let b = a + 1
+      ",
+      expect![@r#"
+        a: i32
+        b: i32
+      "#],
+    );
+  }
 }
