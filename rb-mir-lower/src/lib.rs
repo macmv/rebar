@@ -95,7 +95,7 @@ impl Lower<'_> {
   fn lower_stmt(&mut self, stmt: hir::StmtId) -> Option<mir::StmtId> {
     let stmt = match self.hir.stmts[stmt] {
       hir::Stmt::Expr(expr) => mir::Stmt::Expr(self.lower_expr(expr)),
-      hir::Stmt::Let(_, hir_id, expr) => {
+      hir::Stmt::Let(_, hir_id, _, expr) => {
         let mir_expr = self.lower_expr(expr);
         let ty = self.ty.type_of_expr(expr);
         let id = self.next_var_id(ty.clone());

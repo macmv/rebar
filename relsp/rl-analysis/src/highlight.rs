@@ -149,7 +149,7 @@ impl Highlight {
 
 impl Highlighter<'_> {
   fn visit_stmt(&mut self, stmt: hir::StmtId) {
-    if let hir::Stmt::Let(_, _, _) = self.func.stmts[stmt] {
+    if let hir::Stmt::Let(_, _, _, _) = self.func.stmts[stmt] {
       let span = self.span_map.let_stmts[&stmt];
       self.hl.tokens.push(HighlightToken {
         range:      span.range,
