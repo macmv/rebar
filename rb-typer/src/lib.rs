@@ -340,6 +340,9 @@ impl<'a> Typer<'a> {
         let ret =
           VType::Var(self.fresh_var(self.span(expr), format!("return type of binary op {op:?}")));
 
+        // TODO: Need to handle impls right here.
+        self.constrain(&rhs, &lhs, self.span(rhs_expr));
+
         let call_type = VType::Function(vec![lhs, rhs], Box::new(ret.clone()));
 
         match op {
@@ -450,6 +453,7 @@ impl<'a> Typer<'a> {
 #[cfg(test)]
 fn check(body: &str, expected: rb_test::Expect) { check_inner(body, false, expected); }
 #[cfg(test)]
+#[allow(dead_code)]
 fn check_v(body: &str, expected: rb_test::Expect) { check_inner(body, true, expected); }
 
 #[cfg(test)]
@@ -558,28 +562,18 @@ mod tests {
 
   #[test]
   fn check_comparison() {
-    check_v(
+    check(
       r#"
       let a: i32 = 3
       let b: i8 = 4
       let c = a < b
       "#,
       expect![@r#"
-        a: i32
-        b: i8
-        c: bool
-
-        v0 (integer):
-          + Integer
-          - Primitive(I32)
-        v1 (integer):
-          + Integer
-          - Primitive(I8)
-        v2 (return type of binary op Lt):
-          + Primitive(Bool)
-        v3 (arg for Lt):
-          + Primitive(I32)
-          + Primitive(I8)
+        error: i8 is not a subtype of i32
+         --> inline.rbr:4:19
+          |
+        4 |       let c = a < b
+          |                   ^
       "#],
     );
   }

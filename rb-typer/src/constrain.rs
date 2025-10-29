@@ -71,6 +71,8 @@ impl Typer<'_> {
       buf.push('\n');
     }
 
+    buf.truncate(buf.trim_end().len());
+
     buf
   }
 
