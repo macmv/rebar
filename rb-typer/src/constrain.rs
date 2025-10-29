@@ -20,38 +20,6 @@ impl Typer<'_> {
   pub(crate) fn constrain(&mut self, v: &VType, u: &VType, span: Span) {
     let mut constrain = Constrain { typer: self, errors: vec![], ctx: vec![] };
 
-    fn render_err(e: &TypeError, ctx: &[(String, Option<Span>)]) -> String {
-      let mut buf = String::new();
-
-      match e {
-        TypeError::NotSubtype(v, u) => {
-          buf.push_str(&format!("{v:?} is not a subtype of {u:?}"));
-          buf.push('\n');
-        }
-        TypeError::UnresolvedUnion(v, u, errors) => {
-          buf.push_str(&format!("could not resolve union, {v:?} is not a subtype of {u:?}"));
-          buf.push('\n');
-
-          for (error, ctx) in errors {
-            buf.push_str(&render_err(error, ctx));
-            buf.push('\n');
-          }
-        }
-        TypeError::Union(errors) => {
-          for error in errors {
-            buf.push_str(&render_err(error, &[]));
-            buf.push('\n');
-          }
-        }
-      }
-
-      for (desc, _) in ctx {
-        buf.push_str(desc);
-        buf.push('\n');
-      }
-
-      buf
-    }
     constrain.constrain(v, u, span);
 
     for (e, ctx) in constrain.errors {
@@ -60,8 +28,42 @@ impl Typer<'_> {
           emit!(*sp => "{ctx:?}");
         }
       }
-      emit!(span => render_err(&e, &ctx));
+      emit!(span => self.render_err(&e, &ctx));
     }
+  }
+
+  fn render_err(&self, e: &TypeError, ctx: &[(String, Option<Span>)]) -> String {
+    let mut buf = String::new();
+
+    match e {
+      TypeError::NotSubtype(v, u) => {
+        // TODO: Need display-only type
+        buf.push_str(&format!("{} is not a subtype of {}", self.lower_type(v), self.lower_type(u)));
+        buf.push('\n');
+      }
+      TypeError::UnresolvedUnion(v, u, errors) => {
+        buf.push_str(&format!("could not resolve union, {v:?} is not a subtype of {u:?}"));
+        buf.push('\n');
+
+        for (error, ctx) in errors {
+          buf.push_str(&self.render_err(error, ctx));
+          buf.push('\n');
+        }
+      }
+      TypeError::Union(errors) => {
+        for error in errors {
+          buf.push_str(&self.render_err(error, &[]));
+          buf.push('\n');
+        }
+      }
+    }
+
+    for (desc, _) in ctx {
+      buf.push_str(desc);
+      buf.push('\n');
+    }
+
+    buf
   }
 }
 
@@ -206,6 +208,18 @@ mod tests {
       expect![@r#"
         a: i64
         b: i64
+      "#],
+    );
+  }
+
+  #[test]
+  fn let_types() {
+    check(
+      "
+      let a: i32 = 3
+      ",
+      expect![@r#"
+        a: i32
       "#],
     );
   }
