@@ -179,6 +179,7 @@ impl Constrain<'_, '_> {
 #[cfg(test)]
 mod tests {
   use rb_test::{Expect, expect};
+  use std::fmt::Write;
 
   use crate::Environment;
 
@@ -190,7 +191,7 @@ mod tests {
     let mut out = String::new();
     for (id, local) in body.locals.iter() {
       let ty = typer.type_of_local(id);
-      out.push_str(&format!("{}: {}\n", local.name, ty));
+      writeln!(out, "{}: {}", local.name, ty).unwrap();
     }
     expected.assert_eq(&out);
   }
