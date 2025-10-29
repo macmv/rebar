@@ -180,11 +180,27 @@ impl Constrain<'_, '_> {
 mod tests {
   use rb_test::{Expect, expect};
 
-  fn check(body: &str, _expected: Expect) {
+  fn check(body: &str, expected: Expect) {
     let body = rb_hir_lower::parse_body(body);
-    dbg!(&body);
+
+    let mut out = String::new();
+    for local in body.locals.values() {
+      out.push_str(&format!("{}: {:?}\n", local.name, local.ty));
+    }
+    expected.assert_eq(&out);
   }
 
   #[test]
-  fn it_works() { check("let a = 1 + 2", expect![@"a: i32"]); }
+  fn it_works() {
+    check(
+      "
+      let a = 1 + 2
+      let b = 3
+      ",
+      expect![@r#"
+        a: None
+        b: None
+      "#],
+    );
+  }
 }
