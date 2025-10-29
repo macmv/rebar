@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+  collections::{HashMap, HashSet},
+  fmt,
+};
 
 use la_arena::Idx;
 use rb_diagnostic::Span;
@@ -88,5 +91,27 @@ pub struct TypeVar {
 impl TypeVar {
   pub fn new(span: Span, description: String) -> Self {
     TypeVar { values: HashSet::new(), uses: HashSet::new(), span, description }
+  }
+}
+
+impl fmt::Display for Type {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Type::Primitive(p) => write!(f, "{p}"),
+      Type::Array(ty) => write!(f, "Array[{}]", ty),
+      Type::Tuple(types) => {
+        let types: Vec<String> = types.iter().map(|ty| format!("{}", ty)).collect();
+        write!(f, "({})", types.join(", "))
+      }
+      Type::Function(args, ret) => {
+        let args: Vec<String> = args.iter().map(|ty| format!("{}", ty)).collect();
+        write!(f, "fn({}) -> {}", args.join(", "), ret)
+      }
+      Type::Union(types) => {
+        let types: Vec<String> = types.iter().map(|ty| format!("{}", ty)).collect();
+        write!(f, "{}", types.join(" | "))
+      }
+      Type::Struct(name) => write!(f, "Struct {}", name),
+    }
   }
 }

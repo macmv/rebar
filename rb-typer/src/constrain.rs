@@ -190,7 +190,7 @@ mod tests {
     let mut out = String::new();
     for (id, local) in body.locals.iter() {
       let ty = typer.type_of_local(id);
-      out.push_str(&format!("{}: {:?}\n", local.name, ty));
+      out.push_str(&format!("{}: {}\n", local.name, ty));
     }
     expected.assert_eq(&out);
   }
@@ -203,8 +203,8 @@ mod tests {
       let b = 3
       ",
       expect![@r#"
-        a: Primitive(I64)
-        b: Primitive(I64)
+        a: i64
+        b: i64
       "#],
     );
   }

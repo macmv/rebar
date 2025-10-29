@@ -253,3 +253,23 @@ impl fmt::Display for Path {
     Ok(())
   }
 }
+
+impl fmt::Display for PrimitiveType {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      PrimitiveType::Str => write!(f, "str"),
+      PrimitiveType::Bool => write!(f, "bool"),
+
+      PrimitiveType::I8 => write!(f, "i8"),
+      PrimitiveType::I16 => write!(f, "i16"),
+      PrimitiveType::I32 => write!(f, "i32"),
+      PrimitiveType::I64 => write!(f, "i64"),
+      PrimitiveType::U8 => write!(f, "u8"),
+      PrimitiveType::U16 => write!(f, "u16"),
+      PrimitiveType::U32 => write!(f, "u32"),
+      PrimitiveType::U64 => write!(f, "u64"),
+
+      PrimitiveType::Never => write!(f, "!"),
+    }
+  }
+}
