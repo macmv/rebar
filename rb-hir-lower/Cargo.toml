@@ -11,3 +11,6 @@ edition = "2024"
 rb-diagnostic.workspace = true
 rb-syntax.workspace = true
 rb-hir.workspace = true
+
+[features]
+test = []

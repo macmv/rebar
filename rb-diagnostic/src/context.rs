@@ -54,6 +54,10 @@ impl Context {
 
   pub fn exit_if_error(&self) {
     if self.error {
+      #[cfg(feature = "test")]
+      panic!("errors were emitted");
+
+      #[cfg(not(feature = "test"))]
       std::process::exit(1);
     }
   }
