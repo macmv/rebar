@@ -85,7 +85,7 @@ fn resolve_function(
 
   let mut walk_until = |locals: &HashMap<String, hir::LocalId>, e: hir::ExprId| {
     let mut id = hir::ExprId::from_raw(expr.into());
-    while id != e {
+    while id <= e {
       match &mut function.exprs[id] {
         hir::Expr::Name(p) => {
           if let Some(ident) = p.as_single()
