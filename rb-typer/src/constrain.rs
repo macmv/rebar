@@ -281,20 +281,27 @@ mod tests {
 
   fn check(body: &str, expected: Expect) {
     let (sources, body, span_map) = rb_hir_lower::parse_body(body);
-    rb_diagnostic::run_or_exit(sources, || {
+    let mut out = String::new();
+    let res = rb_diagnostic::run(sources.clone(), || {
       let env = Environment::empty();
       let typer = crate::Typer::check(&env, &body, &span_map);
 
-      let mut out = String::new();
       for (id, local) in body.locals.iter() {
         let ty = typer.type_of_local(id);
         writeln!(out, "{}: {}", local.name, ty).unwrap();
       }
-      if !rb_diagnostic::is_ok() {
-        return;
-      }
-      expected.assert_eq(&out);
     });
+
+    match res {
+      Ok(()) => expected.assert_eq(&out),
+      Err(e) => {
+        let mut out = String::new();
+        for e in e {
+          writeln!(out, "{}", e.render(&sources)).unwrap();
+        }
+        expected.assert_eq(&out);
+      }
+    }
   }
 
   #[test]
