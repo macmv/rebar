@@ -531,7 +531,7 @@ impl<'a> Typer<'a> {
           stack.push(*dep);
         }
 
-        if self.integers[id].concrete.is_some() {
+        if self.integers[id].concrete.is_some_and(|c| c != target) {
           panic!("conflicting integer type constraints");
         }
         self.integers[id].concrete = Some(target);
@@ -735,6 +735,34 @@ mod tests {
       "
       let a = 3
       let b: i32 = 1
+      let c: i8 = a + b
+      ",
+      expect![@r#"
+        error: expected i8, found i32
+         --> inline.rbr:4:19
+          |
+        4 |       let c: i8 = a + b
+          |                   ^^^^^
+      "#],
+    );
+
+    check(
+      "
+      let a = 3
+      let b: i32 = a + 1
+      let c = a + b
+      ",
+      expect![@r#"
+        a: i32
+        b: i32
+        c: i32
+      "#],
+    );
+
+    check(
+      "
+      let a = 3
+      let b: i32 = a + 1
       let c: i8 = a + b
       ",
       expect![@r#"
