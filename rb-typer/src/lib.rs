@@ -359,7 +359,38 @@ impl<'a> Typer<'a> {
         let lhs = self.synth_expr(lhs_expr)?;
         let rhs = self.synth_expr(rhs_expr)?;
 
-        todo!()
+        use hir::PrimitiveType::*;
+
+        // NB: Binary ops are special. If either side is a specific integer type, it
+        // coerces.
+        //
+        // This is not like `a.add(b)`, where the left hand side must be concrete.
+        match (lhs, rhs) {
+          (VType::Integer, VType::Integer) => VType::Integer,
+
+          (VType::Primitive(I8), VType::Integer | VType::Primitive(I8)) => I8.into(),
+          (VType::Primitive(I16), VType::Integer | VType::Primitive(I16)) => I16.into(),
+          (VType::Primitive(I32), VType::Integer | VType::Primitive(I32)) => I32.into(),
+          (VType::Primitive(I64), VType::Integer | VType::Primitive(I64)) => I64.into(),
+          (VType::Primitive(U8), VType::Integer | VType::Primitive(U8)) => U8.into(),
+          (VType::Primitive(U16), VType::Integer | VType::Primitive(U16)) => U16.into(),
+          (VType::Primitive(U32), VType::Integer | VType::Primitive(U32)) => U32.into(),
+          (VType::Primitive(U64), VType::Integer | VType::Primitive(U64)) => U64.into(),
+
+          (VType::Integer, VType::Primitive(I8)) => I8.into(),
+          (VType::Integer, VType::Primitive(I16)) => I16.into(),
+          (VType::Integer, VType::Primitive(I32)) => I32.into(),
+          (VType::Integer, VType::Primitive(I64)) => I64.into(),
+          (VType::Integer, VType::Primitive(U8)) => U8.into(),
+          (VType::Integer, VType::Primitive(U16)) => U16.into(),
+          (VType::Integer, VType::Primitive(U32)) => U32.into(),
+          (VType::Integer, VType::Primitive(U64)) => U64.into(),
+
+          _ => {
+            emit!(self.span(expr) => "cannot apply binary operator {:?} to types", op);
+            return None;
+          }
+        }
       }
 
       hir::Expr::Index(lhs, rhs) => {
