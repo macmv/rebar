@@ -447,6 +447,15 @@ impl<'a> Typer<'a> {
     match (a, b) {
       (a, b) if a == b => true,
 
+      (VType::Integer, VType::Primitive(hir::PrimitiveType::I8)) => true,
+      (VType::Integer, VType::Primitive(hir::PrimitiveType::I16)) => true,
+      (VType::Integer, VType::Primitive(hir::PrimitiveType::I32)) => true,
+      (VType::Integer, VType::Primitive(hir::PrimitiveType::I64)) => true,
+      (VType::Integer, VType::Primitive(hir::PrimitiveType::U8)) => true,
+      (VType::Integer, VType::Primitive(hir::PrimitiveType::U16)) => true,
+      (VType::Integer, VType::Primitive(hir::PrimitiveType::U32)) => true,
+      (VType::Integer, VType::Primitive(hir::PrimitiveType::U64)) => true,
+
       _ => false,
     }
   }
@@ -557,6 +566,38 @@ mod tests {
           |
         3 |       let b: i64 = a
           |                    ^
+      "#],
+    );
+  }
+
+  #[test]
+  fn infer_numbers() {
+    check(
+      r#"
+      let a = 3
+      "#,
+      expect![@r#"
+        a: i64
+      "#],
+    );
+
+    check(
+      r#"
+      let a: i32 = 3
+      "#,
+      expect![@r#"
+        a: i32
+      "#],
+    );
+
+    check(
+      r#"
+      let a: i32 = 3
+      let b = a
+      "#,
+      expect![@r#"
+        a: i32
+        b: i32
       "#],
     );
   }
