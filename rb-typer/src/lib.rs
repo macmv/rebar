@@ -9,7 +9,6 @@ use rb_hir::{
 };
 use ty::{TypeVar, VType, VarId};
 
-mod constrain;
 mod ty;
 
 pub use ty::{Environment, Type};
@@ -353,27 +352,6 @@ impl<'a> Typer<'a> {
 
         let call_type = VType::Function(vec![ty], Box::new(ret.clone()));
 
-        match op {
-          hir::UnaryOp::Neg => {
-            self.constrain(
-              &VType::Function(vec![VType::Integer], Box::new(VType::Integer)),
-              &call_type,
-              self.span(expr),
-            );
-          }
-
-          hir::UnaryOp::Not => {
-            self.constrain(
-              &VType::Function(
-                vec![hir::PrimitiveType::Bool.into()],
-                Box::new(hir::PrimitiveType::Bool.into()),
-              ),
-              &call_type,
-              self.span(expr),
-            );
-          }
-        }
-
         ret
       }
 
@@ -381,38 +359,7 @@ impl<'a> Typer<'a> {
         let lhs = self.synth_expr(lhs_expr)?;
         let rhs = self.synth_expr(rhs_expr)?;
 
-        match op {
-          hir::BinaryOp::Add
-          | hir::BinaryOp::Sub
-          | hir::BinaryOp::Mul
-          | hir::BinaryOp::Div
-          | hir::BinaryOp::Mod
-          | hir::BinaryOp::BitOr
-          | hir::BinaryOp::BitAnd
-          | hir::BinaryOp::Xor
-          | hir::BinaryOp::ShiftLeft
-          | hir::BinaryOp::ShiftRight => {
-            self.constrain(&lhs, &VType::Integer, self.span(rhs_expr));
-            self.constrain(&rhs, &lhs, self.span(rhs_expr));
-
-            lhs
-          }
-
-          hir::BinaryOp::Eq | hir::BinaryOp::Neq => {
-            self.constrain(&lhs, &rhs, self.span(rhs_expr));
-
-            hir::PrimitiveType::Bool.into()
-          }
-
-          hir::BinaryOp::Lt | hir::BinaryOp::Lte | hir::BinaryOp::Gt | hir::BinaryOp::Gte => {
-            self.constrain(&lhs, &VType::Integer, self.span(rhs_expr));
-            self.constrain(&rhs, &lhs, self.span(rhs_expr));
-
-            hir::PrimitiveType::Bool.into()
-          }
-
-          _ => unimplemented!("binary op {op:?}"),
-        }
+        todo!()
       }
 
       hir::Expr::Index(lhs, rhs) => {
@@ -420,9 +367,6 @@ impl<'a> Typer<'a> {
         let rhs = self.synth_expr(rhs)?;
 
         let elem = VType::Var(self.fresh_var(self.span(expr), "array element".to_string()));
-
-        self.constrain(&lhs, &VType::Array(Box::new(elem.clone())), self.span(expr));
-        self.constrain(&rhs, &VType::Primitive(hir::PrimitiveType::U64), self.span(expr));
 
         elem
       }
@@ -444,9 +388,6 @@ impl<'a> Typer<'a> {
 
           let res = self.fresh_var(self.span(expr), "if statment foo".to_string());
           let res = VType::Var(res);
-
-          self.constrain(&then_ty, &res, self.span(then));
-          self.constrain(&els_ty, &res, self.span(then));
 
           res
         } else {
