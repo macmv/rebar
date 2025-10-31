@@ -473,6 +473,12 @@ impl<'a> Typer<'a> {
       _ => match self.synth_expr(expr) {
         Some(inferred) => {
           if self.is_subtype(&inferred, expected) {
+            match inferred {
+              VType::Integer(_) => self.pin_integer(&inferred, expected),
+
+              _ => {}
+            }
+
             true
           } else {
             emit!(self.span(expr) => "expected {}, found {}", self.display_type(&expected), self.type_of_expr(expr));
@@ -709,6 +715,34 @@ mod tests {
         a: i32
         b: i32
         c: i32
+      "#],
+    );
+
+    check(
+      "
+      let a = 3
+      let b = 1
+      let c: i32 = a + b
+      ",
+      expect![@r#"
+        a: i32
+        b: i32
+        c: i32
+      "#],
+    );
+
+    check(
+      "
+      let a = 3
+      let b: i32 = 1
+      let c: i8 = a + b
+      ",
+      expect![@r#"
+        error: expected i8, found i32
+         --> inline.rbr:4:19
+          |
+        4 |       let c: i8 = a + b
+          |                   ^^^^^
       "#],
     );
   }
