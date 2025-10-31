@@ -157,6 +157,10 @@ impl From<hir::PrimitiveType> for VType {
   fn from(literal: hir::PrimitiveType) -> Self { VType::Primitive(literal) }
 }
 
+impl VType {
+  pub fn unit() -> Self { VType::Tuple(vec![]) }
+}
+
 pub type VarId = Idx<TypeVar>;
 
 #[derive(Debug, Clone, PartialEq)]
