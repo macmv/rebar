@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt};
 use indexmap::IndexMap;
 use la_arena::Idx;
 use rb_diagnostic::Span;
-use rb_hir::ast::{self as hir, Path};
+use rb_hir::ast::{self as hir, ExprId, Path};
 
 use crate::Typer;
 
@@ -51,7 +51,6 @@ pub struct TraitDef {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum VType {
   SelfT,
-  Integer,
   Primitive(hir::PrimitiveType),
 
   Array(Box<VType>),
@@ -63,6 +62,7 @@ pub(crate) enum VType {
   #[allow(dead_code)]
   Union(Vec<VType>),
 
+  Integer(IntId),
   Var(VarId),
 
   Struct(Path),
@@ -163,7 +163,14 @@ impl VType {
   pub fn unit() -> Self { VType::Tuple(vec![]) }
 }
 
+pub type IntId = Idx<IntVar>;
 pub type VarId = Idx<TypeVar>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IntVar {
+  pub deps:     Vec<IntId>,
+  pub concrete: Option<hir::PrimitiveType>,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeVar {
@@ -219,7 +226,7 @@ impl fmt::Display for VTypeDisplay<'_> {
     match self.vtype {
       VType::SelfT => write!(f, "Self"),
       VType::Primitive(lit) => write!(f, "{lit}"),
-      VType::Integer => write!(f, "integer"),
+      VType::Integer(_) => write!(f, "integer"),
       VType::Array(ty) => {
         write!(f, "array<")?;
         write!(f, "{}", self.typer.display_type(ty))?;
