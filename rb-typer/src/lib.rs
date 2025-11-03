@@ -897,7 +897,7 @@ mod tests {
       "#],
     );
 
-    check_v(
+    check(
       r#"
       let a: i32 = 3
       let b = 4
@@ -907,7 +907,6 @@ mod tests {
         a: i32
         b: i32
         c: i32
-
       "#],
     );
   }
