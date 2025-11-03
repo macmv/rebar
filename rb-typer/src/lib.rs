@@ -206,11 +206,9 @@ impl<'a> Typer<'a> {
 
   fn span(&self, expr: ExprId) -> Span { self.span_map.exprs[expr.into_raw().into_u32() as usize] }
 
-  fn type_stmt(&mut self, stmt: StmtId) {
+  fn type_stmt(&mut self, stmt: StmtId) -> Option<VType> {
     match self.function.stmts[stmt] {
-      hir::Stmt::Expr(expr) => {
-        self.synth_expr(expr);
-      }
+      hir::Stmt::Expr(expr) => self.synth_expr(expr),
       hir::Stmt::Let(_, ref id, ref te, expr) => {
         if let Some(te) = te {
           let ty = VType::from(type_of_type_expr(te));
@@ -226,10 +224,11 @@ impl<'a> Typer<'a> {
             }
           }
         }
+        None
       }
 
-      hir::Stmt::FunctionDef(_) => {}
-      hir::Stmt::Struct => {}
+      hir::Stmt::FunctionDef(_) => None,
+      hir::Stmt::Struct => None,
     }
   }
 
@@ -345,7 +344,10 @@ impl<'a> Typer<'a> {
       hir::Expr::Local(id) => self.locals[&id].clone(),
 
       hir::Expr::Block(ref block) => {
-        todo!()
+        for &expr in block[..block.len() - 1].iter() {
+          self.type_stmt(expr);
+        }
+        if let Some(&expr) = block.last() { self.type_stmt(expr)? } else { VType::unit() }
       }
 
       hir::Expr::Paren(expr) => self.synth_expr(expr)?,
