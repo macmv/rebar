@@ -105,7 +105,7 @@ impl<'a> Typer<'a> {
         typer.type_stmt(item);
       }
 
-      let ret = function.ret.clone().map_or(Type::unit(), |ty| type_of_type_expr(&ty));
+      let ret = type_of_type_expr(&function.sig.ret);
 
       match body.last().map(|tail| &typer.function.stmts[*tail]) {
         Some(hir::Stmt::Expr(e)) => {
