@@ -1,7 +1,7 @@
 use std::num::NonZero;
 
+use rb_hir::ast::Type;
 use rb_mir::{MirContext, ast::StructId};
-use rb_typer::Type;
 
 mod arg;
 mod array;

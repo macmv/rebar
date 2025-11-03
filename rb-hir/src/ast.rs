@@ -128,6 +128,25 @@ pub enum PrimitiveType {
   Never,
 }
 
+/// A rendered type. This is the result of typechecking. It is only produced by
+/// `rb-typer`, not from parsing.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Type {
+  SelfT,
+  Primitive(PrimitiveType),
+  Array(Box<Type>),
+  Tuple(Vec<Type>),
+
+  Function(Vec<Type>, Box<Type>),
+  Union(Vec<Type>),
+
+  Struct(Path),
+}
+
+impl Default for Type {
+  fn default() -> Self { Type::unit() }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Stmt {
   Expr(ExprId),
@@ -214,11 +233,19 @@ impl Path {
 }
 
 impl TypeExpr {
-  pub fn unit() -> Self { TypeExpr::Tuple(vec![]) }
+  pub const fn unit() -> Self { TypeExpr::Tuple(vec![]) }
+}
+
+impl Type {
+  pub const fn unit() -> Self { Type::Tuple(vec![]) }
 }
 
 impl From<PrimitiveType> for TypeExpr {
   fn from(value: PrimitiveType) -> Self { TypeExpr::Primitive(value) }
+}
+
+impl From<PrimitiveType> for Type {
+  fn from(literal: PrimitiveType) -> Self { Type::Primitive(literal) }
 }
 
 pub struct ModuleIter<'a> {
@@ -285,6 +312,29 @@ impl fmt::Display for PrimitiveType {
       PrimitiveType::U64 => write!(f, "u64"),
 
       PrimitiveType::Never => write!(f, "!"),
+    }
+  }
+}
+
+impl fmt::Display for Type {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Type::SelfT => write!(f, "Self"),
+      Type::Primitive(p) => write!(f, "{p}"),
+      Type::Array(ty) => write!(f, "Array[{}]", ty),
+      Type::Tuple(types) => {
+        let types: Vec<String> = types.iter().map(|ty| format!("{}", ty)).collect();
+        write!(f, "({})", types.join(", "))
+      }
+      Type::Function(args, ret) => {
+        let args: Vec<String> = args.iter().map(|ty| format!("{}", ty)).collect();
+        write!(f, "fn({}) -> {}", args.join(", "), ret)
+      }
+      Type::Union(types) => {
+        let types: Vec<String> = types.iter().map(|ty| format!("{}", ty)).collect();
+        write!(f, "{}", types.join(" | "))
+      }
+      Type::Struct(name) => write!(f, "Struct {}", name),
     }
   }
 }

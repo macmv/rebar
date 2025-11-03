@@ -661,8 +661,8 @@ dependencies = [
  "rb-codegen",
  "rb-codegen-opt",
  "rb-codegen-x86",
+ "rb-hir",
  "rb-mir",
- "rb-typer",
  "rb-value",
  "smallvec",
 ]
@@ -750,7 +750,6 @@ version = "0.1.0"
 dependencies = [
  "la-arena",
  "rb-hir",
- "rb-typer",
 ]
 
 [[package]]
@@ -823,7 +822,6 @@ version = "0.1.0"
 dependencies = [
  "rb-hir",
  "rb-mir",
- "rb-typer",
 ]
 
 [[package]]

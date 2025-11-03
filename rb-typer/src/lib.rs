@@ -4,13 +4,13 @@ use la_arena::Arena;
 use rb_diagnostic::{Span, emit};
 use rb_hir::{
   FunctionSpanMap,
-  ast::{self as hir, ExprId, LocalId, StmtId},
+  ast::{self as hir, ExprId, LocalId, StmtId, Type},
 };
 use ty::VType;
 
 mod ty;
 
-pub use ty::{Environment, Type};
+pub use ty::Environment;
 
 use crate::ty::{IntId, IntVar};
 
@@ -220,7 +220,7 @@ impl<'a> Typer<'a> {
             let path = self.resolve_type(&lhs)?;
             let signature = self.env.impl_type(&path, &method)?;
             // This is an impl method, so fill in `self` with the type we're calling it on.
-            let signature = signature.resolve_self(&lhs);
+            let signature = crate::ty::resolve_self(signature, &lhs);
 
             signature
           }

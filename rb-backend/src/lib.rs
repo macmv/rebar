@@ -9,7 +9,7 @@ use rb_mir::{MirContext, ast as mir};
 mod r_value;
 // mod slot;
 
-use rb_typer::Type;
+use rb_hir::ast::Type;
 use rb_value::ValueType;
 
 use crate::r_value::RValue;

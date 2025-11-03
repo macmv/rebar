@@ -5,13 +5,13 @@ use std::collections::HashMap;
 use rb_diagnostic::emit;
 use rb_hir::{
   FunctionSpanMap,
-  ast::{self as hir, Path},
+  ast::{self as hir, Path, Type},
 };
 use rb_mir::{
   Item, MirContext, UserFunction,
   ast::{self as mir, UserFunctionId},
 };
-use rb_typer::{Type, Typer};
+use rb_typer::Typer;
 
 pub fn declare_user_function(
   ctx: &mut MirContext,

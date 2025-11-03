@@ -1,9 +1,8 @@
 use std::{collections::HashMap, sync::Arc};
 
 use rb_diagnostic::{Diagnostic, Sources};
-use rb_hir::ast::Path;
+use rb_hir::ast::{Path, Type};
 use rb_mir::{MirContext, ast as mir};
-use rb_typer::Type;
 
 const NUM_CPUS: usize = 32;
 

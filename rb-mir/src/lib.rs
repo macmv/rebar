@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use ast::StructId;
-use rb_hir::ast::Path;
-use rb_typer::Type;
+use rb_hir::ast::{Path, Type};
 
 pub mod ast;
 

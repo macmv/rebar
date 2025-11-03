@@ -1,27 +1,9 @@
 use std::{collections::HashMap, fmt};
 
 use la_arena::Idx;
-use rb_hir::ast::{self as hir, Path};
+use rb_hir::ast::{self as hir, Path, Type};
 
 use crate::Typer;
-
-/// A rendered type. This is the result of typechecking.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Type {
-  SelfT,
-  Primitive(hir::PrimitiveType),
-  Array(Box<Type>),
-  Tuple(Vec<Type>),
-
-  Function(Vec<Type>, Box<Type>),
-  Union(Vec<Type>),
-
-  Struct(Path),
-}
-
-impl Default for Type {
-  fn default() -> Self { Type::unit() }
-}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
@@ -122,22 +104,18 @@ impl Environment {
   pub fn function_type(&self, path: &Path) -> Option<&Type> { self.names.get(path) }
 }
 
-impl Type {
-  pub const fn unit() -> Self { Type::Tuple(vec![]) }
-
-  pub(crate) fn resolve_self(&self, slf: &VType) -> VType {
-    match self {
-      Type::SelfT => slf.clone(),
-      Type::Primitive(p) => VType::Primitive(*p),
-      Type::Array(ty) => VType::Array(Box::new(ty.resolve_self(slf))),
-      Type::Tuple(types) => VType::Tuple(types.iter().map(|ty| ty.resolve_self(slf)).collect()),
-      Type::Function(args, ret) => VType::Function(
-        args.iter().map(|ty| ty.resolve_self(slf)).collect(),
-        Box::new(ret.resolve_self(slf)),
-      ),
-      Type::Union(types) => VType::Union(types.iter().map(|ty| ty.resolve_self(slf)).collect()),
-      Type::Struct(name) => VType::Struct(name.clone()),
-    }
+pub fn resolve_self(ty: &Type, slf: &VType) -> VType {
+  match ty {
+    Type::SelfT => slf.clone(),
+    Type::Primitive(p) => VType::Primitive(*p),
+    Type::Array(ty) => VType::Array(Box::new(resolve_self(&ty, slf))),
+    Type::Tuple(types) => VType::Tuple(types.iter().map(|ty| resolve_self(ty, slf)).collect()),
+    Type::Function(args, ret) => VType::Function(
+      args.iter().map(|ty| resolve_self(ty, slf)).collect(),
+      Box::new(resolve_self(ret, slf)),
+    ),
+    Type::Union(types) => VType::Union(types.iter().map(|ty| resolve_self(ty, slf)).collect()),
+    Type::Struct(name) => VType::Struct(name.clone()),
   }
 }
 
@@ -157,9 +135,6 @@ impl From<Type> for VType {
   }
 }
 
-impl From<hir::PrimitiveType> for Type {
-  fn from(literal: hir::PrimitiveType) -> Self { Type::Primitive(literal) }
-}
 impl From<hir::PrimitiveType> for VType {
   fn from(literal: hir::PrimitiveType) -> Self { VType::Primitive(literal) }
 }
@@ -202,29 +177,6 @@ impl Typer<'_> {
 pub(crate) struct VTypeDisplay<'a> {
   typer: &'a Typer<'a>,
   vtype: &'a VType,
-}
-
-impl fmt::Display for Type {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    match self {
-      Type::SelfT => write!(f, "Self"),
-      Type::Primitive(p) => write!(f, "{p}"),
-      Type::Array(ty) => write!(f, "Array[{}]", ty),
-      Type::Tuple(types) => {
-        let types: Vec<String> = types.iter().map(|ty| format!("{}", ty)).collect();
-        write!(f, "({})", types.join(", "))
-      }
-      Type::Function(args, ret) => {
-        let args: Vec<String> = args.iter().map(|ty| format!("{}", ty)).collect();
-        write!(f, "fn({}) -> {}", args.join(", "), ret)
-      }
-      Type::Union(types) => {
-        let types: Vec<String> = types.iter().map(|ty| format!("{}", ty)).collect();
-        write!(f, "{}", types.join(" | "))
-      }
-      Type::Struct(name) => write!(f, "Struct {}", name),
-    }
-  }
 }
 
 impl fmt::Display for VTypeDisplay<'_> {

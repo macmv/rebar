@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use la_arena::{Arena, Idx};
-use rb_typer::Type;
+use rb_hir::ast::Type;
 
 pub type ExprId = Idx<Expr>;
 pub type StmtId = Idx<Stmt>;

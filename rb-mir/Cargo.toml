@@ -9,6 +9,5 @@ edition = "2024"
 
 [dependencies]
 rb-hir.workspace = true
-rb-typer.workspace = true
 
 la-arena = "0.3.1"
