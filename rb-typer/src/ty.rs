@@ -1,9 +1,9 @@
 use std::{collections::HashMap, fmt};
 
-use indexmap::IndexMap;
 use la_arena::Idx;
-use rb_diagnostic::Span;
 use rb_hir::ast::{self as hir, Path};
+
+use crate::Typer;
 
 /// A rendered type. This is the result of typechecking.
 #[derive(Debug, Clone, PartialEq)]
@@ -48,8 +48,8 @@ pub struct TraitDef {
 /// A type with variables in it. Internal to the typer.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum VType {
+  Error,
   SelfT,
-  Integer,
   Primitive(hir::PrimitiveType),
 
   Array(Box<VType>),
@@ -61,7 +61,7 @@ pub(crate) enum VType {
   #[allow(dead_code)]
   Union(Vec<VType>),
 
-  Var(VarId),
+  Integer(IntId),
 
   Struct(Path),
 }
@@ -103,9 +103,16 @@ impl Environment {
   pub fn add_impls(&mut self, for_trait: &Path, impls: TraitImpls) {
     for t in &impls.impls {
       self.impls.entry(t.clone()).or_default().push(for_trait.clone());
+      for (f, sig) in &impls.trait_def.functions {
+        self.names.insert(t.join(f.clone()), sig.clone());
+      }
     }
 
     self.traits.insert(for_trait.clone(), impls);
+  }
+
+  pub fn struct_field(&self, ty: &Path, field: &str) -> Option<&Type> {
+    self.structs.get(ty)?.iter().find_map(|(f, t)| (f == field).then_some(t))
   }
 
   pub fn impl_type(&self, ty: &Path, method: &str) -> Option<&Type> {
@@ -157,21 +164,44 @@ impl From<hir::PrimitiveType> for VType {
   fn from(literal: hir::PrimitiveType) -> Self { VType::Primitive(literal) }
 }
 
-pub type VarId = Idx<TypeVar>;
+impl VType {
+  pub fn unit() -> Self { VType::Tuple(vec![]) }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct TypeVar {
-  pub values: IndexMap<VType, Span>,
-  pub uses:   IndexMap<VType, Span>,
+  pub fn is_integer(&self) -> bool {
+    match self {
+      VType::Integer(_) => true,
 
-  pub span:        Span,
-  pub description: String,
+      VType::Primitive(hir::PrimitiveType::I8) => true,
+      VType::Primitive(hir::PrimitiveType::I16) => true,
+      VType::Primitive(hir::PrimitiveType::I32) => true,
+      VType::Primitive(hir::PrimitiveType::I64) => true,
+      VType::Primitive(hir::PrimitiveType::U8) => true,
+      VType::Primitive(hir::PrimitiveType::U16) => true,
+      VType::Primitive(hir::PrimitiveType::U32) => true,
+      VType::Primitive(hir::PrimitiveType::U64) => true,
+
+      _ => false,
+    }
+  }
 }
 
-impl TypeVar {
-  pub fn new(span: Span, description: String) -> Self {
-    TypeVar { values: IndexMap::new(), uses: IndexMap::new(), span, description }
+pub type IntId = Idx<IntVar>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct IntVar {
+  pub deps:     Vec<IntId>,
+  pub concrete: Option<hir::PrimitiveType>,
+}
+
+impl Typer<'_> {
+  pub(crate) fn display_type<'a>(&'a self, ty: &'a VType) -> VTypeDisplay<'a> {
+    VTypeDisplay { typer: self, vtype: ty }
   }
+}
+
+pub(crate) struct VTypeDisplay<'a> {
+  typer: &'a Typer<'a>,
+  vtype: &'a VType,
 }
 
 impl fmt::Display for Type {
@@ -193,6 +223,55 @@ impl fmt::Display for Type {
         write!(f, "{}", types.join(" | "))
       }
       Type::Struct(name) => write!(f, "Struct {}", name),
+    }
+  }
+}
+
+impl fmt::Display for VTypeDisplay<'_> {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self.vtype {
+      VType::Error => write!(f, "unknown"),
+      VType::SelfT => write!(f, "Self"),
+      VType::Primitive(lit) => write!(f, "{lit}"),
+      VType::Integer(_) => write!(f, "integer"),
+      VType::Array(ty) => {
+        write!(f, "array<")?;
+        write!(f, "{}", self.typer.display_type(ty))?;
+        write!(f, ">")
+      }
+      VType::Tuple(tys) => {
+        write!(f, "(")?;
+        for (i, ty) in tys.iter().enumerate() {
+          if i != 0 {
+            write!(f, ", ")?;
+          }
+          write!(f, "{}", self.typer.display_type(ty))?;
+        }
+        write!(f, ")")
+      }
+
+      VType::Function(args, ret) => {
+        write!(f, "fn(")?;
+        for (i, ty) in args.iter().enumerate() {
+          if i != 0 {
+            write!(f, ", ")?;
+          }
+          write!(f, "{}", self.typer.display_type(ty))?;
+        }
+        write!(f, ") -> {}", self.typer.display_type(ret))
+      }
+
+      VType::Union(tys) => {
+        for (i, t) in tys.iter().enumerate() {
+          if i != 0 {
+            write!(f, " | ")?;
+          }
+          write!(f, "{}", self.typer.display_type(t))?;
+        }
+        Ok(())
+      }
+
+      VType::Struct(path) => write!(f, "{path}"),
     }
   }
 }

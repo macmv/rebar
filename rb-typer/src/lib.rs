@@ -1,18 +1,18 @@
 use std::collections::HashMap;
 
-use indexmap::IndexSet;
 use la_arena::Arena;
 use rb_diagnostic::{Span, emit};
 use rb_hir::{
   FunctionSpanMap,
   ast::{self as hir, ExprId, LocalId, StmtId},
 };
-use ty::{TypeVar, VType, VarId};
+use ty::VType;
 
-mod constrain;
 mod ty;
 
 pub use ty::{Environment, Type};
+
+use crate::ty::{IntId, IntVar};
 
 #[cfg(test)]
 #[macro_use]
@@ -33,7 +33,7 @@ pub struct Typer<'a> {
   exprs: HashMap<ExprId, VType>,
 
   // Type variables.
-  variables: Arena<TypeVar>,
+  integers: Arena<IntVar>,
 
   // Variables in the current block.
   //
@@ -65,7 +65,7 @@ impl<'a> Typer<'a> {
       function,
       span_map,
       exprs: HashMap::new(),
-      variables: Arena::new(),
+      integers: Arena::new(),
       local_functions: HashMap::new(),
       locals: HashMap::new(),
     }
@@ -100,23 +100,45 @@ impl<'a> Typer<'a> {
       }
     }
 
-    for &item in function.body.iter().flatten() {
-      typer.type_stmt(item);
+    if let Some(body) = &function.body {
+      for &item in body {
+        typer.type_stmt(item);
+      }
+
+      let ret = type_of_type_expr(&function.sig.ret);
+
+      match body.last().map(|tail| &typer.function.stmts[*tail]) {
+        Some(hir::Stmt::Expr(e)) => {
+          typer.check_expr(*e, &VType::from(ret.clone()));
+        }
+        _ => {
+          if !typer.is_subtype(&VType::from(ret), &VType::from(Type::unit())) {
+            panic!("expected result");
+          }
+        }
+      }
     }
 
     typer
   }
 
-  pub fn type_of_expr(&self, expr: ExprId) -> Type { self.lower_type(&self.exprs[&expr]) }
-  pub fn type_of_local(&self, local: LocalId) -> Type { self.lower_type(&self.locals[&local]) }
+  pub fn type_of_expr(&self, expr: ExprId) -> Type {
+    self.lower_type(&self.exprs.get(&expr).unwrap_or(&VType::Error))
+  }
+  pub fn type_of_local(&self, local: LocalId) -> Type {
+    self.lower_type(self.locals.get(&local).unwrap_or(&VType::Error))
+  }
 
   fn lower_type(&self, ty: &VType) -> Type {
     match ty {
+      VType::Error => Type::unit(),
       VType::SelfT => Type::SelfT,
       VType::Primitive(lit) => Type::Primitive(*lit),
 
       // Integers default to i64.
-      VType::Integer => Type::Primitive(hir::PrimitiveType::I64),
+      VType::Integer(id) => {
+        Type::Primitive(self.integers[*id].concrete.unwrap_or(hir::PrimitiveType::I64))
+      }
 
       VType::Array(ty) => Type::Array(Box::new(self.lower_type(ty))),
       VType::Tuple(tys) => Type::Tuple(tys.iter().map(|t| self.lower_type(t)).collect()),
@@ -125,104 +147,44 @@ impl<'a> Typer<'a> {
         Box::new(self.lower_type(ret)),
       ),
 
-      VType::Var(v) => self.anneal(*v),
-
       VType::Union(tys) => Type::Union(tys.iter().map(|ty| self.lower_type(ty)).collect()),
 
       VType::Struct(path) => Type::Struct(path.clone()),
     }
   }
 
-  fn anneal(&self, v: VarId) -> Type {
-    use hir::PrimitiveType::*;
-
-    let var = &self.variables[v];
-
-    let values = var
-      .values
-      .keys()
-      .map(|t| match t {
-        VType::Var(v) => VType::from(self.anneal(*v)),
-        t => t.clone(),
-      })
-      .collect::<IndexSet<_>>();
-
-    let uses = var
-      .uses
-      .keys()
-      .map(|t| match t {
-        VType::Var(v) => VType::from(self.anneal(*v)),
-        t => t.clone(),
-      })
-      .filter(|t| !values.contains(t))
-      .collect::<Vec<_>>();
-
-    let values = values.into_iter().collect::<Vec<_>>();
-
-    match (values.as_slice(), uses.as_slice()) {
-      ([a], []) => self.lower_type(&a),
-      ([a], [b]) if a == b => self.lower_type(&a),
-
-      ([VType::Integer], [VType::Primitive(I8)]) => I8.into(),
-      ([VType::Integer], [VType::Primitive(I16)]) => I16.into(),
-      ([VType::Integer], [VType::Primitive(I32)]) => I32.into(),
-      ([VType::Integer], [VType::Primitive(I64)]) => I64.into(),
-      ([VType::Integer], [VType::Primitive(U8)]) => U8.into(),
-      ([VType::Integer], [VType::Primitive(U16)]) => U16.into(),
-      ([VType::Integer], [VType::Primitive(U32)]) => U32.into(),
-      ([VType::Integer], [VType::Primitive(U64)]) => U64.into(),
-
-      // Unions?
-      (_, [u1, u2]) => {
-        emit!(var.span => "cannot unify types {} and {}", self.display_type(&u1), self.display_type(&u2));
-        Type::unit()
-      }
-      (_, uses) => {
-        emit!(var.span => "cannot unify types {uses:?}");
-        Type::unit()
-      }
-    }
-  }
-
   fn span(&self, expr: ExprId) -> Span { self.span_map.exprs[expr.into_raw().into_u32() as usize] }
 
-  fn type_stmt(&mut self, stmt: StmtId) {
+  fn type_stmt(&mut self, stmt: StmtId) -> Option<VType> {
     match self.function.stmts[stmt] {
-      hir::Stmt::Expr(expr) => {
-        self.type_expr(expr);
-      }
+      hir::Stmt::Expr(expr) => self.synth_expr(expr),
       hir::Stmt::Let(_, ref id, ref te, expr) => {
-        let res = self.type_expr(expr);
         if let Some(te) = te {
           let ty = VType::from(type_of_type_expr(te));
-          self.constrain(&res, &ty, self.span(expr));
+          self.check_expr(expr, &ty);
           self.locals.insert(id.unwrap(), ty);
         } else {
-          self.locals.insert(id.unwrap(), res);
+          match self.synth_expr(expr) {
+            Some(t) => {
+              self.locals.insert(id.unwrap(), t);
+            }
+            None => {}
+          }
         }
+        None
       }
-      hir::Stmt::FunctionDef(_) => {}
-      hir::Stmt::Struct => {}
+
+      hir::Stmt::FunctionDef(_) => None,
+      hir::Stmt::Struct => None,
     }
   }
 
-  fn fresh_var(&mut self, span: Span, description: String) -> VarId {
-    let var = TypeVar::new(span, description);
-    self.variables.alloc(var)
-  }
-
-  fn type_expr(&mut self, expr: ExprId) -> VType {
+  fn synth_expr(&mut self, expr: ExprId) -> Option<VType> {
     let ty = match self.function.exprs[expr] {
       hir::Expr::Literal(ref lit) => match lit {
-        hir::Literal::Nil => VType::Tuple(vec![]),
+        hir::Literal::Nil => VType::unit(),
         hir::Literal::Bool(_) => VType::Primitive(hir::PrimitiveType::Bool),
-        hir::Literal::Int(_) => {
-          let v = self.fresh_var(self.span(expr), "integer".to_string());
-
-          self.constrain(&VType::Integer, &VType::Var(v), self.span(expr));
-
-          VType::Var(v)
-        }
+        hir::Literal::Int(_) => self.fresh_int(&[]),
       },
 
       hir::Expr::String(ref segments) => {
@@ -232,7 +194,7 @@ impl<'a> Typer<'a> {
             hir::StringInterp::Expr(expr) => {
               // TODO: Constraint this to be stringifiable (currently everything is, but later
               // we want to restrict that).
-              self.type_expr(*expr);
+              self.synth_expr(*expr);
             }
           }
         }
@@ -241,69 +203,50 @@ impl<'a> Typer<'a> {
       }
 
       hir::Expr::Array(ref exprs) => {
-        let v = self.fresh_var(self.span(expr), "array element".to_string());
-
+        let mut tys = vec![];
         for &expr in exprs {
-          let e = self.type_expr(expr);
-          self.constrain(&e, &VType::Var(v), self.span(expr));
+          tys.push(self.synth_expr(expr)?);
         }
 
-        VType::Array(Box::new(VType::Var(v)))
+        VType::Array(Box::new(self.make_union(&tys)))
       }
 
-      hir::Expr::Call(lhs_expr, ref args) => match self.function.exprs[lhs_expr] {
-        hir::Expr::Field(lhs, ref method) => {
-          let lhs = self.type_expr(lhs);
+      hir::Expr::Call(lhs_expr, ref args) => {
+        let signature = match self.function.exprs[lhs_expr] {
+          hir::Expr::Field(lhs, ref method) => {
+            let lhs = self.synth_expr(lhs)?;
 
-          // We must have a concrete type by the time we resolve methods.
-          if let Some(path) = self.resolve_type(&lhs) {
-            if let Some(signature) = self.env.impl_type(&path, &method) {
-              let ret = VType::Var(
-                self.fresh_var(self.span(expr), format!("return type of calling {path}::{method}")),
-              );
+            // We must have a concrete type by the time we resolve methods.
+            let path = self.resolve_type(&lhs)?;
+            let signature = self.env.impl_type(&path, &method)?;
+            // This is an impl method, so fill in `self` with the type we're calling it on.
+            let signature = signature.resolve_self(&lhs);
 
-              // This is an impl method, so fill in `self` with the type we're calling it on.
-              let signature = signature.resolve_self(&lhs);
-
-              let call_type = VType::Function(
-                std::iter::once(lhs.clone())
-                  .chain(args.iter().map(|&arg| self.type_expr(arg)))
-                  .collect(),
-                Box::new(ret.clone()),
-              );
-
-              self.constrain(&signature.clone().into(), &call_type, self.span(lhs_expr));
-
-              ret
-            } else {
-              emit!(self.span(expr) => "method {} not found for type {}", method, self.display_type(&lhs));
-
-              Type::unit().into()
-            }
-          } else {
-            emit!(self.span(expr) => "could not resolve concrete type for {}", self.display_type(&lhs));
-
-            Type::unit().into()
+            signature
           }
+
+          _ => self.synth_expr(lhs_expr)?,
+        };
+
+        let VType::Function(ref sig_args, ref ret) = signature else {
+          return None;
+        };
+
+        if sig_args.len() == args.len() + 1 {
+          for (&arg, sig) in args.iter().zip(sig_args.iter().skip(1)) {
+            self.check_expr(arg, &sig);
+          }
+        } else {
+          emit!(
+            self.span(expr) =>
+            "expected {} arguments, found {}",
+            sig_args.len().saturating_sub(1),
+            args.len()
+          );
         }
 
-        _ => {
-          let lhs = self.type_expr(lhs_expr);
-
-          let ret = VType::Var(
-            self.fresh_var(self.span(expr), format!("return type of calling {:?}", lhs)),
-          );
-
-          let call_type = VType::Function(
-            args.iter().map(|&arg| self.type_expr(arg)).collect(),
-            Box::new(ret.clone()),
-          );
-
-          self.constrain(&lhs, &call_type, self.span(lhs_expr));
-
-          ret
-        }
-      },
+        (**ret).clone()
+      }
 
       hir::Expr::Name(ref path) => {
         if let Some(ident) = path.as_single()
@@ -321,128 +264,125 @@ impl<'a> Typer<'a> {
       hir::Expr::Local(id) => self.locals[&id].clone(),
 
       hir::Expr::Block(ref block) => {
-        // FIXME: Make a new scope here for the block.
-        for &stmt in block {
-          self.type_stmt(stmt);
+        for &expr in block[..block.len() - 1].iter() {
+          self.type_stmt(expr);
         }
-
-        match block.last() {
-          Some(stmt) => match self.function.stmts[*stmt] {
-            hir::Stmt::Expr(expr) => self.type_expr(expr),
-            _ => VType::Tuple(vec![]),
-          },
-          None => VType::Tuple(vec![]),
-        }
+        if let Some(&expr) = block.last() { self.type_stmt(expr)? } else { VType::unit() }
       }
 
-      hir::Expr::Paren(expr) => self.type_expr(expr),
+      hir::Expr::Paren(expr) => self.synth_expr(expr)?,
 
-      hir::Expr::UnaryOp(expr, ref op) => {
-        let ty = self.type_expr(expr);
-
-        let ret =
-          VType::Var(self.fresh_var(self.span(expr), format!("return type of binary op {op:?}")));
-
-        let call_type = VType::Function(vec![ty], Box::new(ret.clone()));
-
-        match op {
-          hir::UnaryOp::Neg => {
-            self.constrain(
-              &VType::Function(vec![VType::Integer], Box::new(VType::Integer)),
-              &call_type,
-              self.span(expr),
-            );
-          }
-
-          hir::UnaryOp::Not => {
-            self.constrain(
-              &VType::Function(
-                vec![hir::PrimitiveType::Bool.into()],
-                Box::new(hir::PrimitiveType::Bool.into()),
-              ),
-              &call_type,
-              self.span(expr),
-            );
-          }
+      hir::Expr::UnaryOp(expr, hir::UnaryOp::Neg) => {
+        let int = self.fresh_int(&[]);
+        let inferred = self.synth_expr(expr)?;
+        if !self.is_subtype(&int, &inferred) {
+          emit!(self.span(expr) => "cannot negate {}", self.display_type(&inferred));
         }
 
-        ret
+        inferred
       }
 
-      hir::Expr::BinaryOp(lhs_expr, ref op, rhs_expr) => {
-        let lhs = self.type_expr(lhs_expr);
-        let rhs = self.type_expr(rhs_expr);
-
-        match op {
-          hir::BinaryOp::Add
-          | hir::BinaryOp::Sub
-          | hir::BinaryOp::Mul
-          | hir::BinaryOp::Div
-          | hir::BinaryOp::Mod
-          | hir::BinaryOp::BitOr
-          | hir::BinaryOp::BitAnd
-          | hir::BinaryOp::Xor
-          | hir::BinaryOp::ShiftLeft
-          | hir::BinaryOp::ShiftRight => {
-            self.constrain(&lhs, &VType::Integer, self.span(rhs_expr));
-            self.constrain(&rhs, &lhs, self.span(rhs_expr));
-
-            lhs
-          }
-
-          hir::BinaryOp::Eq | hir::BinaryOp::Neq => {
-            self.constrain(&lhs, &rhs, self.span(rhs_expr));
-
-            hir::PrimitiveType::Bool.into()
-          }
-
-          hir::BinaryOp::Lt | hir::BinaryOp::Lte | hir::BinaryOp::Gt | hir::BinaryOp::Gte => {
-            self.constrain(&lhs, &VType::Integer, self.span(rhs_expr));
-            self.constrain(&rhs, &lhs, self.span(rhs_expr));
-
-            hir::PrimitiveType::Bool.into()
-          }
-
-          _ => unimplemented!("binary op {op:?}"),
+      hir::Expr::UnaryOp(expr, hir::UnaryOp::Not) => {
+        let inferred = self.synth_expr(expr)?;
+        if !self.is_subtype(&hir::PrimitiveType::Bool.into(), &inferred) {
+          emit!(self.span(expr) => "cannot invert {}", self.display_type(&inferred));
         }
+
+        inferred
+      }
+
+      hir::Expr::BinaryOp(
+        lhs_expr,
+        hir::BinaryOp::Add
+        | hir::BinaryOp::Sub
+        | hir::BinaryOp::Mul
+        | hir::BinaryOp::Div
+        | hir::BinaryOp::Mod
+        | hir::BinaryOp::BitAnd
+        | hir::BinaryOp::BitOr
+        | hir::BinaryOp::Xor
+        | hir::BinaryOp::ShiftLeft
+        | hir::BinaryOp::ShiftRight,
+        rhs_expr,
+      ) => {
+        let lhs = self.synth_expr(lhs_expr)?;
+        let rhs = self.synth_expr(rhs_expr)?;
+
+        // NB: Binary ops are special. If either side is a specific integer type, it
+        // coerces.
+        //
+        // This is not like `a.add(b)`, where the left hand side must be concrete.
+        let res = self.synth_binary_integers(&lhs, &rhs, self.span(expr))?;
+
+        if !matches!(res, VType::Integer(_)) {
+          self.pin_integer(&lhs, &res);
+          self.pin_integer(&rhs, &res);
+        }
+
+        res
+      }
+
+      hir::Expr::BinaryOp(
+        lhs_expr,
+        hir::BinaryOp::Lt | hir::BinaryOp::Lte | hir::BinaryOp::Gt | hir::BinaryOp::Gte,
+        rhs_expr,
+      ) => {
+        let lhs = self.synth_expr(lhs_expr)?;
+        let rhs = self.synth_expr(rhs_expr)?;
+
+        let res = self.synth_binary_integers(&lhs, &rhs, self.span(expr))?;
+
+        if !matches!(res, VType::Integer(_)) {
+          self.pin_integer(&lhs, &res);
+          self.pin_integer(&rhs, &res);
+        }
+
+        hir::PrimitiveType::Bool.into()
+      }
+
+      hir::Expr::BinaryOp(lhs_expr, hir::BinaryOp::And | hir::BinaryOp::Or, rhs_expr) => {
+        self.check_expr(lhs_expr, &hir::PrimitiveType::Bool.into());
+        self.check_expr(rhs_expr, &hir::PrimitiveType::Bool.into());
+
+        hir::PrimitiveType::Bool.into()
+      }
+
+      hir::Expr::BinaryOp(lhs_expr, hir::BinaryOp::Eq | hir::BinaryOp::Neq, rhs_expr) => {
+        let lhs = self.synth_expr(lhs_expr)?;
+        self.check_expr(rhs_expr, &lhs);
+
+        hir::PrimitiveType::Bool.into()
       }
 
       hir::Expr::Index(lhs, rhs) => {
-        let lhs = self.type_expr(lhs);
-        let rhs = self.type_expr(rhs);
-
-        let elem = VType::Var(self.fresh_var(self.span(expr), "array element".to_string()));
-
-        self.constrain(&lhs, &VType::Array(Box::new(elem.clone())), self.span(expr));
-        self.constrain(&rhs, &VType::Primitive(hir::PrimitiveType::U64), self.span(expr));
-
-        elem
+        let lhs = self.synth_expr(lhs)?;
+        match lhs {
+          VType::Array(elem) => {
+            self.check_expr(rhs, &hir::PrimitiveType::U64.into());
+            (*elem).clone()
+          }
+          _ => {
+            emit!(self.span(rhs) => "cannot index into {}", self.display_type(&lhs));
+            return None;
+          }
+        }
       }
 
-      hir::Expr::Field(lhs, _) => {
-        let lhs = self.type_expr(lhs);
-
-        // TODO
-
-        lhs
+      hir::Expr::Field(lhs, ref field) => {
+        let lhs = self.synth_expr(lhs)?;
+        let path = self.resolve_type(&lhs)?;
+        let ty = self.env.struct_field(&path, &field)?;
+        VType::from(ty.clone())
       }
 
       hir::Expr::If { cond, then, els } => {
-        let cond_ty = self.type_expr(cond);
+        self.check_expr(cond, &VType::Primitive(hir::PrimitiveType::Bool));
 
-        self.constrain(&cond_ty, &VType::Primitive(hir::PrimitiveType::Bool), self.span(cond));
-
-        let then_ty = self.type_expr(then);
+        let then_ty = self.synth_expr(then)?;
         if let Some(els) = els {
-          let els_ty = self.type_expr(els);
+          let els_ty = self.synth_expr(els)?;
 
-          let res = self.fresh_var(self.span(expr), "if statment foo".to_string());
-          let res = VType::Var(res);
-
-          self.constrain(&then_ty, &res, self.span(then));
-          self.constrain(&els_ty, &res, self.span(then));
-
-          res
+          self.make_union(&[then_ty, els_ty])
         } else {
           then_ty
         }
@@ -453,13 +393,12 @@ impl<'a> Typer<'a> {
           self.env.structs.get(path).unwrap_or_else(|| panic!("no struct at path {path:?}"));
 
         for &(ref k, v) in fields {
-          let ty = self.type_expr(v);
           let Some(field) = strct.iter().find(|(n, _)| n == k) else {
             emit!(self.span(v) => "field {k} not found in struct {path}");
             continue;
           };
 
-          self.constrain(&ty, &VType::from(field.1.clone()), self.span(v));
+          self.check_expr(v, &VType::from(field.1.clone()));
         }
 
         VType::Struct(path.clone())
@@ -469,7 +408,120 @@ impl<'a> Typer<'a> {
     };
 
     self.exprs.insert(expr, ty.clone());
-    ty
+    Some(ty)
+  }
+
+  fn synth_binary_integers(&mut self, lhs: &VType, rhs: &VType, span: Span) -> Option<VType> {
+    use hir::PrimitiveType::*;
+
+    Some(match (&lhs, &rhs) {
+      (VType::Integer(l), VType::Integer(r)) => self.fresh_int(&[*l, *r]),
+
+      (VType::Primitive(I8), VType::Integer(_) | VType::Primitive(I8)) => I8.into(),
+      (VType::Primitive(I16), VType::Integer(_) | VType::Primitive(I16)) => I16.into(),
+      (VType::Primitive(I32), VType::Integer(_) | VType::Primitive(I32)) => I32.into(),
+      (VType::Primitive(I64), VType::Integer(_) | VType::Primitive(I64)) => I64.into(),
+      (VType::Primitive(U8), VType::Integer(_) | VType::Primitive(U8)) => U8.into(),
+      (VType::Primitive(U16), VType::Integer(_) | VType::Primitive(U16)) => U16.into(),
+      (VType::Primitive(U32), VType::Integer(_) | VType::Primitive(U32)) => U32.into(),
+      (VType::Primitive(U64), VType::Integer(_) | VType::Primitive(U64)) => U64.into(),
+
+      (VType::Integer(_), VType::Primitive(I8)) => I8.into(),
+      (VType::Integer(_), VType::Primitive(I16)) => I16.into(),
+      (VType::Integer(_), VType::Primitive(I32)) => I32.into(),
+      (VType::Integer(_), VType::Primitive(I64)) => I64.into(),
+      (VType::Integer(_), VType::Primitive(U8)) => U8.into(),
+      (VType::Integer(_), VType::Primitive(U16)) => U16.into(),
+      (VType::Integer(_), VType::Primitive(U32)) => U32.into(),
+      (VType::Integer(_), VType::Primitive(U64)) => U64.into(),
+
+      _ => {
+        emit!(
+          span =>
+          "cannot apply binary operator to types {} and {}",
+          self.display_type(&lhs),
+          self.display_type(&rhs)
+        );
+        return None;
+      }
+    })
+  }
+
+  fn check_expr(&mut self, expr: ExprId, expected: &VType) -> bool {
+    match self.function.exprs[expr] {
+      hir::Expr::If { cond, then, els } => {
+        self.check_expr(cond, &VType::Primitive(hir::PrimitiveType::Bool))
+          && self.check_expr(then, expected)
+          && if let Some(els) = els { self.check_expr(els, expected) } else { true }
+      }
+
+      _ => match self.synth_expr(expr) {
+        Some(inferred) => {
+          if self.is_subtype(&inferred, expected) {
+            match inferred {
+              VType::Integer(_) => self.pin_integer(&inferred, expected),
+
+              _ => {}
+            }
+
+            true
+          } else {
+            emit!(self.span(expr) => "expected {}, found {}", self.display_type(&expected), self.type_of_expr(expr));
+            false
+          }
+        }
+        None => {
+          emit!(self.span(expr) => "expected {}, found {}", self.display_type(&expected), self.type_of_expr(expr));
+          false
+        }
+      },
+    }
+  }
+
+  fn is_subtype(&self, a: &VType, b: &VType) -> bool {
+    match (a, b) {
+      (a, b) if a == b => true,
+
+      (VType::Integer(_), VType::Primitive(hir::PrimitiveType::I8)) => true,
+      (VType::Integer(_), VType::Primitive(hir::PrimitiveType::I16)) => true,
+      (VType::Integer(_), VType::Primitive(hir::PrimitiveType::I32)) => true,
+      (VType::Integer(_), VType::Primitive(hir::PrimitiveType::I64)) => true,
+      (VType::Integer(_), VType::Primitive(hir::PrimitiveType::U8)) => true,
+      (VType::Integer(_), VType::Primitive(hir::PrimitiveType::U16)) => true,
+      (VType::Integer(_), VType::Primitive(hir::PrimitiveType::U32)) => true,
+      (VType::Integer(_), VType::Primitive(hir::PrimitiveType::U64)) => true,
+
+      _ => false,
+    }
+  }
+
+  fn fresh_int(&mut self, deps: &[IntId]) -> VType {
+    let id =
+      self.integers.alloc(IntVar { deps: deps.iter().copied().collect(), concrete: None });
+
+    VType::Integer(id)
+  }
+
+  fn pin_integer(&mut self, ty: &VType, target: &VType) {
+    let target = match target {
+      VType::Primitive(prim) => *prim,
+      _ => panic!("can only pin integer to primitive type"),
+    };
+
+    if let VType::Integer(id) = *ty {
+      let mut stack = vec![id];
+      while let Some(id) = stack.pop() {
+        let int = &self.integers[id];
+        for dep in &int.deps {
+          stack.push(*dep);
+        }
+
+        if self.integers[id].concrete.is_some_and(|c| c != target) {
+          panic!("conflicting integer type constraints");
+        }
+        self.integers[id].concrete = Some(target);
+      }
+    }
   }
 
   fn resolve_type(&self, ty: &VType) -> Option<hir::Path> {
@@ -488,21 +540,74 @@ impl<'a> Typer<'a> {
       _ => None,
     }
   }
+
+  fn make_union(&mut self, tys: &[VType]) -> VType {
+    if tys.is_empty() {
+      return VType::unit();
+    } else if tys.len() == 1 {
+      return tys[0].clone();
+    }
+
+    let mut tys = tys.to_vec();
+
+    loop {
+      let mut changed = false;
+      for i in 0..tys.len() {
+        for j in (i + 1)..tys.len() {
+          if tys[i] == tys[j] {
+            tys.remove(i);
+            changed = true;
+          }
+        }
+      }
+
+      if !changed {
+        break;
+      }
+    }
+
+    if tys.len() == 1 {
+      return tys.into_iter().next().unwrap();
+    }
+
+    if tys.iter().any(|t| matches!(t, VType::Error)) {
+      return VType::Error;
+    }
+
+    if tys.iter().all(|t| t.is_integer()) {
+      let concrete =
+        tys.iter().find_map(|t| if let VType::Primitive(p) = t { Some(*p) } else { None });
+
+      if let Some(concrete) = concrete {
+        for ty in tys {
+          self.pin_integer(&ty, &VType::Primitive(concrete));
+        }
+        return VType::Primitive(concrete);
+      } else {
+        let mut deps = vec![];
+        for ty in tys {
+          if let VType::Integer(id) = ty {
+            deps.push(id);
+          }
+        }
+        let int = self.fresh_int(&deps);
+        return int;
+      }
+    }
+
+    todo!("unions")
+  }
 }
 
 #[cfg(test)]
-fn check(body: &str, expected: rb_test::Expect) { check_inner(body, false, expected); }
-#[cfg(test)]
-#[allow(dead_code)]
-fn check_v(body: &str, expected: rb_test::Expect) { check_inner(body, true, expected); }
+fn check(body: &str, expected: rb_test::Expect) { check_inner(body, expected); }
 
 #[cfg(test)]
-fn check_inner(body: &str, verbose: bool, expected: rb_test::Expect) {
+fn check_inner(body: &str, expected: rb_test::Expect) {
   use std::fmt::Write;
 
   let (sources, body, span_map) = rb_hir_lower::parse_body(body);
   let mut out = String::new();
-  let mut debug = String::new();
   let res = rb_diagnostic::run(sources.clone(), || {
     let env = Environment::mini();
     let typer = crate::Typer::check(&env, &body, &span_map);
@@ -511,30 +616,16 @@ fn check_inner(body: &str, verbose: bool, expected: rb_test::Expect) {
       let ty = typer.type_of_local(id);
       writeln!(out, "{}: {}", local.name, ty).unwrap();
     }
-
-    if verbose {
-      writeln!(debug).unwrap();
-
-      for (v, var) in typer.variables.iter() {
-        writeln!(debug, "v{} ({}):", v.into_raw().into_u32(), var.description).unwrap();
-        for v in var.values.keys() {
-          writeln!(debug, "  + {:?}", v).unwrap();
-        }
-        for u in var.uses.keys() {
-          writeln!(debug, "  - {:?}", u).unwrap();
-        }
-      }
-    }
   });
 
   match res {
-    Ok(()) => expected.assert_eq(&format!("{out}{debug}")),
+    Ok(()) => expected.assert_eq(&format!("{out}")),
     Err(e) => {
       let mut out = String::new();
       for e in e {
         write!(out, "{}", e.render(&sources)).unwrap();
       }
-      expected.assert_eq(&format!("{out}{debug}"));
+      expected.assert_eq(&format!("{out}"));
     }
   }
 }
@@ -542,6 +633,77 @@ fn check_inner(body: &str, verbose: bool, expected: rb_test::Expect) {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn simple_check() {
+    check(
+      r#"
+      let a: str = "hi"
+      "#,
+      expect![@r#"
+        a: str
+      "#],
+    );
+
+    check(
+      r#"
+      let a: i32 = "hi"
+      "#,
+      expect![@r#"
+        error: expected i32, found str
+         --> inline.rbr:2:20
+          |
+        2 |       let a: i32 = "hi"
+          |                    ^^^^
+      "#],
+    );
+
+    check(
+      r#"
+      let a = "hi"
+      let b: i64 = a
+      "#,
+      expect![@r#"
+        error: expected i64, found str
+         --> inline.rbr:3:20
+          |
+        3 |       let b: i64 = a
+          |                    ^
+      "#],
+    );
+  }
+
+  #[test]
+  fn infer_numbers() {
+    check(
+      r#"
+      let a = 3
+      "#,
+      expect![@r#"
+        a: i64
+      "#],
+    );
+
+    check(
+      r#"
+      let a: i32 = 3
+      "#,
+      expect![@r#"
+        a: i32
+      "#],
+    );
+
+    check(
+      r#"
+      let a: i32 = 3
+      let b = a
+      "#,
+      expect![@r#"
+        a: i32
+        b: i32
+      "#],
+    );
+  }
 
   #[test]
   fn unify_addition() {
@@ -564,6 +726,128 @@ mod tests {
       expect![@r#"
         a: i32
         b: i32
+      "#],
+    );
+
+    check(
+      "
+      let a: i32 = 3
+      let b = 1
+      let c = a + b
+      ",
+      expect![@r#"
+        a: i32
+        b: i32
+        c: i32
+      "#],
+    );
+
+    check(
+      "
+      let a = 3
+      let b = 1
+      let c: i32 = a + b
+      ",
+      expect![@r#"
+        a: i32
+        b: i32
+        c: i32
+      "#],
+    );
+
+    check(
+      "
+      let a = 3
+      let b: i32 = 1
+      let c: i8 = a + b
+      ",
+      expect![@r#"
+        error: expected i8, found i32
+         --> inline.rbr:4:19
+          |
+        4 |       let c: i8 = a + b
+          |                   ^^^^^
+      "#],
+    );
+
+    check(
+      "
+      let a = 3
+      let b: i32 = a + 1
+      let c = a + b
+      ",
+      expect![@r#"
+        a: i32
+        b: i32
+        c: i32
+      "#],
+    );
+
+    check(
+      "
+      let a = 3
+      let b: i32 = a + 1
+      let c: i8 = a + b
+      ",
+      expect![@r#"
+        error: expected i8, found i32
+         --> inline.rbr:4:19
+          |
+        4 |       let c: i8 = a + b
+          |                   ^^^^^
+      "#],
+    );
+  }
+
+  #[test]
+  fn unify_unary_op() {
+    check(
+      "
+      let a: i32 = 3
+      let b = -a
+      ",
+      expect![@r#"
+        a: i32
+        b: i32
+      "#],
+    );
+
+    check(
+      "
+      let a = true
+      let b = -a
+      ",
+      expect![@r#"
+        error: cannot negate bool
+         --> inline.rbr:3:16
+          |
+        3 |       let b = -a
+          |                ^
+      "#],
+    );
+
+    check(
+      "
+      let a = true
+      let b = !a
+      ",
+      expect![@r#"
+        a: bool
+        b: bool
+      "#],
+    );
+
+    check(
+      "
+      let a = 3
+      let b = !a
+      ",
+      expect![@r#"
+        error: cannot invert integer
+         --> inline.rbr:3:16
+          |
+        3 |       let b = !a
+          |                ^
       "#],
     );
   }
@@ -601,6 +885,77 @@ mod tests {
   }
 
   #[test]
+  fn unify_array() {
+    check(
+      "
+      let a = 1
+      let b = 2
+      let c = [a, b]
+      ",
+      expect![@r#"
+        a: i64
+        b: i64
+        c: Array[i64]
+      "#],
+    );
+
+    check(
+      "
+      let a: i32 = 1
+      let b = 2
+      let c = [a, b]
+      ",
+      expect![@r#"
+        a: i32
+        b: i32
+        c: Array[i32]
+      "#],
+    );
+
+    check(
+      "
+      let a = 1
+      let b: i32 = 2
+      let c = [a, b]
+      ",
+      expect![@r#"
+        a: i32
+        b: i32
+        c: Array[i32]
+      "#],
+    );
+  }
+
+  #[test]
+  fn unify_index() {
+    check(
+      "
+      let a = [1, 2, 3]
+      let b = 0
+      let c = a[b]
+      ",
+      expect![@r#"
+        a: Array[i64]
+        b: u64
+        c: i64
+      "#],
+    );
+
+    check(
+      "
+      let a = 3[4]
+      ",
+      expect![@r#"
+        error: cannot index into integer
+         --> inline.rbr:2:17
+          |
+        2 |       let a = 3[4]
+          |                 ^
+      "#],
+    );
+  }
+
+  #[test]
   fn check_comparison() {
     check(
       r#"
@@ -609,11 +964,11 @@ mod tests {
       let c = a < b
       "#,
       expect![@r#"
-        error: i8 is not a subtype of i32
-         --> inline.rbr:4:19
+        error: cannot apply binary operator to types i32 and i8
+         --> inline.rbr:4:15
           |
         4 |       let c = a < b
-          |                   ^
+          |               ^^^^^
       "#],
     );
   }
@@ -631,7 +986,7 @@ mod tests {
       "#],
     );
 
-    check_v(
+    check(
       r#"
       let a: i32 = 3
       let b = 4
@@ -641,15 +996,20 @@ mod tests {
         a: i32
         b: i32
         c: i32
+      "#],
+    );
+  }
 
-        v0 (integer):
-          + Integer
-          - Primitive(I32)
-        v1 (integer):
-          + Integer
-          - Primitive(I32)
-        v2 (return type of calling i32::add):
-          + Primitive(I32)
+  #[test]
+  fn absolute_calls() {
+    check(
+      r#"
+      let a: i32 = 3
+      let b = i32::add(a, 1)
+      "#,
+      expect![@r#"
+        a: i32
+        b: i32
       "#],
     );
   }
