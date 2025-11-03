@@ -1,8 +1,6 @@
 use std::{collections::HashMap, fmt};
 
-use indexmap::IndexMap;
 use la_arena::Idx;
-use rb_diagnostic::Span;
 use rb_hir::ast::{self as hir, Path};
 
 use crate::Typer;
@@ -64,7 +62,6 @@ pub(crate) enum VType {
   Union(Vec<VType>),
 
   Integer(IntId),
-  Var(VarId),
 
   Struct(Path),
 }
@@ -189,27 +186,11 @@ impl VType {
 }
 
 pub type IntId = Idx<IntVar>;
-pub type VarId = Idx<TypeVar>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct IntVar {
   pub deps:     Vec<IntId>,
   pub concrete: Option<hir::PrimitiveType>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct TypeVar {
-  pub values: IndexMap<VType, Span>,
-  pub uses:   IndexMap<VType, Span>,
-
-  pub span:        Span,
-  pub description: String,
-}
-
-impl TypeVar {
-  pub fn new(span: Span, description: String) -> Self {
-    TypeVar { values: IndexMap::new(), uses: IndexMap::new(), span, description }
-  }
 }
 
 impl Typer<'_> {
@@ -278,32 +259,6 @@ impl fmt::Display for VTypeDisplay<'_> {
           write!(f, "{}", self.typer.display_type(ty))?;
         }
         write!(f, ") -> {}", self.typer.display_type(ret))
-      }
-
-      // TODO: Render type variables correctly.
-      VType::Var(v) => {
-        let var = &self.typer.variables[*v];
-
-        if var.values.is_empty() {
-          write!(f, "()")
-        } else if var.values.len() == 1 {
-          write!(f, "{}", self.typer.display_type(var.values.keys().next().unwrap()))
-        } else {
-          let mut types = vec![];
-          for ty in var.values.keys() {
-            types.push(self.typer.display_type(ty));
-          }
-          // TODO: Need to sort types.
-          // types.sort_unstable();
-
-          for (i, t) in types.iter().enumerate() {
-            if i != 0 {
-              write!(f, " | ")?;
-            }
-            write!(f, "{}", t)?;
-          }
-          Ok(())
-        }
       }
 
       VType::Union(tys) => {

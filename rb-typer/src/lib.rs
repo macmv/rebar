@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 
-use indexmap::IndexSet;
 use la_arena::Arena;
 use rb_diagnostic::{Span, emit};
 use rb_hir::{
   FunctionSpanMap,
   ast::{self as hir, ExprId, LocalId, StmtId},
 };
-use ty::{TypeVar, VType, VarId};
+use ty::VType;
 
 mod ty;
 
@@ -34,8 +33,7 @@ pub struct Typer<'a> {
   exprs: HashMap<ExprId, VType>,
 
   // Type variables.
-  integers:  Arena<IntVar>,
-  variables: Arena<TypeVar>,
+  integers: Arena<IntVar>,
 
   // Variables in the current block.
   //
@@ -68,7 +66,6 @@ impl<'a> Typer<'a> {
       span_map,
       exprs: HashMap::new(),
       integers: Arena::new(),
-      variables: Arena::new(),
       local_functions: HashMap::new(),
       locals: HashMap::new(),
     }
@@ -150,62 +147,9 @@ impl<'a> Typer<'a> {
         Box::new(self.lower_type(ret)),
       ),
 
-      VType::Var(v) => self.anneal(*v),
-
       VType::Union(tys) => Type::Union(tys.iter().map(|ty| self.lower_type(ty)).collect()),
 
       VType::Struct(path) => Type::Struct(path.clone()),
-    }
-  }
-
-  fn anneal(&self, v: VarId) -> Type {
-    use hir::PrimitiveType::*;
-
-    let var = &self.variables[v];
-
-    let values = var
-      .values
-      .keys()
-      .map(|t| match t {
-        VType::Var(v) => VType::from(self.anneal(*v)),
-        t => t.clone(),
-      })
-      .collect::<IndexSet<_>>();
-
-    let uses = var
-      .uses
-      .keys()
-      .map(|t| match t {
-        VType::Var(v) => VType::from(self.anneal(*v)),
-        t => t.clone(),
-      })
-      .filter(|t| !values.contains(t))
-      .collect::<Vec<_>>();
-
-    let values = values.into_iter().collect::<Vec<_>>();
-
-    match (values.as_slice(), uses.as_slice()) {
-      ([a], []) => self.lower_type(&a),
-      ([a], [b]) if a == b => self.lower_type(&a),
-
-      ([VType::Integer(_)], [VType::Primitive(I8)]) => I8.into(),
-      ([VType::Integer(_)], [VType::Primitive(I16)]) => I16.into(),
-      ([VType::Integer(_)], [VType::Primitive(I32)]) => I32.into(),
-      ([VType::Integer(_)], [VType::Primitive(I64)]) => I64.into(),
-      ([VType::Integer(_)], [VType::Primitive(U8)]) => U8.into(),
-      ([VType::Integer(_)], [VType::Primitive(U16)]) => U16.into(),
-      ([VType::Integer(_)], [VType::Primitive(U32)]) => U32.into(),
-      ([VType::Integer(_)], [VType::Primitive(U64)]) => U64.into(),
-
-      // Unions?
-      (_, [u1, u2]) => {
-        emit!(var.span => "cannot unify types {} and {}", self.display_type(&u1), self.display_type(&u2));
-        Type::unit()
-      }
-      (_, uses) => {
-        emit!(var.span => "cannot unify types {uses:?}");
-        Type::unit()
-      }
     }
   }
 
@@ -233,11 +177,6 @@ impl<'a> Typer<'a> {
       hir::Stmt::FunctionDef(_) => None,
       hir::Stmt::Struct => None,
     }
-  }
-
-  fn fresh_var(&mut self, span: Span, description: String) -> VarId {
-    let var = TypeVar::new(span, description);
-    self.variables.alloc(var)
   }
 
   fn synth_expr(&mut self, expr: ExprId) -> Option<VType> {
@@ -661,18 +600,14 @@ impl<'a> Typer<'a> {
 }
 
 #[cfg(test)]
-fn check(body: &str, expected: rb_test::Expect) { check_inner(body, false, expected); }
-#[cfg(test)]
-#[allow(dead_code)]
-fn check_v(body: &str, expected: rb_test::Expect) { check_inner(body, true, expected); }
+fn check(body: &str, expected: rb_test::Expect) { check_inner(body, expected); }
 
 #[cfg(test)]
-fn check_inner(body: &str, verbose: bool, expected: rb_test::Expect) {
+fn check_inner(body: &str, expected: rb_test::Expect) {
   use std::fmt::Write;
 
   let (sources, body, span_map) = rb_hir_lower::parse_body(body);
   let mut out = String::new();
-  let mut debug = String::new();
   let res = rb_diagnostic::run(sources.clone(), || {
     let env = Environment::mini();
     let typer = crate::Typer::check(&env, &body, &span_map);
@@ -681,30 +616,16 @@ fn check_inner(body: &str, verbose: bool, expected: rb_test::Expect) {
       let ty = typer.type_of_local(id);
       writeln!(out, "{}: {}", local.name, ty).unwrap();
     }
-
-    if verbose {
-      writeln!(debug).unwrap();
-
-      for (v, var) in typer.variables.iter() {
-        writeln!(debug, "v{} ({}):", v.into_raw().into_u32(), var.description).unwrap();
-        for v in var.values.keys() {
-          writeln!(debug, "  + {:?}", v).unwrap();
-        }
-        for u in var.uses.keys() {
-          writeln!(debug, "  - {:?}", u).unwrap();
-        }
-      }
-    }
   });
 
   match res {
-    Ok(()) => expected.assert_eq(&format!("{out}{debug}")),
+    Ok(()) => expected.assert_eq(&format!("{out}")),
     Err(e) => {
       let mut out = String::new();
       for e in e {
         write!(out, "{}", e.render(&sources)).unwrap();
       }
-      expected.assert_eq(&format!("{out}{debug}"));
+      expected.assert_eq(&format!("{out}"));
     }
   }
 }
