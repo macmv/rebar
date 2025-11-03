@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use rb_diagnostic::emit;
 use rb_hir::{
-  FunctionSpanMap, SpanMap,
+  Environment, FunctionSpanMap, SpanMap,
   ast::{self as hir, Path},
 };
 
@@ -11,7 +11,7 @@ enum Item {
   Function,
 }
 
-pub fn resolve_hir(hir: &mut hir::Module, span_map: &SpanMap) {
+pub fn resolve_hir(_env: &Environment, hir: &mut hir::Module, span_map: &SpanMap) {
   let root = collect_module(hir);
   let _ = resolve_module(hir, &root, span_map, Path::new(), &root);
 }

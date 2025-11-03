@@ -423,9 +423,10 @@ fn check(src: &str) -> Vec<Diagnostic> {
   };
 
   let mut span_map = SpanMap::default();
+  let mut env = rb_hir::Environment::empty();
   span_map.modules.insert(rb_hir::ast::Path { segments: vec![] }, hir.1);
   let res = rb_diagnostic::run(sources.clone(), || {
-    rb_hir_lower::resolve_hir(&mut hir.0, &span_map);
+    rb_hir_lower::resolve_hir(&env, &mut hir.0, &span_map);
   });
   let span_map = span_map.modules.into_values().next().unwrap();
 
@@ -434,10 +435,8 @@ fn check(src: &str) -> Vec<Diagnostic> {
     Err(errs) => return errs,
   };
 
-  let mut typer_env = rb_hir::Environment::empty();
-
   for s in hir.0.structs.values() {
-    typer_env.structs.insert(
+    env.structs.insert(
       Path::new().join(s.name.clone()),
       s.fields.iter().map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te))).collect(),
     );
@@ -449,7 +448,7 @@ fn check(src: &str) -> Vec<Diagnostic> {
     for (idx, function) in hir.functions {
       let span_map = &span_map.functions[&idx];
 
-      rb_typer::Typer::check(&typer_env, &function, span_map);
+      rb_typer::Typer::check(&env, &function, span_map);
     }
   });
 

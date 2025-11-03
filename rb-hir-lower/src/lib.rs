@@ -13,6 +13,8 @@ use rb_syntax::{AstNode, SyntaxNodePtr, cst};
 #[cfg(feature = "test")]
 use rb_diagnostic::Sources;
 #[cfg(feature = "test")]
+use rb_hir::Environment;
+#[cfg(feature = "test")]
 use std::sync::Arc;
 
 mod collect;
@@ -24,7 +26,7 @@ pub use fs::FileSystem;
 pub use resolve::resolve_hir;
 
 #[cfg(feature = "test")]
-pub fn parse_body(body: &str) -> (Arc<Sources>, hir::Function, FunctionSpanMap) {
+pub fn parse_body(env: &Environment, body: &str) -> (Arc<Sources>, hir::Function, FunctionSpanMap) {
   use rb_diagnostic::Source;
 
   let mut sources = Sources::new();
@@ -51,7 +53,7 @@ pub fn parse_body(body: &str) -> (Arc<Sources>, hir::Function, FunctionSpanMap) 
 
     let mut span_map = SpanMap::default();
     span_map.modules.insert(Path::new(), module_span_map);
-    crate::resolve_hir(&mut module, &span_map);
+    crate::resolve_hir(&env, &mut module, &span_map);
     let mut module_span_map = span_map.modules.remove(&Path::new()).unwrap();
 
     let function = module.functions[module.main_function.unwrap()].clone();

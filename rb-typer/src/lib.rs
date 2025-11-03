@@ -604,10 +604,10 @@ fn check(body: &str, expected: rb_test::Expect) { check_inner(body, expected); }
 fn check_inner(body: &str, expected: rb_test::Expect) {
   use std::fmt::Write;
 
-  let (sources, body, span_map) = rb_hir_lower::parse_body(body);
+  let env = Environment::mini();
+  let (sources, body, span_map) = rb_hir_lower::parse_body(&env, body);
   let mut out = String::new();
   let res = rb_diagnostic::run(sources.clone(), || {
-    let env = Environment::mini();
     let typer = crate::Typer::check(&env, &body, &span_map);
 
     for (id, local) in body.locals.iter() {
