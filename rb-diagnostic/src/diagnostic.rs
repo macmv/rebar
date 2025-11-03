@@ -65,24 +65,41 @@ impl<'a> Render<'a> {
       let end_line_num = end.line + 1;
       let _end_col_num = end.col + 1;
 
+      let start =
+        u32::from(source.line_index.offset(LineCol { line: start.line, col: 0 }).unwrap()) as usize;
+      let end = source
+        .line_index
+        .offset(LineCol { line: end.line + 1, col: 0 })
+        .map(|o| u32::from(o) as usize)
+        .unwrap_or(source.source.len());
+
       let margin_str = " ".repeat(end_line_num.ilog10() as usize + 1);
 
       let mut out = String::new();
 
-      writeln!(out, "error: {}", diagnostic.message).unwrap();
-      writeln!(out, "{}--> {}:{}:{}", margin_str, source.name, start_line_num, start_col_num)
+      writeln!(out, "{}: {}", self.red(self.bold("error")), self.bold(&diagnostic.message))
         .unwrap();
+      writeln!(
+        out,
+        "{}{} {}:{}:{}",
+        margin_str,
+        self.blue("-->"),
+        source.name,
+        start_line_num,
+        start_col_num
+      )
+      .unwrap();
+      writeln!(out, "{} {}", margin_str, self.blue("|")).unwrap();
 
-      let lines = source.line_index.lines(diagnostic.span.range);
-      for line in lines {
-        let pos = source.line_index.line_col(line.start());
-        let line_num = pos.line + 1;
-        let _col_num = pos.col + 1;
+      for (i, line) in source.source[start..end].lines().enumerate() {
+        let line_num = start_line_num + i as u32;
+        let line_str = line.trim_end();
 
-        let line_str = &source.source[line].trim();
-
-        writeln!(out, "{} | {}", line_num, line_str).unwrap();
+        writeln!(out, "{} {} {}", self.blue(self.bold(line_num)), self.blue("|"), line_str)
+          .unwrap();
       }
+
+      writeln!(out, "{} {}", margin_str, self.blue("|")).unwrap();
 
       out
     } else {
