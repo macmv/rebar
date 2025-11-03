@@ -51,6 +51,7 @@ pub fn type_of_function(func: &hir::Function) -> Type {
 pub fn type_of_type_expr(te: &hir::TypeExpr) -> Type {
   match te {
     hir::TypeExpr::Primitive(t) => Type::Primitive(*t),
+    hir::TypeExpr::Ref(te) => Type::Ref(Box::new(type_of_type_expr(te))),
     hir::TypeExpr::Struct(path) => Type::Struct(path.clone()),
     hir::TypeExpr::Tuple(tys) => Type::Tuple(tys.iter().map(type_of_type_expr).collect()),
   }
@@ -132,6 +133,7 @@ impl<'a> Typer<'a> {
       VType::Error => Type::unit(),
       VType::SelfT => Type::SelfT,
       VType::Primitive(lit) => Type::Primitive(*lit),
+      VType::Ref(t) => Type::Ref(Box::new(self.lower_type(t))),
 
       // Integers default to i64.
       VType::Integer(id) => {

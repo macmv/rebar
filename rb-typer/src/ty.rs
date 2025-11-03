@@ -11,6 +11,7 @@ pub(crate) enum VType {
   Error,
   SelfT,
   Primitive(hir::PrimitiveType),
+  Ref(Box<VType>),
 
   Array(Box<VType>),
   Tuple(Vec<VType>),
@@ -31,6 +32,7 @@ impl From<Type> for VType {
     match ty {
       Type::SelfT => VType::SelfT,
       Type::Primitive(lit) => VType::Primitive(lit),
+      Type::Ref(t) => VType::Ref(Box::new((*t).into())),
       Type::Array(ty) => VType::Array(Box::new((*ty).into())),
       Type::Tuple(types) => VType::Tuple(types.into_iter().map(Into::into).collect()),
       Type::Function(args, ret) => {
@@ -92,6 +94,7 @@ impl fmt::Display for VTypeDisplay<'_> {
       VType::Error => write!(f, "unknown"),
       VType::SelfT => write!(f, "Self"),
       VType::Primitive(lit) => write!(f, "{lit}"),
+      VType::Ref(ty) => write!(f, "&{}", self.typer.display_type(ty)),
       VType::Integer(_) => write!(f, "integer"),
       VType::Array(ty) => {
         write!(f, "array<")?;

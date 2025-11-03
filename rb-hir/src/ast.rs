@@ -109,6 +109,7 @@ pub enum StringInterp {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeExpr {
   Primitive(PrimitiveType),
+  Ref(Box<TypeExpr>),
   Struct(Path),
   Tuple(Vec<TypeExpr>),
 }
@@ -140,6 +141,7 @@ pub enum PrimitiveType {
 pub enum Type {
   SelfT,
   Primitive(PrimitiveType),
+  Ref(Box<Type>),
   Array(Box<Type>),
   Tuple(Vec<Type>),
 
@@ -296,6 +298,7 @@ impl Type {
     match self {
       Type::SelfT => slf.clone(),
       Type::Primitive(p) => Type::Primitive(*p),
+      Type::Ref(t) => Type::Ref(Box::new(t.resolve_self(slf))),
       Type::Array(ty) => Type::Array(Box::new(ty.resolve_self(slf))),
       Type::Tuple(types) => Type::Tuple(types.iter().map(|ty| ty.resolve_self(slf)).collect()),
       Type::Function(args, ret) => Type::Function(
@@ -389,6 +392,7 @@ impl fmt::Display for Type {
     match self {
       Type::SelfT => write!(f, "Self"),
       Type::Primitive(p) => write!(f, "{p}"),
+      Type::Ref(t) => write!(f, "&{t}"),
       Type::Array(ty) => write!(f, "Array[{}]", ty),
       Type::Tuple(types) => {
         let types: Vec<String> = types.iter().map(|ty| format!("{}", ty)).collect();

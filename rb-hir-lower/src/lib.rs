@@ -587,6 +587,11 @@ fn type_expr(source: SourceId, cst: &cst::Type) -> hir::TypeExpr {
       }
     }
 
+    cst::Type::RefType(cst) => {
+      let inner = type_expr(source, &cst.ty().unwrap());
+      hir::TypeExpr::Ref(Box::new(inner))
+    }
+
     cst::Type::BinaryType(cst) => {
       let _lhs = type_expr(source, &cst.lhs().unwrap());
       let _rhs = type_expr(source, &cst.rhs().unwrap());
