@@ -116,3 +116,8 @@ impl cst::IfExpr {
   pub fn then(&self) -> Option<cst::Expr> { support::children(&self.syntax).nth(1) }
   pub fn els(&self) -> Option<cst::Expr> { support::children(&self.syntax).nth(2) }
 }
+
+impl cst::FullyQualifiedPath {
+  pub fn struct_path(&self) -> Option<cst::SimplePath> { support::children(&self.syntax).next() }
+  pub fn trait_path(&self) -> Option<cst::SimplePath> { support::children(&self.syntax).nth(1) }
+}

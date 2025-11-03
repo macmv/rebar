@@ -1031,5 +1031,16 @@ mod tests {
         b: i32
       "#],
     );
+
+    check(
+      r#"
+      let a: i32 = 3
+      let b = <i32 as std::op::Add>::add(a, 1)
+      "#,
+      expect![@r#"
+        a: i32
+        b: i32
+      "#],
+    );
   }
 }

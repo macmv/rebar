@@ -138,10 +138,18 @@ impl ModuleLower<'_> {
 
     for attr in cst.attrs() {
       let path = attr.path().unwrap();
-      // TODO: Path type!
-      let name = path.ident_tokens().map(|t| t.text().to_string()).collect::<Vec<_>>().join("::");
+      match path {
+        cst::Path::SimplePath(ref simple) => {
+          // TODO: Use the path type!
+          let name =
+            simple.ident_tokens().map(|t| t.text().to_string()).collect::<Vec<_>>().join("::");
 
-      lower.f.attrs.push(hir::Attribute { path: name });
+          lower.f.attrs.push(hir::Attribute { path: name });
+        }
+        _ => {
+          panic!("only simple paths allowed in attributes");
+        }
+      }
     }
 
     for arg in cst.params().unwrap().params() {
@@ -347,15 +355,33 @@ impl FunctionLower<'_, '_> {
         hir::Expr::Array(items)
       }
 
-      cst::Expr::PathExpr(ref path) => {
-        let mut p = Path::new();
+      cst::Expr::PathExpr(ref path) => match path.path().unwrap() {
+        cst::Path::FullyQualifiedPath(ref fq) => {
+          let mut struct_path = Path::new();
+          for tok in fq.struct_path().unwrap().ident_tokens() {
+            struct_path.push(tok.text().to_string());
+          }
+          let mut trait_path = Path::new();
+          for tok in fq.trait_path().unwrap().ident_tokens() {
+            trait_path.push(tok.text().to_string());
+          }
 
-        for tok in path.path().unwrap().ident_tokens() {
-          p.push(tok.text().to_string());
+          hir::Expr::Name(hir::FullyQualifiedName::new_trait_impl(
+            trait_path,
+            struct_path,
+            fq.ident_token().unwrap().text().to_string(),
+          ))
         }
+        cst::Path::SimplePath(ref simple) => {
+          let mut p = Path::new();
 
-        hir::Expr::Name(hir::FullyQualifiedName::new_bare(p).unwrap())
-      }
+          for tok in simple.ident_tokens() {
+            p.push(tok.text().to_string());
+          }
+
+          hir::Expr::Name(hir::FullyQualifiedName::new_bare(p).unwrap())
+        }
+      },
 
       cst::Expr::Block(ref block) => {
         let mut stmts = vec![];
@@ -422,22 +448,25 @@ impl FunctionLower<'_, '_> {
         els:  expr.els().map(|e| self.expr(e)),
       },
 
-      cst::Expr::StructExpr(ref expr) => {
-        let mut p = Path::new();
-        for tok in expr.path().unwrap().ident_tokens() {
-          p.push(tok.text().to_string());
+      cst::Expr::StructExpr(ref expr) => match expr.path().unwrap() {
+        cst::Path::SimplePath(simple) => {
+          let mut p = Path::new();
+          for tok in simple.ident_tokens() {
+            p.push(tok.text().to_string());
+          }
+
+          let mut fields = Vec::with_capacity(expr.field_inits().size_hint().0);
+          for field in expr.field_inits() {
+            let name = field.ident_token().unwrap().to_string();
+            let expr = self.expr(field.expr().unwrap());
+
+            fields.push((name, expr));
+          }
+
+          hir::Expr::StructInit(p, fields)
         }
-
-        let mut fields = Vec::with_capacity(expr.field_inits().size_hint().0);
-        for field in expr.field_inits() {
-          let name = field.ident_token().unwrap().to_string();
-          let expr = self.expr(field.expr().unwrap());
-
-          fields.push((name, expr));
-        }
-
-        hir::Expr::StructInit(p, fields)
-      }
+        _ => unreachable!("fully qualified paths not allowed in struct exprs"),
+      },
 
       _ => unimplemented!("lowering for {:?}", cst),
     };
