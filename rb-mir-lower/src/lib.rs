@@ -226,7 +226,7 @@ impl Lower<'_> {
             panic!("unresolved function {name}");
           }
         }
-        _ => panic!("todo: dynamic dispatch"),
+        ref e => panic!("todo: dispatch on {e:?}"),
       },
 
       hir::Expr::If { cond, then, els } => {
