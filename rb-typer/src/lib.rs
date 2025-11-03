@@ -1043,4 +1043,21 @@ mod tests {
       "#],
     );
   }
+
+  #[test]
+  fn unify_if() {
+    // FIXME: This should unify to `i32`.
+    check(
+      r#"
+      let a: i32 = 3
+      let b = 4
+      let c = if true { a } else { 4 }
+      "#,
+      expect![@r#"
+        a: i32
+        b: i64
+        c: i32
+      "#],
+    );
+  }
 }
