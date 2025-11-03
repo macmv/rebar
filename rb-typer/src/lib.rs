@@ -264,11 +264,12 @@ impl<'a> Typer<'a> {
       }
 
       hir::Expr::Array(ref exprs) => {
+        let mut tys = vec![];
         for &expr in exprs {
-          let _t = self.synth_expr(expr);
+          tys.push(self.synth_expr(expr)?);
         }
 
-        VType::Array(Box::new(VType::unit()))
+        VType::Array(Box::new(self.make_union(&tys)))
       }
 
       hir::Expr::Call(lhs_expr, ref args) => match self.function.exprs[lhs_expr] {
@@ -629,6 +630,63 @@ impl<'a> Typer<'a> {
       _ => None,
     }
   }
+
+  fn make_union(&mut self, tys: &[VType]) -> VType {
+    if tys.is_empty() {
+      return VType::unit();
+    } else if tys.len() == 1 {
+      return tys[0].clone();
+    }
+
+    let mut tys = tys.to_vec();
+
+    loop {
+      let mut changed = false;
+      for i in 0..tys.len() {
+        for j in (i + 1)..tys.len() {
+          if tys[i] == tys[j] {
+            tys.remove(i);
+            changed = true;
+          }
+        }
+      }
+
+      if !changed {
+        break;
+      }
+    }
+
+    if tys.len() == 1 {
+      return tys.into_iter().next().unwrap();
+    }
+
+    if tys.iter().any(|t| matches!(t, VType::Error)) {
+      return VType::Error;
+    }
+
+    if tys.iter().all(|t| t.is_integer()) {
+      let concrete =
+        tys.iter().find_map(|t| if let VType::Primitive(p) = t { Some(*p) } else { None });
+
+      if let Some(concrete) = concrete {
+        for ty in tys {
+          self.pin_integer(&ty, &VType::Primitive(concrete));
+        }
+        return VType::Primitive(concrete);
+      } else {
+        let mut deps = vec![];
+        for ty in tys {
+          if let VType::Integer(id) = ty {
+            deps.push(id);
+          }
+        }
+        let int = self.fresh_int(&deps);
+        return int;
+      }
+    }
+
+    todo!("unions")
+  }
 }
 
 #[cfg(test)]
@@ -935,6 +993,48 @@ mod tests {
   }
 
   #[test]
+  fn unify_array() {
+    check(
+      "
+      let a = 1
+      let b = 2
+      let c = [a, b]
+      ",
+      expect![@r#"
+        a: i64
+        b: i64
+        c: Array[i64]
+      "#],
+    );
+
+    check(
+      "
+      let a: i32 = 1
+      let b = 2
+      let c = [a, b]
+      ",
+      expect![@r#"
+        a: i32
+        b: i32
+        c: Array[i32]
+      "#],
+    );
+
+    check(
+      "
+      let a = 1
+      let b: i32 = 2
+      let c = [a, b]
+      ",
+      expect![@r#"
+        a: i32
+        b: i32
+        c: Array[i32]
+      "#],
+    );
+  }
+
+  #[test]
   fn unify_index() {
     check(
       "
@@ -943,9 +1043,9 @@ mod tests {
       let c = a[b]
       ",
       expect![@r#"
-        a: Array[()]
+        a: Array[i64]
         b: u64
-        c: ()
+        c: i64
       "#],
     );
 
