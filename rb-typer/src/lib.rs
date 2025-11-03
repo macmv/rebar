@@ -277,40 +277,29 @@ impl<'a> Typer<'a> {
           let lhs = self.synth_expr(lhs)?;
 
           // We must have a concrete type by the time we resolve methods.
-          if let Some(path) = self.resolve_type(&lhs) {
-            if let Some(signature) = self.env.impl_type(&path, &method) {
-              // This is an impl method, so fill in `self` with the type we're calling it on.
-              let signature = signature.resolve_self(&lhs);
+          let path = self.resolve_type(&lhs)?;
+          let signature = self.env.impl_type(&path, &method)?;
+          // This is an impl method, so fill in `self` with the type we're calling it on.
+          let signature = signature.resolve_self(&lhs);
 
-              match signature {
-                VType::Function(ref sig_args, ref ret) => {
-                  if sig_args.len() == args.len() + 1 {
-                    for (&arg, sig) in args.iter().zip(sig_args.iter().skip(1)) {
-                      self.check_expr(arg, &sig);
-                    }
-                  } else {
-                    emit!(
-                      self.span(expr) =>
-                      "expected {} arguments, found {}",
-                      sig_args.len().saturating_sub(1),
-                      args.len()
-                    );
-                  }
+          let VType::Function(ref sig_args, ref ret) = signature else {
+            return None;
+          };
 
-                  (**ret).clone()
-                }
-                _ => return None,
-              }
-            } else {
-              emit!(self.span(expr) => "method {} not found for type {}", method, self.display_type(&lhs));
-
-              Type::unit().into()
+          if sig_args.len() == args.len() + 1 {
+            for (&arg, sig) in args.iter().zip(sig_args.iter().skip(1)) {
+              self.check_expr(arg, &sig);
             }
           } else {
-            emit!(self.span(expr) => "could not resolve concrete type for {}", self.display_type(&lhs));
-
-            Type::unit().into()
+            emit!(
+              self.span(expr) =>
+              "expected {} arguments, found {}",
+              sig_args.len().saturating_sub(1),
+              args.len()
+            );
           }
+
+          (**ret).clone()
         }
 
         _ => {
