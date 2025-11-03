@@ -12,13 +12,14 @@ enum Item {
 }
 
 struct Resolver<'a> {
+  env:      &'a Environment,
   root:     &'a Item,
   span_map: &'a SpanMap,
 }
 
-pub fn resolve_hir(_env: &Environment, hir: &mut hir::Module, span_map: &SpanMap) {
+pub fn resolve_hir(env: &Environment, hir: &mut hir::Module, span_map: &SpanMap) {
   let root = collect_module(hir);
-  let _ = Resolver { root: &root, span_map }.resolve_module(hir, Path::new(), &root);
+  let _ = Resolver { env, root: &root, span_map }.resolve_module(hir, Path::new(), &root);
 }
 
 fn collect_module(hir: &hir::Module) -> Item {
@@ -93,7 +94,7 @@ impl Resolver<'_> {
             {
               // local variable
               function.exprs[id] = hir::Expr::Local(local);
-            } else if self.root.contains(p) {
+            } else if self.root.contains(p) || self.env.names.contains_key(p) {
               // absolute path
             } else {
               let abs = current.concat(p);
