@@ -276,26 +276,28 @@ impl<'a> Typer<'a> {
           // We must have a concrete type by the time we resolve methods.
           if let Some(path) = self.resolve_type(&lhs) {
             if let Some(signature) = self.env.impl_type(&path, &method) {
-              let ret = VType::Var(
-                self.fresh_var(self.span(expr), format!("return type of calling {path}::{method}")),
-              );
-
               // This is an impl method, so fill in `self` with the type we're calling it on.
               let signature = signature.resolve_self(&lhs);
 
-              todo!()
-              /*
-              let call_type = VType::Function(
-                std::iter::once(lhs.clone())
-                  .chain(args.iter().map(|&arg| self.synth_expr(arg)))
-                  .collect(),
-                Box::new(ret.clone()),
-              );
+              match signature {
+                VType::Function(ref sig_args, ref ret) => {
+                  if sig_args.len() == args.len() + 1 {
+                    for (&arg, sig) in args.iter().zip(sig_args.iter().skip(1)) {
+                      self.check_expr(arg, &sig);
+                    }
+                  } else {
+                    emit!(
+                      self.span(expr) =>
+                      "expected {} arguments, found {}",
+                      sig_args.len().saturating_sub(1),
+                      args.len()
+                    );
+                  }
 
-              self.constrain(&signature.clone().into(), &call_type, self.span(lhs_expr));
-
-              ret
-              */
+                  (**ret).clone()
+                }
+                _ => return None,
+              }
             } else {
               emit!(self.span(expr) => "method {} not found for type {}", method, self.display_type(&lhs));
 
@@ -906,14 +908,6 @@ mod tests {
         b: i32
         c: i32
 
-        v0 (integer):
-          + Integer
-          - Primitive(I32)
-        v1 (integer):
-          + Integer
-          - Primitive(I32)
-        v2 (return type of calling i32::add):
-          + Primitive(I32)
       "#],
     );
   }
