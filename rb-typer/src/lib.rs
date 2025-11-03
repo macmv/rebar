@@ -126,10 +126,13 @@ impl<'a> Typer<'a> {
   }
 
   pub fn type_of_expr(&self, expr: ExprId) -> Type { self.lower_type(&self.exprs[&expr]) }
-  pub fn type_of_local(&self, local: LocalId) -> Type { self.lower_type(&self.locals[&local]) }
+  pub fn type_of_local(&self, local: LocalId) -> Type {
+    self.lower_type(self.locals.get(&local).unwrap_or(&VType::Error))
+  }
 
   fn lower_type(&self, ty: &VType) -> Type {
     match ty {
+      VType::Error => Type::unit(),
       VType::SelfT => Type::SelfT,
       VType::Primitive(lit) => Type::Primitive(*lit),
 
@@ -219,9 +222,7 @@ impl<'a> Typer<'a> {
             Some(t) => {
               self.locals.insert(id.unwrap(), t);
             }
-            None => {
-              emit!(self.span(expr) => "could not infer type for let binding");
-            }
+            None => {}
           }
         }
         None
@@ -872,11 +873,11 @@ mod tests {
       let c = a < b
       "#,
       expect![@r#"
-        error: i8 is not a subtype of i32
-         --> inline.rbr:4:19
+        error: cannot apply binary operator to types i32 and i8
+         --> inline.rbr:4:15
           |
         4 |       let c = a < b
-          |                   ^
+          |               ^^^^^
       "#],
     );
   }

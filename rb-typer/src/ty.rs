@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt};
 use indexmap::IndexMap;
 use la_arena::Idx;
 use rb_diagnostic::Span;
-use rb_hir::ast::{self as hir, ExprId, Path};
+use rb_hir::ast::{self as hir, Path};
 
 use crate::Typer;
 
@@ -50,6 +50,7 @@ pub struct TraitDef {
 /// A type with variables in it. Internal to the typer.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum VType {
+  Error,
   SelfT,
   Primitive(hir::PrimitiveType),
 
@@ -224,6 +225,7 @@ impl fmt::Display for Type {
 impl fmt::Display for VTypeDisplay<'_> {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self.vtype {
+      VType::Error => write!(f, "unknown"),
       VType::SelfT => write!(f, "Self"),
       VType::Primitive(lit) => write!(f, "{lit}"),
       VType::Integer(_) => write!(f, "integer"),
