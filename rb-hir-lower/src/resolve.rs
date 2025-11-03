@@ -11,9 +11,14 @@ enum Item {
   Function,
 }
 
+struct Resolver<'a> {
+  root:     &'a Item,
+  span_map: &'a SpanMap,
+}
+
 pub fn resolve_hir(_env: &Environment, hir: &mut hir::Module, span_map: &SpanMap) {
   let root = collect_module(hir);
-  let _ = resolve_module(hir, &root, span_map, Path::new(), &root);
+  let _ = Resolver { root: &root, span_map }.resolve_module(hir, Path::new(), &root);
 }
 
 fn collect_module(hir: &hir::Module) -> Item {
@@ -39,93 +44,90 @@ fn collect_module(hir: &hir::Module) -> Item {
   Item::Module { children }
 }
 
-fn resolve_module(
-  hir: &mut hir::Module,
-  root: &Item,
-  span_map: &SpanMap,
-  current: Path,
-  item: &Item,
-) -> Result<(), ()> {
-  for (name, module) in &mut hir.modules {
-    match module {
-      hir::PartialModule::File => panic!("module wasn't filled in"),
-      hir::PartialModule::Inline(submodule) => {
-        let child_item = item.get(name).unwrap();
-        let _ = resolve_module(submodule, root, span_map, current.join(name.clone()), child_item);
+impl Resolver<'_> {
+  fn resolve_module(&self, hir: &mut hir::Module, current: Path, item: &Item) -> Result<(), ()> {
+    for (name, module) in &mut hir.modules {
+      match module {
+        hir::PartialModule::File => panic!("module wasn't filled in"),
+        hir::PartialModule::Inline(submodule) => {
+          let child_item = item.get(name).unwrap();
+          let _ = self.resolve_module(submodule, current.join(name.clone()), child_item);
+        }
       }
     }
+
+    let span_map = &self.span_map.modules[&current];
+
+    for (id, function) in hir.functions.iter_mut() {
+      let span_map = &span_map.functions[&id];
+
+      self.resolve_function(function, span_map, &current);
+    }
+
+    Ok(())
   }
 
-  let span_map = &span_map.modules[&current];
+  fn resolve_function(
+    &self,
+    function: &mut hir::Function,
+    span_map: &FunctionSpanMap,
+    current: &Path,
+  ) {
+    let Some(ref body) = function.body else { return };
 
-  for (id, function) in hir.functions.iter_mut() {
-    let span_map = &span_map.functions[&id];
+    let mut expr = 0;
+    let mut locals = HashMap::<String, hir::LocalId>::new();
 
-    resolve_function(function, span_map, root, &current);
-  }
+    for (arg, ty) in &function.sig.args {
+      let id = function.locals.alloc(hir::Local { name: arg.to_string(), ty: Some(ty.clone()) });
+      locals.insert(arg.clone(), id);
+    }
 
-  Ok(())
-}
-
-fn resolve_function(
-  function: &mut hir::Function,
-  span_map: &FunctionSpanMap,
-  root: &Item,
-  current: &Path,
-) {
-  let Some(ref body) = function.body else { return };
-
-  let mut expr = 0;
-  let mut locals = HashMap::<String, hir::LocalId>::new();
-
-  for (arg, ty) in &function.sig.args {
-    let id = function.locals.alloc(hir::Local { name: arg.to_string(), ty: Some(ty.clone()) });
-    locals.insert(arg.clone(), id);
-  }
-
-  let mut walk_until = |locals: &HashMap<String, hir::LocalId>, e: hir::ExprId| {
-    let mut id = hir::ExprId::from_raw(expr.into());
-    while id <= e {
-      match &mut function.exprs[id] {
-        hir::Expr::Name(p) => {
-          if let Some(ident) = p.as_single()
-            && let Some(&local) = locals.get(ident)
-          {
-            // local variable
-            function.exprs[id] = hir::Expr::Local(local);
-          } else if root.contains(p) {
-            // absolute path
-          } else {
-            let abs = current.concat(p);
-            if root.contains(&abs) {
-              // relative path
-              *p = abs;
+    let mut walk_until = |locals: &HashMap<String, hir::LocalId>, e: hir::ExprId| {
+      let mut id = hir::ExprId::from_raw(expr.into());
+      while id <= e {
+        match &mut function.exprs[id] {
+          hir::Expr::Name(p) => {
+            if let Some(ident) = p.as_single()
+              && let Some(&local) = locals.get(ident)
+            {
+              // local variable
+              function.exprs[id] = hir::Expr::Local(local);
+            } else if self.root.contains(p) {
+              // absolute path
             } else {
-              emit!(span_map[id] => format!("unresolved name `{p}`"));
+              let abs = current.concat(p);
+              if self.root.contains(&abs) {
+                // relative path
+                *p = abs;
+              } else {
+                emit!(span_map[id] => format!("unresolved name `{p}`"));
+              }
             }
           }
+
+          _ => {}
+        }
+
+        expr += 1;
+        id = hir::ExprId::from_raw(expr.into());
+      }
+    };
+
+    for &item in body {
+      match function.stmts[item] {
+        hir::Stmt::Expr(e) => walk_until(&locals, e),
+        hir::Stmt::Let(ref name, ref mut id, ref te, e) => {
+          walk_until(&locals, e);
+
+          let local =
+            function.locals.alloc(hir::Local { name: name.to_string(), ty: te.clone() });
+          *id = Some(local);
+          locals.insert(name.clone(), local);
         }
 
         _ => {}
       }
-
-      expr += 1;
-      id = hir::ExprId::from_raw(expr.into());
-    }
-  };
-
-  for &item in body {
-    match function.stmts[item] {
-      hir::Stmt::Expr(e) => walk_until(&locals, e),
-      hir::Stmt::Let(ref name, ref mut id, ref te, e) => {
-        walk_until(&locals, e);
-
-        let local = function.locals.alloc(hir::Local { name: name.to_string(), ty: te.clone() });
-        *id = Some(local);
-        locals.insert(name.clone(), local);
-      }
-
-      _ => {}
     }
   }
 }
