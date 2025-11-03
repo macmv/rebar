@@ -3,14 +3,12 @@ use std::collections::HashMap;
 use la_arena::Arena;
 use rb_diagnostic::{Span, emit};
 use rb_hir::{
-  FunctionSpanMap,
+  Environment, FunctionSpanMap,
   ast::{self as hir, ExprId, LocalId, StmtId, Type},
 };
 use ty::VType;
 
 mod ty;
-
-pub use ty::Environment;
 
 use crate::ty::{IntId, IntVar};
 

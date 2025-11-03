@@ -152,12 +152,12 @@ fn build_environment<'a>(
   module: &'a rb_hir::ast::Module,
   span_map: &'a rb_hir::SpanMap,
 ) -> (
-  rb_typer::Environment,
+  rb_hir::Environment,
   rb_mir::MirContext,
   HashMap<Path, rb_mir::ast::UserFunctionId>,
   Vec<(rb_mir::ast::UserFunctionId, &'a rb_hir::ast::Function, &'a rb_hir::FunctionSpanMap)>,
 ) {
-  let mut typer_env = rb_typer::Environment::empty();
+  let mut typer_env = rb_hir::Environment::empty();
   let mut mir_ctx = MirContext::default();
   let mut functions = vec![];
   let mut function_map = HashMap::new();

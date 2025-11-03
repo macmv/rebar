@@ -1,31 +1,9 @@
-use std::{collections::HashMap, fmt};
+use std::fmt;
 
 use la_arena::Idx;
 use rb_hir::ast::{self as hir, Path, Type};
 
 use crate::Typer;
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Environment {
-  pub names:   HashMap<Path, Type>,
-  pub structs: HashMap<Path, Vec<(String, Type)>>,
-
-  // A map of structs to what traits they implement.
-  pub impls:  HashMap<Path, Vec<Path>>,
-  // A map of traits to their definitions.
-  pub traits: HashMap<Path, TraitImpls>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct TraitImpls {
-  pub trait_def: TraitDef,
-  pub impls:     Vec<Path>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct TraitDef {
-  pub functions: HashMap<String, Type>,
-}
 
 /// A type with variables in it. Internal to the typer.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -46,62 +24,6 @@ pub(crate) enum VType {
   Integer(IntId),
 
   Struct(Path),
-}
-
-impl Environment {
-  pub fn empty() -> Self {
-    Environment {
-      names:   HashMap::new(),
-      structs: HashMap::new(),
-      impls:   HashMap::new(),
-      traits:  HashMap::new(),
-    }
-  }
-
-  pub fn mini() -> Self {
-    let mut env = Environment::empty();
-
-    env.add_impls(
-      &Path::from(["std", "op", "Add"]),
-      TraitImpls {
-        trait_def: TraitDef {
-          functions: HashMap::from([(
-            "add".to_string(),
-            Type::Function(vec![Type::SelfT, Type::SelfT], Box::new(Type::SelfT)),
-          )]),
-        },
-        impls:     vec![
-          Path::from(["i8"]),
-          Path::from(["i16"]),
-          Path::from(["i32"]),
-          Path::from(["i64"]),
-        ],
-      },
-    );
-
-    env
-  }
-
-  pub fn add_impls(&mut self, for_trait: &Path, impls: TraitImpls) {
-    for t in &impls.impls {
-      self.impls.entry(t.clone()).or_default().push(for_trait.clone());
-      for (f, sig) in &impls.trait_def.functions {
-        self.names.insert(t.join(f.clone()), sig.clone());
-      }
-    }
-
-    self.traits.insert(for_trait.clone(), impls);
-  }
-
-  pub fn struct_field(&self, ty: &Path, field: &str) -> Option<&Type> {
-    self.structs.get(ty)?.iter().find_map(|(f, t)| (f == field).then_some(t))
-  }
-
-  pub fn impl_type(&self, ty: &Path, method: &str) -> Option<&Type> {
-    self.impls.get(ty)?.iter().filter_map(|t| self.traits[t].trait_def.functions.get(method)).next()
-  }
-
-  pub fn function_type(&self, path: &Path) -> Option<&Type> { self.names.get(path) }
 }
 
 pub fn resolve_self(ty: &Type, slf: &VType) -> VType {

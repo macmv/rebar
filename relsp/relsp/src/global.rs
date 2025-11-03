@@ -434,7 +434,7 @@ fn check(src: &str) -> Vec<Diagnostic> {
     Err(errs) => return errs,
   };
 
-  let mut typer_env = rb_typer::Environment::empty();
+  let mut typer_env = rb_hir::Environment::empty();
 
   for s in hir.0.structs.values() {
     typer_env.structs.insert(
