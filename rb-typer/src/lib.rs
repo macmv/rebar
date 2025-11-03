@@ -125,7 +125,9 @@ impl<'a> Typer<'a> {
     typer
   }
 
-  pub fn type_of_expr(&self, expr: ExprId) -> Type { self.lower_type(&self.exprs[&expr]) }
+  pub fn type_of_expr(&self, expr: ExprId) -> Type {
+    self.lower_type(&self.exprs.get(&expr).unwrap_or(&VType::Error))
+  }
   pub fn type_of_local(&self, local: LocalId) -> Type {
     self.lower_type(self.locals.get(&local).unwrap_or(&VType::Error))
   }
@@ -439,11 +441,16 @@ impl<'a> Typer<'a> {
 
       hir::Expr::Index(lhs, rhs) => {
         let lhs = self.synth_expr(lhs)?;
-        let rhs = self.synth_expr(rhs)?;
-
-        let elem = VType::Var(self.fresh_var(self.span(expr), "array element".to_string()));
-
-        elem
+        match lhs {
+          VType::Array(elem) => {
+            self.check_expr(rhs, &hir::PrimitiveType::U64.into());
+            (*elem).clone()
+          }
+          _ => {
+            emit!(self.span(rhs) => "cannot index into {}", self.display_type(&lhs));
+            return None;
+          }
+        }
       }
 
       hir::Expr::Field(lhs, _) => {
@@ -923,6 +930,35 @@ mod tests {
         a: i32
         b: i32
         c: bool
+      "#],
+    );
+  }
+
+  #[test]
+  fn unify_index() {
+    check(
+      "
+      let a = [1, 2, 3]
+      let b = 0
+      let c = a[b]
+      ",
+      expect![@r#"
+        a: Array[()]
+        b: u64
+        c: ()
+      "#],
+    );
+
+    check(
+      "
+      let a = 3[4]
+      ",
+      expect![@r#"
+        error: cannot index into integer
+         --> inline.rbr:2:17
+          |
+        2 |       let a = 3[4]
+          |                 ^
       "#],
     );
   }
