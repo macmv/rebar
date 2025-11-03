@@ -100,6 +100,11 @@ impl Environment {
       },
     );
 
+    env.names.insert(
+      FullyQualifiedName::new_single("panic".to_string()),
+      Type::Function(vec![], Box::new(Type::Primitive(ast::PrimitiveType::Never))),
+    );
+
     env
   }
 

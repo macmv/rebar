@@ -239,6 +239,8 @@ impl Path {
 }
 
 impl FullyQualifiedName {
+  pub fn new_single(name: String) -> Self { FullyQualifiedName::Bare { path: Path::new(), name } }
+
   pub fn new_bare(mut path: Path) -> Option<Self> {
     let name = path.segments.pop()?;
 

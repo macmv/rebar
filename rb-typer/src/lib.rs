@@ -1060,4 +1060,16 @@ mod tests {
       "#],
     );
   }
+
+  #[test]
+  fn unify_never() {
+    check(
+      r#"
+      let a = panic()
+      "#,
+      expect![@r#"
+        a: !
+      "#],
+    );
+  }
 }
