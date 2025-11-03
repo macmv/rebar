@@ -78,7 +78,7 @@ fn resolve_function(
   let mut expr = 0;
   let mut locals = HashMap::<String, hir::LocalId>::new();
 
-  for (arg, ty) in &function.args {
+  for (arg, ty) in &function.sig.args {
     let id = function.locals.alloc(hir::Local { name: arg.to_string(), ty: Some(ty.clone()) });
     locals.insert(arg.clone(), id);
   }

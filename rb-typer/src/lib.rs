@@ -43,11 +43,8 @@ pub struct Typer<'a> {
 }
 
 pub fn type_of_function(func: &hir::Function) -> Type {
-  let args = func.args.iter().map(|(_, ty)| type_of_type_expr(ty)).collect();
-  let ret = match func.ret {
-    Some(ref ty) => Box::new(type_of_type_expr(ty)),
-    None => Box::new(Type::unit()),
-  };
+  let args = func.sig.args.iter().map(|(_, ty)| type_of_type_expr(ty)).collect();
+  let ret = Box::new(type_of_type_expr(&func.sig.ret));
 
   Type::Function(args, ret)
 }

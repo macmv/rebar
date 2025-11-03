@@ -146,11 +146,11 @@ impl ModuleLower<'_> {
       let name = arg.ident_token().unwrap().to_string();
       let ty = type_expr(lower.source.source, &arg.ty().unwrap());
 
-      lower.f.args.push((name, ty));
+      lower.f.sig.args.push((name, ty));
     }
 
     if let Some(ret) = cst.params().unwrap().return_type() {
-      lower.f.ret = Some(type_expr(lower.source.source, &ret.ty().unwrap()));
+      lower.f.sig.ret = type_expr(lower.source.source, &ret.ty().unwrap());
     }
 
     if let Some(block) = cst.block() {

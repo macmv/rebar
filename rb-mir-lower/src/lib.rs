@@ -59,9 +59,7 @@ pub fn lower_function(ctx: &MirContext, ty: &Typer, hir: &hir::Function) -> Opti
     }
   }
 
-  if let Some(ret) = &hir.ret {
-    lower.mir.ret = Some(rb_typer::type_of_type_expr(ret));
-  }
+  lower.mir.ret = rb_typer::type_of_type_expr(&hir.sig.ret);
 
   if let Some(body) = &hir.body {
     for stmt in body.iter() {

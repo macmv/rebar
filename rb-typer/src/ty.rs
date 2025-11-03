@@ -19,6 +19,10 @@ pub enum Type {
   Struct(Path),
 }
 
+impl Default for Type {
+  fn default() -> Self { Type::unit() }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
   pub names:   HashMap<Path, Type>,

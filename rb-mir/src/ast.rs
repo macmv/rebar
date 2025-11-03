@@ -18,7 +18,7 @@ pub struct Function {
   /// The parameters of this function.
   pub params: Vec<Type>,
   /// The return type of this function.
-  pub ret:    Option<Type>,
+  pub ret:    Type,
 
   /// Local variables in this function.
   pub vars: Vec<Type>,

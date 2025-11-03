@@ -36,8 +36,7 @@ pub struct Function {
   pub name: String,
 
   pub attrs: Vec<Attribute>,
-  pub args:  Vec<(String, TypeExpr)>,
-  pub ret:   Option<TypeExpr>,
+  pub sig:   Signature,
 
   pub exprs:  Arena<Expr>,
   pub stmts:  Arena<Stmt>,
@@ -45,6 +44,12 @@ pub struct Function {
   pub locals: Arena<Local>,
 
   pub body: Option<Vec<StmtId>>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Signature {
+  pub args: Vec<(String, TypeExpr)>,
+  pub ret:  TypeExpr,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,6 +105,10 @@ pub enum TypeExpr {
   Primitive(PrimitiveType),
   Struct(Path),
   Tuple(Vec<TypeExpr>),
+}
+
+impl Default for TypeExpr {
+  fn default() -> Self { TypeExpr::unit() }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
