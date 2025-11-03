@@ -576,9 +576,15 @@ impl<'a> Typer<'a> {
       for i in 0..tys.len() {
         for j in (i + 1)..tys.len() {
           if self.is_subtype(&tys[i], &tys[j]) {
+            if tys[j].is_integer() && matches!(tys[j], VType::Primitive(_)) {
+              self.pin_integer(&tys[i], &tys[j]);
+            }
             tys.remove(i);
             changed = true;
           } else if self.is_subtype(&tys[j], &tys[i]) {
+            if tys[i].is_integer() && matches!(tys[i], VType::Primitive(_)) {
+              self.pin_integer(&tys[j], &tys[i]);
+            }
             tys.remove(j);
             changed = true;
           }
@@ -923,7 +929,6 @@ mod tests {
       "#],
     );
 
-    // FIXME: This should unify to `i32`.
     check(
       "
       let a: i32 = 1
@@ -932,7 +937,7 @@ mod tests {
       ",
       expect![@r#"
         a: i32
-        b: i64
+        b: i32
         c: Array[i32]
       "#],
     );
@@ -944,7 +949,7 @@ mod tests {
       let c = [a, b]
       ",
       expect![@r#"
-        a: i64
+        a: i32
         b: i32
         c: Array[i32]
       "#],
