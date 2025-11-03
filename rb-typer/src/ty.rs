@@ -106,6 +106,9 @@ impl Environment {
   pub fn add_impls(&mut self, for_trait: &Path, impls: TraitImpls) {
     for t in &impls.impls {
       self.impls.entry(t.clone()).or_default().push(for_trait.clone());
+      for (f, sig) in &impls.trait_def.functions {
+        self.names.insert(t.join(f.clone()), sig.clone());
+      }
     }
 
     self.traits.insert(for_trait.clone(), impls);

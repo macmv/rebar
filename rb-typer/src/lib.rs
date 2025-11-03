@@ -272,56 +272,42 @@ impl<'a> Typer<'a> {
         VType::Array(Box::new(self.make_union(&tys)))
       }
 
-      hir::Expr::Call(lhs_expr, ref args) => match self.function.exprs[lhs_expr] {
-        hir::Expr::Field(lhs, ref method) => {
-          let lhs = self.synth_expr(lhs)?;
+      hir::Expr::Call(lhs_expr, ref args) => {
+        let signature = match self.function.exprs[lhs_expr] {
+          hir::Expr::Field(lhs, ref method) => {
+            let lhs = self.synth_expr(lhs)?;
 
-          // We must have a concrete type by the time we resolve methods.
-          let path = self.resolve_type(&lhs)?;
-          let signature = self.env.impl_type(&path, &method)?;
-          // This is an impl method, so fill in `self` with the type we're calling it on.
-          let signature = signature.resolve_self(&lhs);
+            // We must have a concrete type by the time we resolve methods.
+            let path = self.resolve_type(&lhs)?;
+            let signature = self.env.impl_type(&path, &method)?;
+            // This is an impl method, so fill in `self` with the type we're calling it on.
+            let signature = signature.resolve_self(&lhs);
 
-          let VType::Function(ref sig_args, ref ret) = signature else {
-            return None;
-          };
-
-          if sig_args.len() == args.len() + 1 {
-            for (&arg, sig) in args.iter().zip(sig_args.iter().skip(1)) {
-              self.check_expr(arg, &sig);
-            }
-          } else {
-            emit!(
-              self.span(expr) =>
-              "expected {} arguments, found {}",
-              sig_args.len().saturating_sub(1),
-              args.len()
-            );
+            signature
           }
 
-          (**ret).clone()
+          _ => self.synth_expr(lhs_expr)?,
+        };
+
+        let VType::Function(ref sig_args, ref ret) = signature else {
+          return None;
+        };
+
+        if sig_args.len() == args.len() + 1 {
+          for (&arg, sig) in args.iter().zip(sig_args.iter().skip(1)) {
+            self.check_expr(arg, &sig);
+          }
+        } else {
+          emit!(
+            self.span(expr) =>
+            "expected {} arguments, found {}",
+            sig_args.len().saturating_sub(1),
+            args.len()
+          );
         }
 
-        _ => {
-          let lhs = self.synth_expr(lhs_expr);
-
-          let ret = VType::Var(
-            self.fresh_var(self.span(expr), format!("return type of calling {:?}", lhs)),
-          );
-
-          todo!()
-          /*
-          let call_type = VType::Function(
-            args.iter().map(|&arg| self.synth_expr(arg)).collect(),
-            Box::new(ret.clone()),
-          );
-
-          self.constrain(&lhs, &call_type, self.span(lhs_expr));
-
-          ret
-          */
-        }
-      },
+        (**ret).clone()
+      }
 
       hir::Expr::Name(ref path) => {
         if let Some(ident) = path.as_single()
@@ -1089,6 +1075,20 @@ mod tests {
         a: i32
         b: i32
         c: i32
+      "#],
+    );
+  }
+
+  #[test]
+  fn absolute_calls() {
+    check(
+      r#"
+      let a: i32 = 3
+      let b = i32::add(a, 1)
+      "#,
+      expect![@r#"
+        a: i32
+        b: i32
       "#],
     );
   }
