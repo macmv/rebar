@@ -206,6 +206,7 @@ impl<'a> Lexer<'a> {
           "let" => T![let],
           "fn" => T![fn],
           "extern" => T![extern],
+          "as" => T![as],
           "true" => T![true],
           "false" => T![false],
           "nil" => T![nil],

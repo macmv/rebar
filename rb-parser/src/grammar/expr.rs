@@ -62,7 +62,25 @@ fn expr_bp(p: &mut Parser, min_bp: u8, cond: bool) {
   }
 }
 
-pub fn path(p: &mut Parser) -> CompletedMarker {
+pub fn path(p: &mut Parser) -> (CompletedMarker, bool) {
+  if p.at(T![<]) {
+    let m = p.start();
+    p.eat(T![<]);
+    // test ok
+    // <foo::bar as std::op::Add>::foo
+    simple_path(p);
+    p.expect(T![as]);
+    simple_path(p);
+    p.expect(T![>]);
+    p.expect(T![::]);
+    p.expect(T![ident]);
+    (m.complete(p, FULLY_QUALIFIED_PATH), false)
+  } else {
+    (simple_path(p), true)
+  }
+}
+
+fn simple_path(p: &mut Parser) -> CompletedMarker {
   let m = p.start();
   p.expect(T![ident]);
 
@@ -71,7 +89,7 @@ pub fn path(p: &mut Parser) -> CompletedMarker {
     p.expect(T![ident]);
   }
 
-  m.complete(p, PATH)
+  m.complete(p, SIMPLE_PATH)
 }
 
 fn atom_expr(p: &mut Parser, m: Marker, cond: bool) -> Option<CompletedMarker> {
@@ -87,11 +105,11 @@ fn atom_expr(p: &mut Parser, m: Marker, cond: bool) -> Option<CompletedMarker> {
     // test ok
     // hello
     T![ident] => {
-      path(p);
+      let (_, is_simple) = path(p);
       let lhs = m.complete(p, PATH_EXPR);
 
       // Special case for struct literals.
-      if p.current() == T!['{'] && !cond {
+      if is_simple && p.current() == T!['{'] && !cond {
         // test ok
         // Foo { a: 2 }
         // if a { println() }
@@ -109,6 +127,13 @@ fn atom_expr(p: &mut Parser, m: Marker, cond: bool) -> Option<CompletedMarker> {
       } else {
         Some(lhs)
       }
+    }
+
+    // test ok
+    // <i32 as std::op::Add>::add(3)
+    T![<] => {
+      path(p);
+      Some(m.complete(p, PATH_EXPR))
     }
 
     // test ok
@@ -347,7 +372,7 @@ mod tests {
           EXPR_STMT
             CALL_EXPR
               PATH_EXPR
-                PATH
+                SIMPLE_PATH
                   IDENT 'print'
               ARG_LIST
                 OPEN_PAREN '('
@@ -364,7 +389,7 @@ mod tests {
           EXPR_STMT
             CALL_EXPR
               PATH_EXPR
-                PATH
+                SIMPLE_PATH
                   IDENT 'print'
               ARG_LIST
                 OPEN_PAREN '('
@@ -446,10 +471,52 @@ mod tests {
                 POUND '#'
                 OPEN_CURLY '{'
                 PATH_EXPR
-                  PATH
+                  SIMPLE_PATH
                     IDENT 'world'
                 CLOSE_CURLY '}'
               DOUBLE_QUOTE '"'
+          NL_KW '\n'
+          WHITESPACE '      '
+      "#],
+    );
+  }
+
+  #[test]
+  fn fully_qualified_path() {
+    check(
+      r#"
+        <foo::bar as std::op::Add>::add(3)
+      "#,
+      expect![@r#"
+        SOURCE_FILE
+          NL_KW '\n'
+          WHITESPACE '        '
+          EXPR_STMT
+            CALL_EXPR
+              PATH_EXPR
+                FULLY_QUALIFIED_PATH
+                  LESS '<'
+                  SIMPLE_PATH
+                    IDENT 'foo'
+                    COLON_COLON '::'
+                    IDENT 'bar'
+                  WHITESPACE ' '
+                  AS_KW 'as'
+                  WHITESPACE ' '
+                  SIMPLE_PATH
+                    IDENT 'std'
+                    COLON_COLON '::'
+                    IDENT 'op'
+                    COLON_COLON '::'
+                    IDENT 'Add'
+                  GREATER '>'
+                  COLON_COLON '::'
+                  IDENT 'add'
+              ARG_LIST
+                OPEN_PAREN '('
+                LITERAL
+                  INTEGER_KW '3'
+                CLOSE_PAREN ')'
           NL_KW '\n'
           WHITESPACE '      '
       "#],

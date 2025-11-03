@@ -17,7 +17,11 @@
 //   label:A     -- suggested name for field of AST node
 
 Name = 'ident'
-Path = 'ident'* '::'*
+Path =
+  SimplePath |
+  FullyQualifiedPath
+SimplePath = 'ident'* '::'*
+FullyQualifiedPath = '<' struct_type:SimplePath 'as' trait_type:SimplePath '>' 'ident'
 
 BinaryOp = '+' | '-' | '*' | '/' | '%' | '==' | '!=' | '<' | '<=' | '>' | '>=' | '&&' | '||' | '&' | '|' | '^' | '<<' | '>>'
 PrefixOp = '-' | '!'
