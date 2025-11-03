@@ -355,15 +355,18 @@ impl<'a> Typer<'a> {
 
       hir::Expr::Paren(expr) => self.synth_expr(expr)?,
 
-      hir::Expr::UnaryOp(expr, ref op) => {
-        let ty = self.synth_expr(expr)?;
+      hir::Expr::UnaryOp(expr, hir::UnaryOp::Neg) => {
+        let int = self.fresh_int(&[]);
+        let inferred = self.synth_expr(expr)?;
+        if !self.is_subtype(&int, &inferred) {
+          emit!(
+            self.span(expr) =>
+            "cannot apply unary - to type {}",
+            self.display_type(&inferred)
+          );
+        }
 
-        let ret =
-          VType::Var(self.fresh_var(self.span(expr), format!("return type of binary op {op:?}")));
-
-        let call_type = VType::Function(vec![ty], Box::new(ret.clone()));
-
-        ret
+        inferred
       }
 
       hir::Expr::BinaryOp(
@@ -830,6 +833,20 @@ mod tests {
           |
         4 |       let c: i8 = a + b
           |                   ^^^^^
+      "#],
+    );
+  }
+
+  #[test]
+  fn unify_unary_op() {
+    check(
+      "
+      let a: i32 = 3
+      let b = -a
+      ",
+      expect![@r#"
+        a: i32
+        b: i32
       "#],
     );
   }
