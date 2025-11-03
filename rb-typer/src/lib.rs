@@ -359,11 +359,16 @@ impl<'a> Typer<'a> {
         let int = self.fresh_int(&[]);
         let inferred = self.synth_expr(expr)?;
         if !self.is_subtype(&int, &inferred) {
-          emit!(
-            self.span(expr) =>
-            "cannot apply unary - to type {}",
-            self.display_type(&inferred)
-          );
+          emit!(self.span(expr) => "cannot negate {}", self.display_type(&inferred));
+        }
+
+        inferred
+      }
+
+      hir::Expr::UnaryOp(expr, hir::UnaryOp::Not) => {
+        let inferred = self.synth_expr(expr)?;
+        if !self.is_subtype(&hir::PrimitiveType::Bool.into(), &inferred) {
+          emit!(self.span(expr) => "cannot invert {}", self.display_type(&inferred));
         }
 
         inferred
@@ -847,6 +852,45 @@ mod tests {
       expect![@r#"
         a: i32
         b: i32
+      "#],
+    );
+
+    check(
+      "
+      let a = true
+      let b = -a
+      ",
+      expect![@r#"
+        error: cannot negate bool
+         --> inline.rbr:3:16
+          |
+        3 |       let b = -a
+          |                ^
+      "#],
+    );
+
+    check(
+      "
+      let a = true
+      let b = !a
+      ",
+      expect![@r#"
+        a: bool
+        b: bool
+      "#],
+    );
+
+    check(
+      "
+      let a = 3
+      let b = !a
+      ",
+      expect![@r#"
+        error: cannot invert integer
+         --> inline.rbr:3:16
+          |
+        3 |       let b = !a
+          |                ^
       "#],
     );
   }
