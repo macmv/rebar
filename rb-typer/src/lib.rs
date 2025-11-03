@@ -469,10 +469,7 @@ impl<'a> Typer<'a> {
         if let Some(els) = els {
           let els_ty = self.synth_expr(els)?;
 
-          let res = self.fresh_var(self.span(expr), "if statment foo".to_string());
-          let res = VType::Var(res);
-
-          res
+          self.make_union(&[then_ty, els_ty])
         } else {
           then_ty
         }
