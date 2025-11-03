@@ -361,42 +361,28 @@ impl<'a> Typer<'a> {
         ret
       }
 
-      hir::Expr::BinaryOp(lhs_expr, ref op, rhs_expr) => {
+      hir::Expr::BinaryOp(
+        lhs_expr,
+        hir::BinaryOp::Add
+        | hir::BinaryOp::Sub
+        | hir::BinaryOp::Mul
+        | hir::BinaryOp::Div
+        | hir::BinaryOp::Mod
+        | hir::BinaryOp::BitAnd
+        | hir::BinaryOp::BitOr
+        | hir::BinaryOp::Xor
+        | hir::BinaryOp::ShiftLeft
+        | hir::BinaryOp::ShiftRight,
+        rhs_expr,
+      ) => {
         let lhs = self.synth_expr(lhs_expr)?;
         let rhs = self.synth_expr(rhs_expr)?;
-
-        use hir::PrimitiveType::*;
 
         // NB: Binary ops are special. If either side is a specific integer type, it
         // coerces.
         //
         // This is not like `a.add(b)`, where the left hand side must be concrete.
-        let res = match (&lhs, &rhs) {
-          (VType::Integer(l), VType::Integer(r)) => self.fresh_int(&[*l, *r]),
-
-          (VType::Primitive(I8), VType::Integer(_) | VType::Primitive(I8)) => I8.into(),
-          (VType::Primitive(I16), VType::Integer(_) | VType::Primitive(I16)) => I16.into(),
-          (VType::Primitive(I32), VType::Integer(_) | VType::Primitive(I32)) => I32.into(),
-          (VType::Primitive(I64), VType::Integer(_) | VType::Primitive(I64)) => I64.into(),
-          (VType::Primitive(U8), VType::Integer(_) | VType::Primitive(U8)) => U8.into(),
-          (VType::Primitive(U16), VType::Integer(_) | VType::Primitive(U16)) => U16.into(),
-          (VType::Primitive(U32), VType::Integer(_) | VType::Primitive(U32)) => U32.into(),
-          (VType::Primitive(U64), VType::Integer(_) | VType::Primitive(U64)) => U64.into(),
-
-          (VType::Integer(_), VType::Primitive(I8)) => I8.into(),
-          (VType::Integer(_), VType::Primitive(I16)) => I16.into(),
-          (VType::Integer(_), VType::Primitive(I32)) => I32.into(),
-          (VType::Integer(_), VType::Primitive(I64)) => I64.into(),
-          (VType::Integer(_), VType::Primitive(U8)) => U8.into(),
-          (VType::Integer(_), VType::Primitive(U16)) => U16.into(),
-          (VType::Integer(_), VType::Primitive(U32)) => U32.into(),
-          (VType::Integer(_), VType::Primitive(U64)) => U64.into(),
-
-          _ => {
-            emit!(self.span(expr) => "cannot apply binary operator {:?} to types", op);
-            return None;
-          }
-        };
+        let res = self.synth_binary_integers(&lhs, &rhs, self.span(expr))?;
 
         if !matches!(res, VType::Integer(_)) {
           self.pin_integer(&lhs, &res);
@@ -404,6 +390,38 @@ impl<'a> Typer<'a> {
         }
 
         res
+      }
+
+      hir::Expr::BinaryOp(
+        lhs_expr,
+        hir::BinaryOp::Lt | hir::BinaryOp::Lte | hir::BinaryOp::Gt | hir::BinaryOp::Gte,
+        rhs_expr,
+      ) => {
+        let lhs = self.synth_expr(lhs_expr)?;
+        let rhs = self.synth_expr(rhs_expr)?;
+
+        let res = self.synth_binary_integers(&lhs, &rhs, self.span(expr))?;
+
+        if !matches!(res, VType::Integer(_)) {
+          self.pin_integer(&lhs, &res);
+          self.pin_integer(&rhs, &res);
+        }
+
+        hir::PrimitiveType::Bool.into()
+      }
+
+      hir::Expr::BinaryOp(lhs_expr, hir::BinaryOp::And | hir::BinaryOp::Or, rhs_expr) => {
+        self.check_expr(lhs_expr, &hir::PrimitiveType::Bool.into());
+        self.check_expr(rhs_expr, &hir::PrimitiveType::Bool.into());
+
+        hir::PrimitiveType::Bool.into()
+      }
+
+      hir::Expr::BinaryOp(lhs_expr, hir::BinaryOp::Eq | hir::BinaryOp::Neq, rhs_expr) => {
+        let lhs = self.synth_expr(lhs_expr)?;
+        self.check_expr(rhs_expr, &lhs);
+
+        hir::PrimitiveType::Bool.into()
       }
 
       hir::Expr::Index(lhs, rhs) => {
@@ -460,6 +478,42 @@ impl<'a> Typer<'a> {
 
     self.exprs.insert(expr, ty.clone());
     Some(ty)
+  }
+
+  fn synth_binary_integers(&mut self, lhs: &VType, rhs: &VType, span: Span) -> Option<VType> {
+    use hir::PrimitiveType::*;
+
+    Some(match (&lhs, &rhs) {
+      (VType::Integer(l), VType::Integer(r)) => self.fresh_int(&[*l, *r]),
+
+      (VType::Primitive(I8), VType::Integer(_) | VType::Primitive(I8)) => I8.into(),
+      (VType::Primitive(I16), VType::Integer(_) | VType::Primitive(I16)) => I16.into(),
+      (VType::Primitive(I32), VType::Integer(_) | VType::Primitive(I32)) => I32.into(),
+      (VType::Primitive(I64), VType::Integer(_) | VType::Primitive(I64)) => I64.into(),
+      (VType::Primitive(U8), VType::Integer(_) | VType::Primitive(U8)) => U8.into(),
+      (VType::Primitive(U16), VType::Integer(_) | VType::Primitive(U16)) => U16.into(),
+      (VType::Primitive(U32), VType::Integer(_) | VType::Primitive(U32)) => U32.into(),
+      (VType::Primitive(U64), VType::Integer(_) | VType::Primitive(U64)) => U64.into(),
+
+      (VType::Integer(_), VType::Primitive(I8)) => I8.into(),
+      (VType::Integer(_), VType::Primitive(I16)) => I16.into(),
+      (VType::Integer(_), VType::Primitive(I32)) => I32.into(),
+      (VType::Integer(_), VType::Primitive(I64)) => I64.into(),
+      (VType::Integer(_), VType::Primitive(U8)) => U8.into(),
+      (VType::Integer(_), VType::Primitive(U16)) => U16.into(),
+      (VType::Integer(_), VType::Primitive(U32)) => U32.into(),
+      (VType::Integer(_), VType::Primitive(U64)) => U64.into(),
+
+      _ => {
+        emit!(
+          span =>
+          "cannot apply binary operator to types {} and {}",
+          self.display_type(&lhs),
+          self.display_type(&rhs)
+        );
+        return None;
+      }
+    })
   }
 
   fn check_expr(&mut self, expr: ExprId, expected: &VType) -> bool {
