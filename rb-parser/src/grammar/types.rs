@@ -69,6 +69,17 @@ fn atom_type(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
       Some(m.complete(p, NEVER_TYPE))
     }
 
+    // test ok
+    // fn foo(a: &i32) {}
+    T![&] => {
+      p.eat(T![&]);
+      {
+        let m = p.start();
+        atom_type(p, m)?;
+      }
+      Some(m.complete(p, REF_TYPE))
+    }
+
     _ => {
       m.abandon(p);
       p.error("expected type");
