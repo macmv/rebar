@@ -13,6 +13,10 @@ use rb_mir::{
 };
 use rb_typer::Typer;
 
+#[cfg(test)]
+#[macro_use]
+extern crate rb_test;
+
 pub fn declare_user_function(
   ctx: &mut MirContext,
   id: UserFunctionId,
@@ -246,5 +250,57 @@ impl Lower<'_> {
     };
 
     self.mir.exprs.alloc(expr)
+  }
+}
+
+#[cfg(test)]
+fn check(body: &str, expected: rb_test::Expect) {
+  use rb_hir::Environment;
+  use std::fmt::Write;
+
+  let env = Environment::mini();
+  let (sources, body, span_map) = rb_hir_lower::parse_body(&env, body);
+  let mut out = String::new();
+  let res = rb_diagnostic::run(sources.clone(), || {
+    let mir_ctx = MirContext::default();
+
+    let typer = crate::Typer::check(&env, &body, &span_map);
+    if !rb_diagnostic::is_ok() {
+      return;
+    }
+    let func = crate::lower_function(&mir_ctx, &typer, &body).unwrap();
+
+    write!(&mut out, "{}", func).unwrap();
+  });
+
+  match res {
+    Ok(()) => expected.assert_eq(&format!("{out}")),
+    Err(e) => {
+      let mut out = String::new();
+      for e in e {
+        write!(out, "{}", e.render(&sources)).unwrap();
+      }
+      expected.assert_eq(&format!("{out}"));
+    }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn numbers() {
+    check(
+      r#"
+      let a: i32 = 3
+      let b = a * 1 + 2
+      "#,
+      expect![@r#"
+        function 0:
+          let v1: i32 = 3;
+          let v2: i32 = ((v1 * 1)::<i32> + 2)::<i32>;
+      "#],
+    );
   }
 }

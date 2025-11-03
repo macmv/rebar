@@ -758,7 +758,9 @@ version = "0.1.0"
 dependencies = [
  "rb-diagnostic",
  "rb-hir",
+ "rb-hir-lower",
  "rb-mir",
+ "rb-test",
  "rb-typer",
 ]
 
