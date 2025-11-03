@@ -96,6 +96,9 @@ impl Resolver<'_> {
               function.exprs[id] = hir::Expr::Local(local);
             } else if self.root.contains(p) || self.env.lookup_type(p).is_some() {
               // absolute path
+            } else if let Some(fqn) = self.env.resolve_trait_call(p) {
+              // absolute path via environment
+              dbg!(&fqn);
             } else {
               let abs = current.concat(p);
               if self.root.contains(&abs) {

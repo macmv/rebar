@@ -133,4 +133,17 @@ impl Environment {
   pub fn lookup_type(&self, path: &Path) -> Option<&Type> {
     self.names.get(&FullyQualifiedName::new_bare(path.clone())?)
   }
+
+  // Resolve a call like `i32::add` to `<i32 as std::op::Add>::add`
+  pub fn resolve_trait_call(&self, p: &Path) -> Option<FullyQualifiedName> {
+    let mut path = p.clone();
+    let name = path.segments.pop()?;
+    let ty = self.impls.get(&path)?;
+    // TODO: how do use statements/priorities work here??
+    let trait_path = ty
+      .iter()
+      .find(|t| self.traits.get(*t).is_some_and(|t| t.trait_def.functions.contains_key(&name)))?;
+
+    Some(FullyQualifiedName::new_trait_impl(trait_path.clone(), path, name))
+  }
 }
