@@ -354,7 +354,7 @@ impl FunctionLower<'_, '_> {
           p.push(tok.text().to_string());
         }
 
-        hir::Expr::Name(p)
+        hir::Expr::Name(hir::FullyQualifiedName::new_bare(p).unwrap())
       }
 
       cst::Expr::Block(ref block) => {

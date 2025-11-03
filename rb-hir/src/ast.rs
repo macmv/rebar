@@ -74,7 +74,7 @@ pub struct Struct {
 pub enum Expr {
   Literal(Literal),
   Local(LocalId),
-  Name(Path),
+  Name(FullyQualifiedName),
 
   String(Vec<StringInterp>),
   Array(Vec<ExprId>),
@@ -248,6 +248,20 @@ impl FullyQualifiedName {
   pub fn new_trait_impl(trait_path: Path, struct_path: Path, name: String) -> Self {
     FullyQualifiedName::TraitImpl { trait_path, struct_path, name }
   }
+
+  pub fn as_single(&self) -> Option<&str> {
+    match self {
+      FullyQualifiedName::Bare { path, name } if path.segments.is_empty() => Some(name),
+      _ => None,
+    }
+  }
+
+  pub fn to_path(&self) -> Option<Path> {
+    match self {
+      FullyQualifiedName::Bare { path, name } => Some(path.join(name.clone())),
+      _ => None,
+    }
+  }
 }
 
 impl TypeExpr {
@@ -387,6 +401,23 @@ impl fmt::Display for Type {
         write!(f, "{}", types.join(" | "))
       }
       Type::Struct(name) => write!(f, "Struct {}", name),
+    }
+  }
+}
+
+impl fmt::Display for FullyQualifiedName {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      FullyQualifiedName::Bare { path, name } => {
+        if path.segments.is_empty() {
+          write!(f, "{name}")
+        } else {
+          write!(f, "{}::{}", path, name)
+        }
+      }
+      FullyQualifiedName::TraitImpl { trait_path, struct_path, name } => {
+        write!(f, "<{} as {}>::{}", struct_path, trait_path, name)
+      }
     }
   }
 }

@@ -130,9 +130,7 @@ impl Environment {
     self.impls.get(ty)?.iter().filter_map(|t| self.traits[t].trait_def.functions.get(method)).next()
   }
 
-  pub fn lookup_type(&self, path: &Path) -> Option<&Type> {
-    self.names.get(&FullyQualifiedName::new_bare(path.clone())?)
-  }
+  pub fn lookup_type(&self, path: &FullyQualifiedName) -> Option<&Type> { self.names.get(path) }
 
   // Resolve a call like `i32::add` to `<i32 as std::op::Add>::add`
   pub fn resolve_trait_call(&self, p: &Path) -> Option<FullyQualifiedName> {

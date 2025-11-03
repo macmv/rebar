@@ -94,19 +94,25 @@ impl Resolver<'_> {
             {
               // local variable
               function.exprs[id] = hir::Expr::Local(local);
-            } else if self.root.contains(p) || self.env.lookup_type(p).is_some() {
+            } else if self.env.lookup_type(p).is_some() {
               // absolute path
-            } else if let Some(fqn) = self.env.resolve_trait_call(p) {
-              // absolute path via environment
-              dbg!(&fqn);
-            } else {
-              let abs = current.concat(p);
-              if self.root.contains(&abs) {
-                // relative path
-                *p = abs;
+            } else if let Some(path) = p.to_path() {
+              if self.root.contains(&path) {
+                // absolute path
+              } else if let Some(fqn) = self.env.resolve_trait_call(&path) {
+                // absolute path via environment
+                *p = fqn;
               } else {
-                emit!(span_map[id] => format!("unresolved name `{p}`"));
+                let abs = current.concat(&path);
+                if self.root.contains(&abs) {
+                  // relative path
+                  *p = hir::FullyQualifiedName::new_bare(abs).unwrap();
+                } else {
+                  emit!(span_map[id] => format!("unresolved name `{p}`"));
+                }
               }
+            } else {
+              emit!(span_map[id] => format!("unresolved name `{p}`"));
             }
           }
 
