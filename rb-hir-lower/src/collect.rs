@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use rb_diagnostic::{Diagnostic, Source, Sources};
+use rb_diagnostic::{Diagnostic, Source, Sources, Span};
 use rb_hir::{ModuleSpanMap, SpanMap, ast as hir};
 use rb_syntax::cst;
 
@@ -107,6 +107,18 @@ pub fn parse_source(
 
   let src = sources.get(id);
   let res = cst::SourceFile::parse(&src.source);
+  if !res.errors().is_empty() {
+    return (
+      sources,
+      Err(
+        res
+          .errors()
+          .into_iter()
+          .map(|e| Diagnostic::error(e.message(), Span { file: id, range: e.span() }))
+          .collect(),
+      ),
+    );
+  }
   let sources_arc = Arc::new(sources);
   let res = rb_diagnostic::run(sources_arc.clone(), || crate::lower_source(res.tree(), id));
   sources = Arc::try_unwrap(sources_arc).unwrap_or_else(|_| panic!());
