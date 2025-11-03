@@ -111,6 +111,10 @@ impl Environment {
     self.traits.insert(for_trait.clone(), impls);
   }
 
+  pub fn struct_field(&self, ty: &Path, field: &str) -> Option<&Type> {
+    self.structs.get(ty)?.iter().find_map(|(f, t)| (f == field).then_some(t))
+  }
+
   pub fn impl_type(&self, ty: &Path, method: &str) -> Option<&Type> {
     self.impls.get(ty)?.iter().filter_map(|t| self.traits[t].trait_def.functions.get(method)).next()
   }

@@ -443,12 +443,11 @@ impl<'a> Typer<'a> {
         }
       }
 
-      hir::Expr::Field(lhs, _) => {
+      hir::Expr::Field(lhs, ref field) => {
         let lhs = self.synth_expr(lhs)?;
-
-        // TODO
-
-        lhs
+        let path = self.resolve_type(&lhs)?;
+        let ty = self.env.struct_field(&path, &field)?;
+        VType::from(ty.clone())
       }
 
       hir::Expr::If { cond, then, els } => {
