@@ -510,6 +510,8 @@ impl<'a> Typer<'a> {
       (VType::Integer(_), VType::Primitive(hir::PrimitiveType::U32)) => true,
       (VType::Integer(_), VType::Primitive(hir::PrimitiveType::U64)) => true,
 
+      (VType::Primitive(hir::PrimitiveType::Never), _) => true,
+
       _ => false,
     }
   }
@@ -573,8 +575,11 @@ impl<'a> Typer<'a> {
       let mut changed = false;
       for i in 0..tys.len() {
         for j in (i + 1)..tys.len() {
-          if tys[i] == tys[j] {
+          if self.is_subtype(&tys[i], &tys[j]) {
             tys.remove(i);
+            changed = true;
+          } else if self.is_subtype(&tys[j], &tys[i]) {
+            tys.remove(j);
             changed = true;
           }
         }
@@ -918,6 +923,7 @@ mod tests {
       "#],
     );
 
+    // FIXME: This should unify to `i32`.
     check(
       "
       let a: i32 = 1
@@ -926,7 +932,7 @@ mod tests {
       ",
       expect![@r#"
         a: i32
-        b: i32
+        b: i64
         c: Array[i32]
       "#],
     );
@@ -938,7 +944,7 @@ mod tests {
       let c = [a, b]
       ",
       expect![@r#"
-        a: i32
+        a: i64
         b: i32
         c: Array[i32]
       "#],
@@ -1069,6 +1075,15 @@ mod tests {
       "#,
       expect![@r#"
         a: !
+      "#],
+    );
+
+    check(
+      r#"
+      let a = [3, panic()]
+      "#,
+      expect![@r#"
+        a: Array[i64]
       "#],
     );
   }
