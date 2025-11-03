@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use rb_diagnostic::emit;
 use rb_hir::{
   FunctionSpanMap,
-  ast::{self as hir, Path, Type},
+  ast::{self as hir, FullyQualifiedName, Path, Type},
 };
 use rb_mir::{
   Item, MirContext, UserFunction,
@@ -45,7 +45,7 @@ pub fn declare_user_function(
     }
   }
 
-  ctx.items.insert(path, Item::UserFunction(func));
+  ctx.items.insert(FullyQualifiedName::new_bare(path).unwrap(), Item::UserFunction(func));
 }
 
 pub fn lower_function(ctx: &MirContext, ty: &Typer, hir: &hir::Function) -> Option<mir::Function> {
@@ -135,19 +135,13 @@ impl Lower<'_> {
         mir::Expr::Array(exprs, ty)
       }
 
-      hir::Expr::Name(ref v) => {
-        if let Some(path) = v.to_path() {
-          match self.ctx.items[&path] {
-            Item::UserFunction(ref func) => {
-              self.mir.deps.insert(func.id);
-              mir::Expr::UserFunction(func.id, self.ty.type_of_expr(expr))
-            }
-            Item::NativeFunction(id) => mir::Expr::Native(id, self.ty.type_of_expr(expr)),
-          }
-        } else {
-          panic!("unresolved name {v}");
+      hir::Expr::Name(ref v) => match self.ctx.items[v] {
+        Item::UserFunction(ref func) => {
+          self.mir.deps.insert(func.id);
+          mir::Expr::UserFunction(func.id, self.ty.type_of_expr(expr))
         }
-      }
+        Item::NativeFunction(id) => mir::Expr::Native(id, self.ty.type_of_expr(expr)),
+      },
 
       hir::Expr::Local(id) => mir::Expr::Local(self.locals[&id], self.ty.type_of_expr(expr)),
 
@@ -217,9 +211,7 @@ impl Lower<'_> {
 
       hir::Expr::Call(lhs, ref args) => match self.hir.exprs[lhs] {
         hir::Expr::Name(ref name) => {
-          if let Some(name) = name.to_path()
-            && let Some(Item::UserFunction(func)) = self.ctx.items.get(&name)
-          {
+          if let Some(Item::UserFunction(func)) = self.ctx.items.get(&name) {
             self.mir.deps.insert(func.id);
 
             let lhs_ty = self.ty.type_of_expr(lhs);
