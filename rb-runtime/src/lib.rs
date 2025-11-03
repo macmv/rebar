@@ -199,7 +199,10 @@ fn build_environment<'a>(
       functions.push((mir_id, f, span_map));
       function_map.insert(path.clone(), mir_id);
       rb_mir_lower::declare_user_function(&mut mir_ctx, mir_id, path.clone(), f, span_map);
-      env.names.insert(path, rb_typer::type_of_function(f));
+      env.names.insert(
+        rb_hir::ast::FullyQualifiedName::new_bare(path).unwrap(),
+        rb_typer::type_of_function(f),
+      );
     }
   }
 

@@ -25,6 +25,12 @@ pub struct Path {
   pub segments: Vec<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum FullyQualifiedName {
+  Bare { path: Path, name: String },
+  TraitImpl { trait_path: Path, struct_path: Path, name: String },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PartialModule {
   File,
@@ -229,6 +235,18 @@ impl Path {
     let mut new_path = self.clone();
     new_path.segments.extend(p.segments.iter().cloned());
     new_path
+  }
+}
+
+impl FullyQualifiedName {
+  pub fn new_bare(mut path: Path) -> Option<Self> {
+    let name = path.segments.pop()?;
+
+    Some(FullyQualifiedName::Bare { path, name })
+  }
+
+  pub fn new_trait_impl(trait_path: Path, struct_path: Path, name: String) -> Self {
+    FullyQualifiedName::TraitImpl { trait_path, struct_path, name }
   }
 }
 

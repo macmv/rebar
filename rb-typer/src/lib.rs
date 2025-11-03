@@ -273,7 +273,7 @@ impl<'a> Typer<'a> {
         {
           ty.clone().into()
         } else {
-          match self.env.names.get(&path) {
+          match self.env.lookup_type(path) {
             Some(ty) => VType::from(ty.clone()),
             None => panic!("could not resolve {path}"),
           }

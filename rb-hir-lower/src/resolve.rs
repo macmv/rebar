@@ -94,7 +94,7 @@ impl Resolver<'_> {
             {
               // local variable
               function.exprs[id] = hir::Expr::Local(local);
-            } else if self.root.contains(p) || self.env.names.contains_key(p) {
+            } else if self.root.contains(p) || self.env.lookup_type(p).is_some() {
               // absolute path
             } else {
               let abs = current.concat(p);

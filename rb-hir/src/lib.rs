@@ -5,7 +5,7 @@ use std::{collections::HashMap, ops::Index};
 use ast::{ExprId, FunctionId, StmtId};
 use rb_diagnostic::Span;
 
-use crate::ast::{Path, Type};
+use crate::ast::{FullyQualifiedName, Path, Type};
 
 #[derive(Default)]
 pub struct SpanMap {
@@ -33,7 +33,7 @@ pub struct FunctionSpanMap {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
-  pub names:   HashMap<Path, Type>,
+  pub names:   HashMap<FullyQualifiedName, Type>,
   pub structs: HashMap<Path, Vec<(String, Type)>>,
 
   // A map of structs to what traits they implement.
@@ -108,7 +108,14 @@ impl Environment {
       self.impls.entry(t.clone()).or_default().push(for_trait.clone());
       for (f, sig) in &impls.trait_def.functions {
         let sig = sig.resolve_self(&Type::from_path(t));
-        self.names.insert(t.join(f.clone()), sig);
+        self.names.insert(
+          FullyQualifiedName::TraitImpl {
+            trait_path:  for_trait.clone(),
+            struct_path: t.clone(),
+            name:        f.clone(),
+          },
+          sig,
+        );
       }
     }
 
@@ -123,5 +130,7 @@ impl Environment {
     self.impls.get(ty)?.iter().filter_map(|t| self.traits[t].trait_def.functions.get(method)).next()
   }
 
-  pub fn function_type(&self, path: &Path) -> Option<&Type> { self.names.get(path) }
+  pub fn lookup_type(&self, path: &Path) -> Option<&Type> {
+    self.names.get(&FullyQualifiedName::new_bare(path.clone())?)
+  }
 }
