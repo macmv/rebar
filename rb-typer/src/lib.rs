@@ -210,40 +210,61 @@ impl<'a> Typer<'a> {
       }
 
       hir::Expr::Call(lhs_expr, ref args) => {
-        let signature = match self.function.exprs[lhs_expr] {
+        match self.function.exprs[lhs_expr] {
           hir::Expr::Field(lhs, ref method) => {
             let lhs = self.synth_expr(lhs)?;
 
             // We must have a concrete type by the time we resolve methods.
             let path = self.resolve_type(&lhs)?;
+            let lhs = self.lower_type(&lhs);
             let signature = self.env.impl_type(&path, &method)?;
             // This is an impl method, so fill in `self` with the type we're calling it on.
-            let signature = crate::ty::resolve_self(signature, &lhs);
+            let signature = signature.resolve_self(&lhs);
 
-            signature
+            let Type::Function(ref sig_args, ref ret) = signature else {
+              return None;
+            };
+
+            if sig_args.len() == args.len() + 1 {
+              for (&arg, sig) in args.iter().zip(sig_args.iter().skip(1)) {
+                self.check_expr(arg, &VType::from(sig.clone()));
+              }
+            } else {
+              emit!(
+                self.span(expr) =>
+                "expected {} arguments, found {}",
+                sig_args.len().saturating_sub(1),
+                args.len()
+              );
+            }
+
+            VType::from((**ret).clone())
           }
 
-          _ => self.synth_expr(lhs_expr)?,
-        };
+          _ => {
+            let signature = self.synth_expr(lhs_expr)?;
+            let signature = self.lower_type(&signature);
 
-        let VType::Function(ref sig_args, ref ret) = signature else {
-          return None;
-        };
+            let Type::Function(ref sig_args, ref ret) = signature else {
+              return None;
+            };
 
-        if sig_args.len() == args.len() + 1 {
-          for (&arg, sig) in args.iter().zip(sig_args.iter().skip(1)) {
-            self.check_expr(arg, &sig);
+            if sig_args.len() == args.len() {
+              for (&arg, sig) in args.iter().zip(sig_args.iter()) {
+                self.check_expr(arg, &VType::from(sig.clone()));
+              }
+            } else {
+              emit!(
+                self.span(expr) =>
+                "expected {} arguments, found {}",
+                sig_args.len(),
+                args.len()
+              );
+            }
+
+            VType::from((**ret).clone())
           }
-        } else {
-          emit!(
-            self.span(expr) =>
-            "expected {} arguments, found {}",
-            sig_args.len().saturating_sub(1),
-            args.len()
-          );
         }
-
-        (**ret).clone()
       }
 
       hir::Expr::Name(ref path) => {

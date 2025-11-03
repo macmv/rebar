@@ -107,7 +107,8 @@ impl Environment {
     for t in &impls.impls {
       self.impls.entry(t.clone()).or_default().push(for_trait.clone());
       for (f, sig) in &impls.trait_def.functions {
-        self.names.insert(t.join(f.clone()), sig.clone());
+        let sig = sig.resolve_self(&Type::from_path(t));
+        self.names.insert(t.join(f.clone()), sig);
       }
     }
 

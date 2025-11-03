@@ -26,21 +26,6 @@ pub(crate) enum VType {
   Struct(Path),
 }
 
-pub fn resolve_self(ty: &Type, slf: &VType) -> VType {
-  match ty {
-    Type::SelfT => slf.clone(),
-    Type::Primitive(p) => VType::Primitive(*p),
-    Type::Array(ty) => VType::Array(Box::new(resolve_self(&ty, slf))),
-    Type::Tuple(types) => VType::Tuple(types.iter().map(|ty| resolve_self(ty, slf)).collect()),
-    Type::Function(args, ret) => VType::Function(
-      args.iter().map(|ty| resolve_self(ty, slf)).collect(),
-      Box::new(resolve_self(ret, slf)),
-    ),
-    Type::Union(types) => VType::Union(types.iter().map(|ty| resolve_self(ty, slf)).collect()),
-    Type::Struct(name) => VType::Struct(name.clone()),
-  }
-}
-
 impl From<Type> for VType {
   fn from(ty: Type) -> Self {
     match ty {

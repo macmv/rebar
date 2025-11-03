@@ -238,6 +238,40 @@ impl TypeExpr {
 
 impl Type {
   pub const fn unit() -> Self { Type::Tuple(vec![]) }
+
+  // TODO: This is a terrible hack. Not sure where to put it.
+  pub fn from_path(path: &Path) -> Self {
+    match path.as_single() {
+      Some("Self") => Type::SelfT,
+      Some("str") => Type::Primitive(PrimitiveType::Str),
+      Some("bool") => Type::Primitive(PrimitiveType::Bool),
+      Some("i8") => Type::Primitive(PrimitiveType::I8),
+      Some("i16") => Type::Primitive(PrimitiveType::I16),
+      Some("i32") => Type::Primitive(PrimitiveType::I32),
+      Some("i64") => Type::Primitive(PrimitiveType::I64),
+      Some("u8") => Type::Primitive(PrimitiveType::U8),
+      Some("u16") => Type::Primitive(PrimitiveType::U16),
+      Some("u32") => Type::Primitive(PrimitiveType::U32),
+      Some("u64") => Type::Primitive(PrimitiveType::U64),
+
+      _ => Type::Struct(path.clone()),
+    }
+  }
+
+  pub fn resolve_self(self: &Type, slf: &Type) -> Type {
+    match self {
+      Type::SelfT => slf.clone(),
+      Type::Primitive(p) => Type::Primitive(*p),
+      Type::Array(ty) => Type::Array(Box::new(ty.resolve_self(slf))),
+      Type::Tuple(types) => Type::Tuple(types.iter().map(|ty| ty.resolve_self(slf)).collect()),
+      Type::Function(args, ret) => Type::Function(
+        args.iter().map(|ty| ty.resolve_self(slf)).collect(),
+        Box::new(ret.resolve_self(slf)),
+      ),
+      Type::Union(types) => Type::Union(types.iter().map(|ty| ty.resolve_self(slf)).collect()),
+      Type::Struct(name) => Type::Struct(name.clone()),
+    }
+  }
 }
 
 impl From<PrimitiveType> for TypeExpr {
