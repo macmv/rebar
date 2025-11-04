@@ -502,16 +502,7 @@ impl<'a> Typer<'a> {
   fn is_subtype(&self, a: &VType, b: &VType) -> bool {
     match (a, b) {
       (a, b) if a == b => true,
-
-      (VType::Integer(_), VType::Primitive(hir::PrimitiveType::I8)) => true,
-      (VType::Integer(_), VType::Primitive(hir::PrimitiveType::I16)) => true,
-      (VType::Integer(_), VType::Primitive(hir::PrimitiveType::I32)) => true,
-      (VType::Integer(_), VType::Primitive(hir::PrimitiveType::I64)) => true,
-      (VType::Integer(_), VType::Primitive(hir::PrimitiveType::U8)) => true,
-      (VType::Integer(_), VType::Primitive(hir::PrimitiveType::U16)) => true,
-      (VType::Integer(_), VType::Primitive(hir::PrimitiveType::U32)) => true,
-      (VType::Integer(_), VType::Primitive(hir::PrimitiveType::U64)) => true,
-
+      (VType::Integer(_), VType::Primitive(prim)) if prim.is_integer() => true,
       (VType::Primitive(hir::PrimitiveType::Never), _) => true,
 
       _ => false,

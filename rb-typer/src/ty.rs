@@ -54,15 +54,7 @@ impl VType {
   pub fn is_integer(&self) -> bool {
     match self {
       VType::Integer(_) => true,
-
-      VType::Primitive(hir::PrimitiveType::I8) => true,
-      VType::Primitive(hir::PrimitiveType::I16) => true,
-      VType::Primitive(hir::PrimitiveType::I32) => true,
-      VType::Primitive(hir::PrimitiveType::I64) => true,
-      VType::Primitive(hir::PrimitiveType::U8) => true,
-      VType::Primitive(hir::PrimitiveType::U16) => true,
-      VType::Primitive(hir::PrimitiveType::U32) => true,
-      VType::Primitive(hir::PrimitiveType::U64) => true,
+      VType::Primitive(prim) if prim.is_integer() => true,
 
       _ => false,
     }

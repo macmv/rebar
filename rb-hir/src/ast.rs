@@ -319,6 +319,22 @@ impl From<PrimitiveType> for Type {
   fn from(literal: PrimitiveType) -> Self { Type::Primitive(literal) }
 }
 
+impl PrimitiveType {
+  pub fn is_integer(&self) -> bool {
+    matches!(
+      self,
+      PrimitiveType::I8
+        | PrimitiveType::I16
+        | PrimitiveType::I32
+        | PrimitiveType::I64
+        | PrimitiveType::U8
+        | PrimitiveType::U16
+        | PrimitiveType::U32
+        | PrimitiveType::U64
+    )
+  }
+}
+
 pub struct ModuleIter<'a> {
   root:  &'a Module,
   stack: Vec<Path>,
