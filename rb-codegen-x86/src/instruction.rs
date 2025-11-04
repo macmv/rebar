@@ -329,6 +329,8 @@ impl Opcode {
   pub const MATH_IMM8: Opcode = Opcode::new([0x80]);
   pub const MOV_MR_32: Opcode = Opcode::new([0x89]);
   pub const MOV_MR_8: Opcode = Opcode::new([0x88]);
+  pub const MOV_RM_32: Opcode = Opcode::new([0x8b]);
+  pub const MOV_RM_8: Opcode = Opcode::new([0x8a]);
   pub const MOV_RD_IMM_16: Opcode = Opcode::new([0xb8]);
   pub const MOV_RD_IMM_8: Opcode = Opcode::new([0xb0]);
   pub const MOV_RM_IMM_16: Opcode = Opcode::new([0xc7]);

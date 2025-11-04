@@ -608,21 +608,19 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           );
         }
 
-        rb_codegen::Opcode::StackLoad(id, _offset) => {
+        rb_codegen::Opcode::StackLoad(id, offset) => {
           let slot = &function.stack_slots[id.0 as usize];
           let output = match inst.output[0] {
             InstructionOutput::Var(v) => reg.get(v),
           };
 
+          let offset = slot.offset + offset;
+
           builder.instr(
-            Instruction::new(Opcode::MOV_MR_32)
-              .with_prefix(if output.size == RegisterSize::Bit64 {
-                Prefix::RexW
-              } else {
-                Prefix::empty()
-              })
+            Instruction::new(Opcode::MOV_RM_32)
+              .with_prefix(Prefix::RexW)
               .with_mod(0b00, output.index)
-              .with_immediate(Immediate::i8(slot.offset as u8)),
+              .with_displacement(Immediate::i8(offset as u8)),
           );
         }
 
