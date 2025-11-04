@@ -21,18 +21,19 @@ fn main() -> ExitCode {
 
   let out_dir = Path::new("out");
   std::fs::remove_dir_all(&out_dir).unwrap();
+  std::fs::create_dir_all(&out_dir).unwrap();
 
   std::thread::scope(|scope| {
-    for (index, chunk) in files.chunks(chunk_size).enumerate() {
+    for chunk in files.chunks(chunk_size) {
       let failed = &failed;
       scope.spawn(move || {
-        let out_dir = out_dir.join(format!("thread-{index}"));
-        std::fs::create_dir_all(&out_dir).unwrap();
-        let out = out_dir.join("out.o");
-
         for path in chunk {
+          let name = path.file_stem().unwrap().to_string_lossy();
           let stringified = path.display().to_string();
-          let res = catch_unwind(|| match rb_runtime::compile_test(path, std, &out) {
+          let object = out_dir.join(format!("{name}.o"));
+          let _binary = out_dir.join(&*name);
+
+          let res = catch_unwind(|| match rb_runtime::compile_test(path, std, &object) {
             (_, Ok(_)) => println!("{}... \x1b[32mok\x1b[0m", stringified),
             (sources, Err(diagnostics)) => {
               failed.fetch_or(true, Ordering::AcqRel);

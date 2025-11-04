@@ -157,10 +157,12 @@ fn compile_mir(
 
   compiler.finish(main_func, out);
 
+  let name = out.file_stem().unwrap().to_string_lossy();
+
   let status = std::process::Command::new("wild")
     .arg(out)
     .arg("-o")
-    .arg(out.parent().unwrap().join("a.out"))
+    .arg(out.parent().unwrap().join(&*name))
     .status()
     .unwrap();
   if !status.success() {
