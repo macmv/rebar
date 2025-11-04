@@ -592,6 +592,58 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
 
         // syscall
         rb_codegen::Opcode::Syscall => builder.instr(Instruction::new(Opcode::SYSCALL)),
+
+        rb_codegen::Opcode::StackAddr(id) => {
+          let slot = &function.stack_slots[id.0 as usize];
+          let output = match inst.output[0] {
+            InstructionOutput::Var(v) => reg.get(v),
+          };
+
+          debug_assert_eq!(output.size, RegisterSize::Bit64, "stack addresses must be 64-bit");
+
+          builder.instr(
+            Instruction::new(Opcode::LEA)
+              .with_prefix(Prefix::RexW)
+              .with_disp(output.index, slot.offset as i32),
+          );
+        }
+
+        rb_codegen::Opcode::StackLoad(id) => {
+          let slot = &function.stack_slots[id.0 as usize];
+          let output = match inst.output[0] {
+            InstructionOutput::Var(v) => reg.get(v),
+          };
+
+          builder.instr(
+            Instruction::new(Opcode::MOV_MR_32)
+              .with_prefix(if output.size == RegisterSize::Bit64 {
+                Prefix::RexW
+              } else {
+                Prefix::empty()
+              })
+              .with_mod(0b00, output.index)
+              .with_immediate(Immediate::i8(slot.offset as u8)),
+          );
+        }
+
+        rb_codegen::Opcode::StackStore(id) => {
+          let slot = &function.stack_slots[id.0 as usize];
+          match inst.input[0] {
+            InstructionInput::Var(v) => builder.instr(
+              Instruction::new(Opcode::MOV_MR_32)
+                .with_prefix(Prefix::RexW)
+                .with_mod(0b00, reg.get(v).index)
+                .with_immediate(Immediate::i8(slot.offset as u8)),
+            ),
+            InstructionInput::Imm(v) => builder.instr(
+              // TODO: Encode displacements and SIB
+              Instruction::new(Opcode::MOV_RM_IMM_16)
+                .with_prefix(Prefix::RexW)
+                .with_mod(0b11, RegisterIndex::Ebp)
+                .with_immediate(Immediate::i32(v.bits() as u32)),
+            ),
+          };
+        }
       }
     }
 
@@ -1029,11 +1081,19 @@ mod tests {
 
   #[test]
   fn stack_slots_work() {
+    let s0 = rb_codegen::StackId(0);
+
     let function = rb_codegen::Function {
       sig: Signature { args: vec![], rets: vec![] },
       blocks: vec![rb_codegen::Block {
         phis:         vec![],
-        instructions: vec![],
+        instructions: vec![rb_codegen::Instruction {
+          opcode: rb_codegen::Opcode::StackStore(s0),
+          input:  smallvec::smallvec![rb_codegen::InstructionInput::Imm(
+            rb_codegen::Immediate::Unsigned(42)
+          )],
+          output: smallvec::smallvec![],
+        }],
         terminator:   rb_codegen::TerminatorInstruction::Return(smallvec::smallvec![]),
       }],
       stack_slots: vec![
@@ -1059,8 +1119,9 @@ mod tests {
       &object_path,
       expect![@r#"
         0x08000250      4883ec18               sub rsp, 0x18
-        0x08000254      4883c418               add rsp, 0x18
-        0x08000258      c3                     ret
+        0x08000254      48c7c52a000000         mov rbp, 0x2a
+        0x0800025b      4883c418               add rsp, 0x18
+        0x0800025f      c3                     ret
       "#],
     );
   }

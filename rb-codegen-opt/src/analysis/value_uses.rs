@@ -82,7 +82,8 @@ impl AnalysisPass for ValueUses {
         self.pass_instr(instr);
       }
 
-      if let rb_codegen::TerminatorInstruction::Return(ref rets) = function.block(block).terminator {
+      if let rb_codegen::TerminatorInstruction::Return(ref rets) = function.block(block).terminator
+      {
         for ret in rets {
           if let InstructionInput::Var(var) = ret {
             self.mark_required(*var);
@@ -164,6 +165,10 @@ impl ValueUses {
       Opcode::Branch(_, _) => {
         self.set(out, VariableValue::Unknown);
         self.mark_required(out);
+      }
+
+      Opcode::StackAddr(_) | Opcode::StackLoad(_) | Opcode::StackStore(_) => {
+        self.set(out, VariableValue::Unknown);
       }
     }
 

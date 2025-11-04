@@ -23,6 +23,9 @@ pub struct Function {
   pub stack_slots:  Vec<StackSlot>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StackId(pub u32);
+
 #[derive(PartialEq, Eq)]
 pub struct StackSlot {
   pub size:   u32,
@@ -115,6 +118,10 @@ pub enum Opcode {
   Lea(Symbol),
   Move,
   Syscall,
+
+  StackAddr(StackId),
+  StackStore(StackId),
+  StackLoad(StackId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -515,6 +522,9 @@ impl fmt::Display for Opcode {
       Opcode::Lea(symbol) => write!(f, "lea symbol {}", symbol.index),
       Opcode::Move => write!(f, "mov"),
       Opcode::Syscall => write!(f, "syscall"),
+      Opcode::StackAddr(slot) => write!(f, "stack_addr {}", slot.0),
+      Opcode::StackStore(slot) => write!(f, "stack_store {}", slot.0),
+      Opcode::StackLoad(slot) => write!(f, "stack_load {}", slot.0),
     }
   }
 }
