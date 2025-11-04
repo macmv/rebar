@@ -19,15 +19,19 @@ fn main() -> ExitCode {
   let std = Path::new("lib/std/lib.rbr");
 
   std::thread::scope(|scope| {
-    for chunk in files.chunks(chunk_size) {
+    for (index, chunk) in files.chunks(chunk_size).enumerate() {
       let f = &filter;
       let failed = &failed;
       scope.spawn(move || {
+        let out_dir = Path::new("out").join(format!("thread-{index}"));
+        std::fs::create_dir_all(&out_dir).unwrap();
+        let out = out_dir.join("out.o");
+
         for path in chunk {
           if path.extension().unwrap() == "rbr" {
             let stringified = path.display().to_string();
             if stringified.contains(f) {
-              let res = catch_unwind(|| match rb_runtime::compile_test(path, std) {
+              let res = catch_unwind(|| match rb_runtime::compile_test(path, std, &out) {
                 (_, Ok(_)) => println!("{}... \x1b[32mok\x1b[0m", stringified),
                 (sources, Err(diagnostics)) => {
                   failed.fetch_or(true, Ordering::AcqRel);

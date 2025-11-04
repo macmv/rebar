@@ -63,19 +63,14 @@ impl Compiler {
 
   pub fn finish_function(&mut self, func: Function) { self.functions.push(func); }
 
-  pub fn finish(self, start: mir::UserFunctionId) {
+  pub fn finish(self, start: mir::UserFunctionId, out: &std::path::Path) {
     let mut builder = rb_codegen_x86::ObjectBuilder::default();
     for function in self.functions {
       builder.add_function(function);
     }
     builder.set_start_function(self.function_ids[&start]);
     let object = builder.finish();
-    object.save(std::path::Path::new("out.o"));
-
-    let status = std::process::Command::new("wild").arg("out.o").status().unwrap();
-    if !status.success() {
-      panic!("linker failed");
-    }
+    object.save(out);
   }
 }
 

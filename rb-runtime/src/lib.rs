@@ -19,7 +19,7 @@ pub fn compile(path: &std::path::Path) -> (Sources, Result<(), Vec<Diagnostic>>)
 
   let res = rb_diagnostic::run(sources.clone(), || {
     rb_hir_lower::resolve_hir(&env, &mut hir, &span_map);
-    compile_diagnostics(env, hir, span_map)
+    compile_diagnostics(env, hir, span_map, std::path::Path::new("out.o"))
   })
   .map(|_| ());
   (Arc::try_unwrap(sources).unwrap_or_else(|_| panic!()), res)
@@ -28,6 +28,7 @@ pub fn compile(path: &std::path::Path) -> (Sources, Result<(), Vec<Diagnostic>>)
 pub fn compile_test(
   test_path: &std::path::Path,
   std: &std::path::Path,
+  out: &std::path::Path,
 ) -> (Sources, Result<(), Vec<Diagnostic>>) {
   let (mut sources, res) = rb_hir_lower::parse_hir(&rb_hir_lower::fs::Native, std);
   let (mut hir, mut span_map) = match res {
@@ -51,7 +52,7 @@ pub fn compile_test(
 
   let res = rb_diagnostic::run(sources.clone(), || {
     rb_hir_lower::resolve_hir(&env, &mut hir, &span_map);
-    compile_diagnostics(env, hir, span_map)
+    compile_diagnostics(env, hir, span_map, out)
   })
   .map(|_| ());
   (Arc::try_unwrap(sources).unwrap_or_else(|_| panic!()), res)
@@ -61,6 +62,7 @@ fn compile_diagnostics(
   mut env: rb_hir::Environment,
   module: rb_hir::ast::Module,
   span_map: rb_hir::SpanMap,
+  out: &std::path::Path,
 ) -> Result<(), ()> {
   let (mir_ctx, function_map, functions) = build_environment(&mut env, &module, &span_map);
 
@@ -102,7 +104,7 @@ fn compile_diagnostics(
   // cranelift IR. Collect all the functions, split them into chunks, and compile
   // them on a thread pool.
 
-  compile_mir(mir_ctx, functions, start_id);
+  compile_mir(mir_ctx, functions, start_id, out);
 
   Ok(())
 }
@@ -138,6 +140,7 @@ fn compile_mir(
   mir_ctx: MirContext,
   functions: Vec<rb_mir::ast::Function>,
   main_func: rb_mir::ast::UserFunctionId,
+  out: &std::path::Path,
 ) {
   let mut compiler = rb_backend::Compiler::new(mir_ctx);
 
@@ -152,7 +155,17 @@ fn compile_mir(
     compiler.finish_function(func);
   }
 
-  compiler.finish(main_func);
+  compiler.finish(main_func, out);
+
+  let status = std::process::Command::new("wild")
+    .arg(out)
+    .arg("-o")
+    .arg(out.parent().unwrap().join("a.out"))
+    .status()
+    .unwrap();
+  if !status.success() {
+    panic!("linker failed");
+  }
 }
 
 fn build_environment<'a>(
