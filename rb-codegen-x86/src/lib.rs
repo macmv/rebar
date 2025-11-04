@@ -813,8 +813,8 @@ mod tests {
     let v5 = Variable::new(5, VariableSize::Bit64);
 
     let function = rb_codegen::Function {
-      sig:          Signature { args: vec![], rets: vec![] },
-      blocks:       vec![rb_codegen::Block {
+      sig: Signature { args: vec![], rets: vec![] },
+      blocks: vec![rb_codegen::Block {
         phis:         vec![],
         instructions: vec![
           // write 1 reloc.foo 14
@@ -862,8 +862,7 @@ mod tests {
         ],
         terminator:   rb_codegen::TerminatorInstruction::Trap,
       }],
-      data:         vec![],
-      data_symbols: vec![],
+      ..Default::default()
     };
 
     let data = b"Hello, world!\n";

@@ -20,6 +20,14 @@ pub struct Function {
   pub blocks:       Vec<Block>,
   pub data:         Vec<u8>,
   pub data_symbols: Vec<SymbolDef>,
+  pub stack_slots:  Vec<StackSlot>,
+}
+
+#[derive(PartialEq, Eq)]
+pub struct StackSlot {
+  pub size:   u32,
+  pub align:  u32,
+  pub offset: u32,
 }
 
 #[derive(Debug, PartialEq, Eq)]

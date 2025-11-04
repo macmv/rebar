@@ -33,6 +33,7 @@ impl FunctionBuilder {
         blocks: vec![Block::default()],
         data: vec![],
         data_symbols: vec![],
+        stack_slots: vec![],
       },
       terminated:    vec![false],
       block:         BlockId(0),
