@@ -276,7 +276,7 @@ impl FuncBuilder<'_> {
         RValue::slot(ValueType::Struct(id), slot)
       }
 
-      mir::Expr::Field(lhs, ref field, _) => {
+      mir::Expr::Field(lhs, ref field, ref ty) => {
         let lhs = self.compile_expr(lhs);
 
         let (id, slot) = lhs.unwrap_slot();
@@ -286,8 +286,13 @@ impl FuncBuilder<'_> {
 
         let offset = layout.offsets[index];
 
-        let value = self.builder.instr().stack_load(Bit64, slot, offset);
-        RValue::int(value)
+        let vt = ValueType::for_type(self.mir(), ty);
+        let mut values = vec![];
+        for i in 0..vt.len(self.mir()) {
+          values.push(self.builder.instr().stack_load(Bit64, slot, offset + i * 8));
+        }
+
+        RValue::new(vt, values)
       }
 
       /*

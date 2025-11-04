@@ -4,3 +4,5 @@ struct Foo {
 }
 
 let f = Foo { a: 1, b: "hi" }
+assert_eq(f.a, 1)
+assert_eq(intrinsic::slice_len(f.b), 2)
