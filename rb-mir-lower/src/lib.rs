@@ -209,6 +209,11 @@ impl Lower<'_> {
         mir::Expr::Index(lhs, rhs, self.ty.type_of_expr(expr))
       }
 
+      // The typer has allowed it, so we can just lower the inner expression.
+      //
+      // TODO: Sign-extend when needed?
+      hir::Expr::Cast(inner, _) => return self.lower_expr(inner),
+
       hir::Expr::Call(lhs, ref args) => match self.hir.exprs[lhs] {
         hir::Expr::Name(ref name) => {
           if let Some(Item::UserFunction(func)) = self.ctx.items.get(&name) {
