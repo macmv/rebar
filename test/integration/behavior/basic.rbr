@@ -1,5 +1,7 @@
-sys::assert_eq(2 + 3, 5)
+use sys::assert_eq
+
+assert_eq(2 + 3, 5)
 
 // precedence should work
-sys::assert_eq(2 * 3 + 4, 10)
-sys::assert_eq(4 + 2 * 3, 10)
+assert_eq(2 * 3 + 4, 10)
+assert_eq(4 + 2 * 3, 10)

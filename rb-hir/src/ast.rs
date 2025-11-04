@@ -262,6 +262,12 @@ impl Path {
     new_path.segments.extend(p.segments.iter().cloned());
     new_path
   }
+
+  pub fn concat_slice(&self, segments: &[String]) -> Path {
+    let mut new_path = self.clone();
+    new_path.segments.extend_from_slice(segments);
+    new_path
+  }
 }
 
 impl FullyQualifiedName {

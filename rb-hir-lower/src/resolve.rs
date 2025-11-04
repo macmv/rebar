@@ -21,6 +21,10 @@ struct Resolver<'a> {
   span_map: &'a SpanMap,
 }
 
+struct UseMap {
+  uses: HashMap<String, Path>,
+}
+
 pub fn resolve_hir(env: &Environment, hir: &mut hir::Module, span_map: &SpanMap) {
   let mut package = Package { items: HashMap::new() };
   collect_structs(&mut package, &Path::new(), hir);
@@ -100,11 +104,13 @@ impl Resolver<'_> {
 
     let span_map = &self.span_map.modules[&current];
 
+    let uses = UseMap::collect(hir.uses.as_mut());
+
     for &id in &hir.standalone_functions {
       let function = &mut hir.functions[id];
       let span_map = &span_map.functions[&id];
 
-      self.resolve_function(function, span_map, &current);
+      self.resolve_function(function, span_map, &current, &uses);
     }
 
     for imp in &mut hir.impls {
@@ -123,7 +129,7 @@ impl Resolver<'_> {
             let function = &mut hir.functions[id];
             let span_map = &span_map.functions[&id];
 
-            self.resolve_function(function, span_map, &current);
+            self.resolve_function(function, span_map, &current, &uses);
           }
         }
         _ => panic!(), // uhh
@@ -138,6 +144,7 @@ impl Resolver<'_> {
     function: &mut hir::Function,
     span_map: &FunctionSpanMap,
     current: &Path,
+    uses: &UseMap,
   ) {
     let Some(ref body) = function.body else { return };
 
@@ -159,6 +166,9 @@ impl Resolver<'_> {
             {
               // local variable
               function.exprs[id] = hir::Expr::Local(local);
+            } else if let Some(path) = uses.lookup(p) {
+              // imported
+              *p = path;
             } else if self.env.lookup_type(p).is_some() {
               // absolute path
             } else if let Some(path) = p.to_path() {
@@ -209,4 +219,38 @@ impl Resolver<'_> {
 
 impl Package {
   pub fn contains(&self, path: &Path) -> bool { self.items.contains_key(path) }
+}
+
+impl UseMap {
+  fn collect(uses: &[hir::Use]) -> Self {
+    let mut map = HashMap::new();
+
+    for u in uses {
+      assert!(!u.is_glob);
+
+      let name = u.alias.clone().unwrap_or_else(|| u.path.segments.last().unwrap().clone());
+      map.insert(name, u.path.clone());
+    }
+
+    UseMap { uses: map }
+  }
+
+  fn lookup(&self, p: &hir::FullyQualifiedName) -> Option<hir::FullyQualifiedName> {
+    match p {
+      hir::FullyQualifiedName::Bare { path, name } => {
+        let full_path = path.join(name.clone());
+        let prefix = full_path.segments.first().unwrap();
+        if let Some(resolved) = self.uses.get(prefix) {
+          Some(
+            hir::FullyQualifiedName::new_bare(resolved.concat_slice(&full_path.segments[1..]))
+              .unwrap(),
+          )
+        } else {
+          None
+        }
+      }
+
+      hir::FullyQualifiedName::TraitImpl { .. } => None,
+    }
+  }
 }
