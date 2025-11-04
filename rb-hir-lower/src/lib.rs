@@ -79,6 +79,7 @@ pub fn lower_source(
   let main = lower.source(&cst);
 
   out.main_function = Some(main);
+  out.standalone_functions.push(main);
   (out, span_map, ast_id_maps)
 }
 
