@@ -80,10 +80,11 @@ StructExpr = Path '{' FieldInit* '}'
 FieldInit = 'ident' ':' Expr
 
 ExprStmt = Attr* Expr
-Stmt = Use | Mod | Struct | Function | Let | Assign | ExprStmt
+Stmt = Use | Mod | Struct | Function | Impl | Let | Assign | ExprStmt
 
 Mod = Attr* 'mod' 'ident' Block?
 Use = Attr* 'use' Path
+Impl = Attr* 'impl' Path ('for' Path)? Block
 
 Let = Attr* 'let' 'ident' (':' Type)? '=' Expr
 Assign = Attr* Expr '=' Expr

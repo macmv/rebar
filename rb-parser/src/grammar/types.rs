@@ -42,7 +42,7 @@ fn ty_bp(p: &mut Parser, min_bp: u8) {
       lhs = m.complete(p, BINARY_TYPE);
     } else {
       match p.current() {
-        T![nl] | T![=] | T![,] | T!['{'] | T![')'] | T!['}'] | EOF => return,
+        T![nl] | T![for] | T![=] | T![,] | T!['{'] | T![')'] | T!['}'] | EOF => return,
         _ => {
           p.error(format!("expected type, got {}", p.current()));
           return;

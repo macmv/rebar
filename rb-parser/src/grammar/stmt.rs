@@ -78,6 +78,23 @@ pub fn stmt(p: &mut Parser) {
     }
 
     // test ok
+    // impl Foo {}
+    // impl Bar for Baz {}
+    T![impl] => {
+      p.eat(T![impl]);
+      super::types::ty(p);
+
+      if p.at(T![for]) {
+        p.eat(T![for]);
+        super::types::ty(p);
+      }
+
+      block(p);
+
+      m.complete(p, IMPL);
+    }
+
+    // test ok
     // let foo = 2 + 3
     // let bar: int = 4
     T![let] => {
