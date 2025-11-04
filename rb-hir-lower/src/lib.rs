@@ -282,6 +282,31 @@ impl FunctionLower<'_, '_> {
         hir::Stmt::Struct
       }
 
+      cst::Stmt::Impl(ref imp) => {
+        let first_ty = type_expr(self.source.source, &imp.first_ty().unwrap());
+        let second_ty = imp.second_ty().map(|t| type_expr(self.source.source, &t));
+
+        let (struct_path, trait_path) = if let Some(second_ty) = second_ty {
+          match first_ty {
+            hir::TypeExpr::Struct(ref p) => (second_ty, Some(p.clone())),
+            _ => {
+              emit!(
+                Span { file: self.source.source, range: imp.first_ty().unwrap().syntax().text_range() } =>
+                "expected a path type"
+              );
+              (second_ty, None)
+            }
+          }
+        } else {
+          (first_ty, None)
+        };
+
+        let functions = self.impl_block(imp.block().unwrap());
+        self.source.out.impls.push(hir::Impl { struct_path, trait_path, functions });
+
+        hir::Stmt::Struct
+      }
+
       _ => unimplemented!("lowering for {:?}", cst),
     };
 
@@ -297,6 +322,25 @@ impl FunctionLower<'_, '_> {
     }
 
     id
+  }
+
+  fn impl_block(&mut self, block: cst::Block) -> Vec<hir::FunctionId> {
+    let mut functions = vec![];
+    for stmt in block.stmts() {
+      match stmt {
+        cst::Stmt::Function(ref def) => {
+          functions.push(self.source.function(def));
+        }
+
+        _ => {
+          emit!(
+            Span { file: self.source.source, range: stmt.syntax().text_range() } =>
+            "only function definitions allowed in impl blocks"
+          );
+        }
+      }
+    }
+    functions
   }
 
   #[track_caller]
@@ -578,13 +622,7 @@ fn type_expr(source: SourceId, cst: &cst::Type) -> hir::TypeExpr {
         "u16" => hir::PrimitiveType::U16.into(),
         "u32" => hir::PrimitiveType::U32.into(),
         "u64" => hir::PrimitiveType::U64.into(),
-        _ => {
-          emit!(
-            Span { file: source, range: cst.ident_token().unwrap().text_range() } =>
-            "unknown type {name}"
-          );
-          hir::TypeExpr::unit()
-        }
+        _ => hir::TypeExpr::Struct(Path::new().join(name)),
       }
     }
 

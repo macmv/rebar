@@ -12,6 +12,7 @@ pub type StructId = Idx<Struct>;
 pub struct Module {
   pub functions: Arena<Function>,
   pub structs:   Arena<Struct>,
+  pub impls:     Vec<Impl>,
 
   pub modules: BTreeMap<String, PartialModule>,
 
@@ -68,6 +69,13 @@ pub struct Struct {
   pub name: String,
 
   pub fields: Vec<(String, TypeExpr)>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Impl {
+  pub struct_path: TypeExpr,
+  pub trait_path:  Option<Path>,
+  pub functions:   Vec<FunctionId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

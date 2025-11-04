@@ -31,3 +31,9 @@ fn assert_eq(a: i64, b: i64) {
     abort()
   }
 }
+
+struct File {
+  fd: i32
+}
+
+impl File {}

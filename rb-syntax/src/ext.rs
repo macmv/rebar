@@ -121,3 +121,8 @@ impl cst::FullyQualifiedPath {
   pub fn struct_path(&self) -> Option<cst::SimplePath> { support::children(&self.syntax).next() }
   pub fn trait_path(&self) -> Option<cst::SimplePath> { support::children(&self.syntax).nth(1) }
 }
+
+impl cst::Impl {
+  pub fn first_ty(&self) -> Option<cst::Type> { support::children(&self.syntax).next() }
+  pub fn second_ty(&self) -> Option<cst::Type> { support::children(&self.syntax).nth(1) }
+}
