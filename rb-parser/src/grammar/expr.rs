@@ -106,15 +106,12 @@ fn atom_expr(p: &mut Parser, m: Marker, cond: bool) -> Option<CompletedMarker> {
     // hello
     T![ident] => {
       let (_, is_simple) = path(p);
-      let lhs = m.complete(p, PATH_EXPR);
 
       // Special case for struct literals.
       if is_simple && p.current() == T!['{'] && !cond {
         // test ok
         // Foo { a: 2 }
         // if a { println() }
-        let strct = lhs.precede(p);
-
         arg_list(p, T!['{'], T!['}'], |p| {
           let m = p.start();
           p.expect(T![ident]);
@@ -123,9 +120,9 @@ fn atom_expr(p: &mut Parser, m: Marker, cond: bool) -> Option<CompletedMarker> {
           m.complete(p, FIELD_INIT);
         });
 
-        Some(strct.complete(p, STRUCT_EXPR))
+        Some(m.complete(p, STRUCT_EXPR))
       } else {
-        Some(lhs)
+        Some(m.complete(p, PATH_EXPR))
       }
     }
 
