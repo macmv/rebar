@@ -182,20 +182,20 @@ fn build_environment<'a>(
   let mut mir_ctx = MirContext::default();
   let mut functions = vec![];
   let mut function_map = HashMap::new();
+  let mut struct_id = rb_mir::ast::StructId(0);
 
   for (path, module) in module.modules() {
     let span_map = &span_map.modules[&path];
-    for (id, s) in module.structs.values().enumerate() {
-      let id = rb_mir::ast::StructId(id as u64);
+    for s in module.structs.values() {
       let struct_path = path.join(s.name.clone());
 
       env.structs.insert(
         struct_path.clone(),
         s.fields.iter().map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te))).collect(),
       );
-      mir_ctx.struct_paths.insert(struct_path, id);
+      mir_ctx.struct_paths.insert(struct_path, struct_id);
       mir_ctx.structs.insert(
-        id,
+        struct_id,
         rb_mir::Struct {
           fields: s
             .fields
@@ -204,6 +204,7 @@ fn build_environment<'a>(
             .collect(),
         },
       );
+      struct_id.0 += 1;
     }
 
     for (hir_id, f) in module.functions.iter() {

@@ -25,7 +25,7 @@ pub struct UserFunction {
   pub intrinsic: Option<ast::Intrinsic>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Struct {
   pub fields: Vec<(String, Type)>,
 }
