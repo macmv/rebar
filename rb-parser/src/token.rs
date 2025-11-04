@@ -207,6 +207,7 @@ impl<'a> Lexer<'a> {
           "fn" => T![fn],
           "extern" => T![extern],
           "as" => T![as],
+          "mut" => T![mut],
           "true" => T![true],
           "false" => T![false],
           "nil" => T![nil],

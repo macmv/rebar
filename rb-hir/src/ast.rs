@@ -110,9 +110,15 @@ pub enum StringInterp {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TypeExpr {
   Primitive(PrimitiveType),
-  Ref(Box<TypeExpr>),
+  Ref(Box<TypeExpr>, Mutability),
   Struct(Path),
   Tuple(Vec<TypeExpr>),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Mutability {
+  Mut,
+  Imm,
 }
 
 impl Default for TypeExpr {
@@ -142,7 +148,7 @@ pub enum PrimitiveType {
 pub enum Type {
   SelfT,
   Primitive(PrimitiveType),
-  Ref(Box<Type>),
+  Ref(Box<Type>, Mutability),
   Array(Box<Type>),
   Tuple(Vec<Type>),
 
@@ -299,7 +305,7 @@ impl Type {
     match self {
       Type::SelfT => slf.clone(),
       Type::Primitive(p) => Type::Primitive(*p),
-      Type::Ref(t) => Type::Ref(Box::new(t.resolve_self(slf))),
+      Type::Ref(t, m) => Type::Ref(Box::new(t.resolve_self(slf)), *m),
       Type::Array(ty) => Type::Array(Box::new(ty.resolve_self(slf))),
       Type::Tuple(types) => Type::Tuple(types.iter().map(|ty| ty.resolve_self(slf)).collect()),
       Type::Function(args, ret) => Type::Function(
@@ -409,7 +415,8 @@ impl fmt::Display for Type {
     match self {
       Type::SelfT => write!(f, "Self"),
       Type::Primitive(p) => write!(f, "{p}"),
-      Type::Ref(t) => write!(f, "&{t}"),
+      Type::Ref(t, Mutability::Imm) => write!(f, "&{t}"),
+      Type::Ref(t, Mutability::Mut) => write!(f, "&mut {t}"),
       Type::Array(ty) => write!(f, "Array[{}]", ty),
       Type::Tuple(types) => {
         let types: Vec<String> = types.iter().map(|ty| format!("{}", ty)).collect();

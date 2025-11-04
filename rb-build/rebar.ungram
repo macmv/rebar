@@ -67,7 +67,7 @@ Block = '{' Stmt* '}'
 Type = NameType | RefType | BinaryType | NeverType
 
 NameType = 'ident' | 'nil'
-RefType = '&' Type
+RefType = '&' 'mut'? Type
 BinaryType = Type TypeOp Type
 NeverType = '!'
 

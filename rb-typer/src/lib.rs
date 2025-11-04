@@ -51,7 +51,7 @@ pub fn type_of_function(func: &hir::Function) -> Type {
 pub fn type_of_type_expr(te: &hir::TypeExpr) -> Type {
   match te {
     hir::TypeExpr::Primitive(t) => Type::Primitive(*t),
-    hir::TypeExpr::Ref(te) => Type::Ref(Box::new(type_of_type_expr(te))),
+    hir::TypeExpr::Ref(te, m) => Type::Ref(Box::new(type_of_type_expr(te)), *m),
     hir::TypeExpr::Struct(path) => Type::Struct(path.clone()),
     hir::TypeExpr::Tuple(tys) => Type::Tuple(tys.iter().map(type_of_type_expr).collect()),
   }
@@ -133,7 +133,7 @@ impl<'a> Typer<'a> {
       VType::Error => Type::unit(),
       VType::SelfT => Type::SelfT,
       VType::Primitive(lit) => Type::Primitive(*lit),
-      VType::Ref(t) => Type::Ref(Box::new(self.lower_type(t))),
+      VType::Ref(t, m) => Type::Ref(Box::new(self.lower_type(t)), *m),
 
       // Integers default to i64.
       VType::Integer(id) => {
@@ -535,7 +535,9 @@ impl<'a> Typer<'a> {
       (VType::Primitive(a), VType::Primitive(b)) if a.is_integer() && b.is_integer() => true,
 
       // References can be cast to i/u64 (addresses).
-      (VType::Ref(_), VType::Primitive(hir::PrimitiveType::I64 | hir::PrimitiveType::U64)) => true,
+      (VType::Ref(_, _), VType::Primitive(hir::PrimitiveType::I64 | hir::PrimitiveType::U64)) => {
+        true
+      }
 
       _ => false,
     }

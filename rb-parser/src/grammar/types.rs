@@ -73,6 +73,12 @@ fn atom_type(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
     // fn foo(a: &i32) {}
     T![&] => {
       p.eat(T![&]);
+      // test ok
+      // fn bar(a: &mut i32) {}
+      if p.at(T![mut]) {
+        p.eat(T![mut]);
+      }
+
       {
         let m = p.start();
         atom_type(p, m)?;

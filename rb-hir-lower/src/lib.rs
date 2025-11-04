@@ -596,7 +596,10 @@ fn type_expr(source: SourceId, cst: &cst::Type) -> hir::TypeExpr {
 
     cst::Type::RefType(cst) => {
       let inner = type_expr(source, &cst.ty().unwrap());
-      hir::TypeExpr::Ref(Box::new(inner))
+      hir::TypeExpr::Ref(
+        Box::new(inner),
+        if cst.mut_token().is_some() { hir::Mutability::Mut } else { hir::Mutability::Imm },
+      )
     }
 
     cst::Type::BinaryType(cst) => {
