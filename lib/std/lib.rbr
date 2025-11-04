@@ -1,2 +1,2 @@
 mod sys
-mod intrinsics
+mod intrinsic

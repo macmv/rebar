@@ -1,21 +1,21 @@
 fn write(fd: i64, buf: str) -> i64 {
-  intrinsics::syscall4(
+  intrinsic::syscall4(
     1,
     fd,
-    intrinsics::slice_ptr(buf) as i64,
-    intrinsics::slice_len(buf),
+    intrinsic::slice_ptr(buf) as i64,
+    intrinsic::slice_len(buf),
   )
 }
-fn getpid() -> i64 { intrinsics::syscall1(39) }
+fn getpid() -> i64 { intrinsic::syscall1(39) }
 fn exit(code: i64) -> ! {
-  intrinsics::syscall2(60, code)
-  intrinsics::trap()
+  intrinsic::syscall2(60, code)
+  intrinsic::trap()
 }
-fn kill(pid: i64, sig: i64) -> i64 { intrinsics::syscall3(62, pid, sig) }
+fn kill(pid: i64, sig: i64) -> i64 { intrinsic::syscall3(62, pid, sig) }
 
 fn abort() -> ! {
   kill(getpid(), 6)
-  intrinsics::trap()
+  intrinsic::trap()
 }
 
 fn assert(cond: bool) {
