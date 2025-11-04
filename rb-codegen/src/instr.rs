@@ -202,6 +202,18 @@ impl InstrBuilder<'_> {
       output: smallvec![],
     });
   }
+
+  pub fn stack_load(&mut self, size: VariableSize, slot: StackId, offset: u32) -> Variable {
+    let output = self.function.var(size);
+
+    self.function.function.blocks[self.block.0 as usize].instructions.push(crate::Instruction {
+      opcode: crate::Opcode::StackLoad(slot, offset),
+      input:  smallvec![],
+      output: smallvec![output.into()],
+    });
+
+    output
+  }
 }
 
 #[cfg(test)]

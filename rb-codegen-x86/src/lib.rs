@@ -608,7 +608,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           );
         }
 
-        rb_codegen::Opcode::StackLoad(id) => {
+        rb_codegen::Opcode::StackLoad(id, _offset) => {
           let slot = &function.stack_slots[id.0 as usize];
           let output = match inst.output[0] {
             InstructionOutput::Var(v) => reg.get(v),
