@@ -626,20 +626,29 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
 
         rb_codegen::Opcode::StackStore(id, offset) => {
           let slot = &function.stack_slots[id.0 as usize];
+
+          let offset = slot.offset + offset;
           match inst.input[0] {
-            InstructionInput::Var(v) => builder.instr(
-              Instruction::new(Opcode::MOV_MR_32)
+            InstructionInput::Var(v) => {
+              let instruction = Instruction::new(Opcode::MOV_MR_32)
                 .with_prefix(Prefix::RexW)
-                .with_mod(0b00, reg.get(v).index)
-                .with_immediate(Immediate::i8(slot.offset as u8)),
-            ),
+                .with_sib(0, RegisterIndex::Esp, RegisterIndex::Esp)
+                .with_reg(reg.get(v).index);
+
+              let instruction = if offset == 0 {
+                instruction
+              } else {
+                instruction.with_displacement(Immediate::i8(offset as u8))
+              };
+
+              builder.instr(instruction)
+            }
             InstructionInput::Imm(v) => {
               let instruction = Instruction::new(Opcode::MOV_RM_IMM_16)
                 .with_prefix(Prefix::RexW)
                 .with_sib(0, RegisterIndex::Esp, RegisterIndex::Esp)
                 .with_immediate(Immediate::i32(v.bits() as u32));
 
-              let offset = slot.offset + offset;
               let instruction = if offset == 0 {
                 instruction
               } else {
@@ -1089,6 +1098,7 @@ mod tests {
   fn stack_slots_work() {
     let s0 = rb_codegen::StackId(0);
     let s1 = rb_codegen::StackId(1);
+    let v0 = Variable::new(0, VariableSize::Bit64);
 
     let function = rb_codegen::Function {
       sig: Signature { args: vec![], rets: vec![] },
@@ -1107,6 +1117,16 @@ mod tests {
             input:  smallvec::smallvec![rb_codegen::InstructionInput::Imm(
               rb_codegen::Immediate::Unsigned(0x4c)
             )],
+            output: smallvec::smallvec![],
+          },
+          rb_codegen::Instruction {
+            opcode: rb_codegen::Opcode::Move,
+            input:  smallvec::smallvec![1.into()],
+            output: smallvec::smallvec![v0.into()],
+          },
+          rb_codegen::Instruction {
+            opcode: rb_codegen::Opcode::StackStore(s1, 0),
+            input:  smallvec::smallvec![v0.into()],
             output: smallvec::smallvec![],
           },
         ],
@@ -1137,8 +1157,10 @@ mod tests {
         0x08000250      4883ec18               sub rsp, 0x18
         0x08000254      48c704242a000000       mov qword [rsp], 0x2a
         0x0800025c      48c74424084c000000     mov qword [rsp + 8], 0x4c
-        0x08000265      4883c418               add rsp, 0x18
-        0x08000269      c3                     ret
+        0x08000265      b801000000             mov eax, 1
+        0x0800026a      4889442408             mov qword [rsp + 8], rax
+        0x0800026f      4883c418               add rsp, 0x18
+        0x08000273      c3                     ret
       "#],
     );
   }
