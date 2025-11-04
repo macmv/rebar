@@ -255,6 +255,24 @@ impl FuncBuilder<'_> {
         RValue::nil()
       }
 
+      mir::Expr::StructInit(id, ref fields) => {
+        let layout = self.mir().layout_struct(id);
+
+        let slot = self.builder.stack_slot(layout.layout.size, layout.layout.align);
+
+        for (offset, (_, field)) in layout.offsets.iter().zip(fields.iter()) {
+          let field = self.compile_expr(*field);
+          let ir = field.to_ir(self);
+
+          for (i, ir) in ir.iter().enumerate() {
+            let off = (*offset as i32) + (i as i32 * 8);
+            self.builder.instr().stack_store(slot, off as u32, *ir);
+          }
+        }
+
+        RValue::nil()
+      }
+
       /*
       Some(ValueType::UserFunction) => {
         let id = match lhs {
@@ -626,12 +644,6 @@ impl FuncBuilder<'_> {
         RValue::TypedDyn(ValueType::Struct(id), Slot::Multiple(len as usize, slot))
       }
       */
-      mir::Expr::StructInit(id, _) => {
-        let layout = self.mir().layout_struct(id);
-        dbg!(&layout);
-        todo!("struct literals")
-      }
-
       mir::Expr::Index(_, _, _) => todo!("indexing"),
       mir::Expr::Assign { .. } => todo!("assignments"),
       mir::Expr::While { .. } => todo!("loops"),

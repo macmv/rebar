@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use smallvec::smallvec;
 
 use crate::{
-  Block, BlockId, Condition, Function, FunctionId, InstructionInput, Math, Signature, Symbol,
-  SymbolDef, Variable, VariableSize,
+  Block, BlockId, Condition, Function, FunctionId, InstructionInput, Math, Signature, StackId,
+  Symbol, SymbolDef, Variable, VariableSize,
 };
 
 pub struct FunctionBuilder {
@@ -84,6 +84,19 @@ impl FunctionBuilder {
 
   pub fn instr(&mut self) -> InstrBuilder<'_> {
     InstrBuilder { block: self.current_block().id(), function: self }
+  }
+
+  pub fn stack_slot(&mut self, size: u32, align: std::num::NonZero<u32>) -> StackId {
+    let id = self.function.stack_slots.len() as u32;
+    let offset = self
+      .function
+      .stack_slots
+      .last()
+      .map_or(0, |slot| slot.offset + slot.size + (align.get() - 1))
+      .wrapping_add(!(align.get() - 1))
+      & !(align.get() - 1);
+    self.function.stack_slots.push(crate::StackSlot { size, align: align.get(), offset });
+    StackId(id)
   }
 }
 
@@ -180,6 +193,14 @@ impl InstrBuilder<'_> {
     });
 
     output
+  }
+
+  pub fn stack_store(&mut self, slot: StackId, offset: u32, value: impl Into<InstructionInput>) {
+    self.function.function.blocks[self.block.0 as usize].instructions.push(crate::Instruction {
+      opcode: crate::Opcode::StackStore(slot, offset),
+      input:  smallvec![value.into()],
+      output: smallvec![],
+    });
   }
 }
 
