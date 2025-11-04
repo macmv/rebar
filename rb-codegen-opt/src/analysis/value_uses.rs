@@ -180,8 +180,12 @@ impl ValueUses {
     }
   }
 
+  #[track_caller]
   pub fn variable(&self, var: Variable) -> &VariableInfo {
-    self.variable_opt(var).unwrap_or_else(|| panic!("no such variable with the id {var:?}"))
+    match self.variable_opt(var) {
+      Some(v) => v,
+      None => panic!("no such variable with the id {var:?}"),
+    }
   }
   pub fn variable_opt(&self, var: Variable) -> Option<&VariableInfo> { self.variables.get(&var) }
 
