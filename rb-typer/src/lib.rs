@@ -369,7 +369,9 @@ impl<'a> Typer<'a> {
 
       hir::Expr::BinaryOp(lhs_expr, hir::BinaryOp::Eq | hir::BinaryOp::Neq, rhs_expr) => {
         let lhs = self.synth_expr(lhs_expr)?;
-        self.check_expr(rhs_expr, &lhs);
+        let rhs = self.synth_expr(rhs_expr)?;
+
+        self.link_types(&lhs, &rhs, self.span(expr));
 
         hir::PrimitiveType::Bool.into()
       }
@@ -539,6 +541,33 @@ impl<'a> Typer<'a> {
       }
 
       _ => false,
+    }
+  }
+
+  fn link_types(&mut self, lhs: &VType, rhs: &VType, span: Span) {
+    match (lhs, rhs) {
+      (a, b) if a == b => {}
+
+      (VType::Integer(l), VType::Integer(r)) => {
+        self.integers.as_mut()[l.into_raw().into_u32() as usize].deps.push(*r);
+        self.integers.as_mut()[r.into_raw().into_u32() as usize].deps.push(*l);
+      }
+
+      (VType::Integer(_), VType::Primitive(prim)) if prim.is_integer() => {
+        self.pin_integer(lhs, rhs);
+      }
+      (VType::Primitive(prim), VType::Integer(_)) if prim.is_integer() => {
+        self.pin_integer(rhs, lhs);
+      }
+
+      _ => {
+        emit!(
+          span =>
+          "cannot compare types {} and {}",
+          self.display_type(&lhs),
+          self.display_type(&rhs)
+        );
+      }
     }
   }
 
@@ -1114,6 +1143,63 @@ mod tests {
       "#,
       expect![@r#"
         a: Array[i64]
+      "#],
+    );
+  }
+
+  #[test]
+  fn unify_equals() {
+    check(
+      r#"
+      let a = 3
+      let b = 4
+      let c = a == b
+      "#,
+      expect![@r#"
+        a: i64
+        b: i64
+        c: bool
+      "#],
+    );
+
+    check(
+      r#"
+      let a = 3
+      let b: i32 = 4
+      let c = a == b
+      "#,
+      expect![@r#"
+        a: i32
+        b: i32
+        c: bool
+      "#],
+    );
+
+    check(
+      r#"
+      let a: i32 = 3
+      let b = 4
+      let c = a == b
+      "#,
+      expect![@r#"
+        a: i32
+        b: i32
+        c: bool
+      "#],
+    );
+
+    check(
+      r#"
+      let a: i32 = 3
+      let b: i16 = 4
+      let c = a == b
+      "#,
+      expect![@r#"
+        error: cannot compare types i32 and i16
+         --> inline.rbr:4:15
+          |
+        4 |       let c = a == b
+          |               ^^^^^^
       "#],
     );
   }
