@@ -40,6 +40,7 @@ Expr =
   PrefixExpr |
   PostfixExpr |
   BinaryExpr |
+  AsExpr |
   IfExpr |
   ParenExpr |
   ArrayExpr |
@@ -55,6 +56,7 @@ FieldExpr = Expr '.' 'ident'
 PrefixExpr = PrefixOp Expr
 PostfixExpr = PostfixOp Expr
 BinaryExpr = Expr BinaryOp Expr
+AsExpr = Expr 'as' Type
 
 IfExpr = 'if' Expr Block ('else' 'if' Expr Block)* ('else' Block)?
 

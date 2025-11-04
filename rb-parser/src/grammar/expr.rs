@@ -302,6 +302,15 @@ fn postfix_expr(p: &mut Parser, mut lhs: CompletedMarker) -> CompletedMarker {
         call.complete(p, INDEX_EXPR)
       }
 
+      // test ok
+      // 3 as i32
+      T![as] => {
+        let m = lhs.precede(p);
+        p.eat(T![as]);
+        super::types::ty(p);
+        m.complete(p, AS_EXPR)
+      }
+
       _ => break,
     };
   }
