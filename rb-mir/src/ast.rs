@@ -86,7 +86,6 @@ pub enum Stmt {
 
 #[derive(Debug)]
 pub enum Literal {
-  Nil,
   Bool(bool),
   Int(i64),
   String(String),
@@ -289,7 +288,6 @@ impl fmt::Display for DisplayExpr<'_> {
 impl fmt::Display for Literal {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
-      Literal::Nil => write!(f, "nil"),
       Literal::Bool(v) => write!(f, "{}", v),
       Literal::Int(v) => write!(f, "{}", v),
       Literal::String(s) => write!(f, "\"{}\"", s),

@@ -182,7 +182,6 @@ impl<'a> Typer<'a> {
   fn synth_expr(&mut self, expr: ExprId) -> Option<VType> {
     let ty = match self.function.exprs[expr] {
       hir::Expr::Literal(ref lit) => match lit {
-        hir::Literal::Nil => VType::unit(),
         hir::Literal::Bool(_) => VType::Primitive(hir::PrimitiveType::Bool),
         hir::Literal::Int(_) => self.fresh_int(&[]),
       },

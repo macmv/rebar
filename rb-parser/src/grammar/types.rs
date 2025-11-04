@@ -57,7 +57,7 @@ fn atom_type(p: &mut Parser, m: Marker) -> Option<CompletedMarker> {
     // test ok
     // fn foo(a: int) {}
     // fn foo(a: nil) {}
-    T![ident] | T![nil] => {
+    T![ident] => {
       p.bump();
       Some(m.complete(p, NAME_TYPE))
     }

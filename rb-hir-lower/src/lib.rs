@@ -314,7 +314,6 @@ impl FunctionLower<'_, '_> {
             integer_token(lit) => hir::Expr::Literal(hir::Literal::Int(lit.text().parse().unwrap())),
             true_token(_) => hir::Expr::Literal(hir::Literal::Bool(true)),
             false_token(_) => hir::Expr::Literal(hir::Literal::Bool(false)),
-            nil_token(_) => hir::Expr::Literal(hir::Literal::Nil),
           }
         }
       }
@@ -566,30 +565,25 @@ fn parse_escapes(span: Span, lit: &str) -> String {
 fn type_expr(source: SourceId, cst: &cst::Type) -> hir::TypeExpr {
   match cst {
     cst::Type::NameType(cst) => {
-      if let Some(_) = cst.nil_token() {
-        hir::TypeExpr::unit()
-      } else {
-        let name = cst.ident_token().unwrap().text().to_string();
+      let name = cst.ident_token().unwrap().text().to_string();
 
-        match name.as_str() {
-          "nil" => hir::TypeExpr::unit(),
-          "bool" => hir::PrimitiveType::Bool.into(),
-          "str" => hir::PrimitiveType::Str.into(),
-          "i8" => hir::PrimitiveType::I8.into(),
-          "i16" => hir::PrimitiveType::I16.into(),
-          "i32" => hir::PrimitiveType::I32.into(),
-          "i64" => hir::PrimitiveType::I64.into(),
-          "u8" => hir::PrimitiveType::U8.into(),
-          "u16" => hir::PrimitiveType::U16.into(),
-          "u32" => hir::PrimitiveType::U32.into(),
-          "u64" => hir::PrimitiveType::U64.into(),
-          _ => {
-            emit!(
-              Span { file: source, range: cst.ident_token().unwrap().text_range() } =>
-              "unknown type {name}"
-            );
-            hir::TypeExpr::unit()
-          }
+      match name.as_str() {
+        "bool" => hir::PrimitiveType::Bool.into(),
+        "str" => hir::PrimitiveType::Str.into(),
+        "i8" => hir::PrimitiveType::I8.into(),
+        "i16" => hir::PrimitiveType::I16.into(),
+        "i32" => hir::PrimitiveType::I32.into(),
+        "i64" => hir::PrimitiveType::I64.into(),
+        "u8" => hir::PrimitiveType::U8.into(),
+        "u16" => hir::PrimitiveType::U16.into(),
+        "u32" => hir::PrimitiveType::U32.into(),
+        "u64" => hir::PrimitiveType::U64.into(),
+        _ => {
+          emit!(
+            Span { file: source, range: cst.ident_token().unwrap().text_range() } =>
+            "unknown type {name}"
+          );
+          hir::TypeExpr::unit()
         }
       }
     }

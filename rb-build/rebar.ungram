@@ -28,7 +28,7 @@ PrefixOp = '-' | '!'
 PostfixOp = '-' // TODO
 TypeOp = '|'
 
-Literal = 'integer' | 'float' | 'true' | 'false' | 'nil'
+Literal = 'integer' | 'float' | 'true' | 'false'
 
 Expr =
   Literal |
@@ -66,7 +66,7 @@ Block = '{' Stmt* '}'
 
 Type = NameType | RefType | BinaryType | NeverType
 
-NameType = 'ident' | 'nil'
+NameType = 'ident'
 RefType = '&' 'mut'? Type
 BinaryType = Type TypeOp Type
 NeverType = '!'

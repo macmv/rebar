@@ -210,7 +210,6 @@ impl<'a> Lexer<'a> {
           "mut" => T![mut],
           "true" => T![true],
           "false" => T![false],
-          "nil" => T![nil],
           "struct" => T![struct],
           _ => r,
         })

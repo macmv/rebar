@@ -112,7 +112,6 @@ impl Lower<'_> {
 
   fn lower_expr(&mut self, expr: hir::ExprId) -> mir::ExprId {
     let expr = match self.hir.exprs[expr] {
-      hir::Expr::Literal(hir::Literal::Nil) => mir::Expr::Literal(mir::Literal::Nil),
       hir::Expr::Literal(hir::Literal::Bool(v)) => mir::Expr::Literal(mir::Literal::Bool(v)),
       hir::Expr::Literal(hir::Literal::Int(v)) => mir::Expr::Literal(mir::Literal::Int(v)),
 

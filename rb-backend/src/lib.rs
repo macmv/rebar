@@ -156,7 +156,6 @@ impl FuncBuilder<'_> {
   fn compile_expr(&mut self, expr: mir::ExprId) -> RValue {
     match self.mir.exprs[expr] {
       mir::Expr::Literal(ref lit) => match lit {
-        mir::Literal::Nil => RValue::nil(),
         mir::Literal::Bool(v) => RValue::bool(self.builder.instr().mov(Bit1, *v as u64)),
         mir::Literal::Int(i) => RValue::int(self.builder.instr().mov(Bit64, *i as u64)),
         mir::Literal::String(s) => {

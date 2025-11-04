@@ -183,7 +183,6 @@ pub struct FunctionDef {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Literal {
-  Nil,
   Bool(bool),
   Int(i64),
 }

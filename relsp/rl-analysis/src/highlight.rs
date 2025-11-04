@@ -161,7 +161,6 @@ impl Highlighter<'_> {
 
   fn visit_expr(&mut self, expr: hir::ExprId) {
     match self.func.exprs[expr] {
-      hir::Expr::Literal(hir::Literal::Nil) => self.token(expr, HighlightKind::Number),
       hir::Expr::Literal(hir::Literal::Int(_)) => self.token(expr, HighlightKind::Number),
       hir::Expr::Literal(hir::Literal::Bool(_)) => self.token(expr, HighlightKind::Number),
       hir::Expr::String(_) => self.token(expr, HighlightKind::String),

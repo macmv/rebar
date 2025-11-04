@@ -97,7 +97,7 @@ fn atom_expr(p: &mut Parser, m: Marker, cond: bool) -> Option<CompletedMarker> {
     // test ok
     // 2
     // 2.345
-    T![integer] | T![float] | T![true] | T![false] | T![nil] => {
+    T![integer] | T![float] | T![true] | T![false] => {
       p.bump();
       Some(m.complete(p, LITERAL))
     }
@@ -449,14 +449,6 @@ mod tests {
       expect![@r#"
         LITERAL
           FALSE_KW 'false'
-      "#],
-    );
-
-    check_expr(
-      "nil",
-      expect![@r#"
-        LITERAL
-          NIL_KW 'nil'
       "#],
     );
   }
