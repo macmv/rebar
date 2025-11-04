@@ -36,4 +36,8 @@ struct File {
   fd: i32
 }
 
-impl File {}
+impl File {
+  fn write_str(buf: str) -> i64 {
+    sys::write(0, buf)
+  }
+}

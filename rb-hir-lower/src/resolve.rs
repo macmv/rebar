@@ -12,7 +12,7 @@ struct Package {
 
 enum Item {
   Function,
-  Struct { functions: HashMap<String, Item> },
+  Struct,
 }
 
 struct Resolver<'a> {
@@ -49,7 +49,7 @@ fn collect_module(package: &mut Package, path: &Path, hir: &hir::Module) {
 
   for s in hir.structs.values() {
     let path = path.join(s.name.clone());
-    package.items.insert(path.clone(), Item::Struct { functions: HashMap::new() });
+    package.items.insert(path.clone(), Item::Struct);
   }
 }
 
@@ -83,6 +83,25 @@ impl Resolver<'_> {
             *s = current.concat(s);
           } else {
             panic!("impl for unknown struct `{}`", s);
+          }
+
+          let path = s.clone();
+          match self.package.items.get(&path) {
+            Some(&Item::Struct) => {
+              for &id in &imp.functions {
+                let function = &mut hir.functions[id];
+                let span_map = &span_map.functions[&id];
+
+                self.resolve_function(function, span_map, &current);
+
+                // let prev = funcs.insert(function.name.clone(),
+                // Item::Function); if prev.is_some() {
+                //   panic!("function `{}` is already defined for struct `{}`",
+                // function.name, s); }
+              }
+            }
+
+            _ => panic!("impl for non-struct `{}`", s),
           }
         }
         _ => panic!(), // uhh
