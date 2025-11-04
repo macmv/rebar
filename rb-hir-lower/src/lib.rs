@@ -413,6 +413,13 @@ impl FunctionLower<'_, '_> {
         hir::Expr::BinaryOp(lhs, op, rhs)
       }
 
+      cst::Expr::AsExpr(ref expr) => {
+        let inner = self.expr_opt(expr.expr());
+        let ty = type_expr(self.source.source, &expr.ty().unwrap());
+
+        hir::Expr::Cast(inner, ty)
+      }
+
       cst::Expr::IndexExpr(ref expr) => {
         let lhs = self.expr_opt(expr.lhs());
         let rhs = self.expr_opt(expr.rhs());

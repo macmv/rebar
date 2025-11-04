@@ -85,6 +85,7 @@ pub enum Expr {
   Index(ExprId, ExprId),
   Field(ExprId, String),
   StructInit(Path, Vec<(String, ExprId)>),
+  Cast(ExprId, TypeExpr),
 
   // TODO: Is this really needed?
   Paren(ExprId),

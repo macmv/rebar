@@ -375,6 +375,22 @@ impl<'a> Typer<'a> {
         hir::PrimitiveType::Bool.into()
       }
 
+      hir::Expr::Cast(expr, ref te) => {
+        let target = VType::from(type_of_type_expr(te));
+        let inferred = self.synth_expr(expr)?;
+
+        if !self.can_cast(&inferred, &target) {
+          emit!(
+            self.span(expr) =>
+            "cannot cast {} to {}",
+            self.display_type(&inferred),
+            self.display_type(&target)
+          );
+        }
+
+        target
+      }
+
       hir::Expr::Index(lhs, rhs) => {
         let lhs = self.synth_expr(lhs)?;
         match lhs {
@@ -504,6 +520,22 @@ impl<'a> Typer<'a> {
       (a, b) if a == b => true,
       (VType::Integer(_), VType::Primitive(prim)) if prim.is_integer() => true,
       (VType::Primitive(hir::PrimitiveType::Never), _) => true,
+
+      _ => false,
+    }
+  }
+
+  fn can_cast(&self, a: &VType, b: &VType) -> bool {
+    if self.is_subtype(a, b) {
+      return true;
+    }
+
+    match (a, b) {
+      // Numbers can be cast to any number.
+      (VType::Primitive(a), VType::Primitive(b)) if a.is_integer() && b.is_integer() => true,
+
+      // References can be cast to i/u64 (addresses).
+      (VType::Ref(_), VType::Primitive(hir::PrimitiveType::I64 | hir::PrimitiveType::U64)) => true,
 
       _ => false,
     }
