@@ -626,7 +626,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           );
         }
 
-        rb_codegen::Opcode::StackStore(id) => {
+        rb_codegen::Opcode::StackStore(id, offset) => {
           let slot = &function.stack_slots[id.0 as usize];
           match inst.input[0] {
             InstructionInput::Var(v) => builder.instr(
@@ -641,10 +641,11 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
                 .with_sib(0, RegisterIndex::Esp, RegisterIndex::Esp)
                 .with_immediate(Immediate::i32(v.bits() as u32));
 
-              let instruction = if slot.offset == 0 {
+              let offset = slot.offset + offset;
+              let instruction = if offset == 0 {
                 instruction
               } else {
-                instruction.with_displacement(Immediate::i8(slot.offset as u8))
+                instruction.with_displacement(Immediate::i8(offset as u8))
               };
 
               builder.instr(instruction);
@@ -1097,14 +1098,14 @@ mod tests {
         phis:         vec![],
         instructions: vec![
           rb_codegen::Instruction {
-            opcode: rb_codegen::Opcode::StackStore(s0),
+            opcode: rb_codegen::Opcode::StackStore(s0, 0),
             input:  smallvec::smallvec![rb_codegen::InstructionInput::Imm(
               rb_codegen::Immediate::Unsigned(0x2a)
             )],
             output: smallvec::smallvec![],
           },
           rb_codegen::Instruction {
-            opcode: rb_codegen::Opcode::StackStore(s1),
+            opcode: rb_codegen::Opcode::StackStore(s1, 0),
             input:  smallvec::smallvec![rb_codegen::InstructionInput::Imm(
               rb_codegen::Immediate::Unsigned(0x4c)
             )],

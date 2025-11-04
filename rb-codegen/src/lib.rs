@@ -120,7 +120,7 @@ pub enum Opcode {
   Syscall,
 
   StackAddr(StackId),
-  StackStore(StackId),
+  StackStore(StackId, u32),
   StackLoad(StackId),
 }
 
@@ -523,7 +523,7 @@ impl fmt::Display for Opcode {
       Opcode::Move => write!(f, "mov"),
       Opcode::Syscall => write!(f, "syscall"),
       Opcode::StackAddr(slot) => write!(f, "stack_addr {}", slot.0),
-      Opcode::StackStore(slot) => write!(f, "stack_store {}", slot.0),
+      Opcode::StackStore(slot, offset) => write!(f, "stack_store {}+{offset}", slot.0),
       Opcode::StackLoad(slot) => write!(f, "stack_load {}", slot.0),
     }
   }
