@@ -110,8 +110,9 @@ impl ModuleLower<'_> {
 
     let mut body = vec![];
     for stmt in cst.stmts() {
-      let item = lower.stmt(stmt);
-      body.push(item);
+      if let Some(item) = lower.stmt(stmt) {
+        body.push(item);
+      }
     }
     lower.f.body = Some(body);
 
@@ -166,8 +167,9 @@ impl ModuleLower<'_> {
     if let Some(block) = cst.block() {
       let mut body = vec![];
       for stmt in block.stmts() {
-        let item = lower.stmt(stmt);
-        body.push(item);
+        if let Some(item) = lower.stmt(stmt) {
+          body.push(item);
+        }
       }
       lower.f.body = Some(body);
     }
@@ -218,12 +220,12 @@ macro_rules! match_token {
 }
 
 impl FunctionLower<'_, '_> {
-  fn stmt(&mut self, cst: cst::Stmt) -> hir::StmtId {
+  fn stmt(&mut self, cst: cst::Stmt) -> Option<hir::StmtId> {
     let stmt = match cst {
       cst::Stmt::ExprStmt(ref expr) => {
         let expr = self.expr_opt(expr.expr());
 
-        hir::Stmt::Expr(expr)
+        Some(hir::Stmt::Expr(expr))
       }
 
       cst::Stmt::Let(ref let_stmt) => {
@@ -232,7 +234,7 @@ impl FunctionLower<'_, '_> {
 
         let te = let_stmt.ty().map(|ty| type_expr(self.source.source, &ty));
 
-        hir::Stmt::Let(name, None, te, expr)
+        Some(hir::Stmt::Let(name, None, te, expr))
       }
 
       // TODO: Allow inner defs to capture local variables.
@@ -258,13 +260,12 @@ impl FunctionLower<'_, '_> {
           .return_type()
           .map(|ret| type_expr(self.source.source, &ret.ty().unwrap()));
 
-        hir::Stmt::FunctionDef(hir::FunctionDef { name, args, ret })
+        Some(hir::Stmt::FunctionDef(hir::FunctionDef { name, args, ret }))
       }
 
       cst::Stmt::Struct(ref strct) => {
         self.source.strct(strct);
-
-        hir::Stmt::Struct
+        None
       }
 
       cst::Stmt::Mod(ref module) => {
@@ -279,7 +280,7 @@ impl FunctionLower<'_, '_> {
           );
         }
 
-        hir::Stmt::Struct
+        None
       }
 
       cst::Stmt::Impl(ref imp) => {
@@ -304,24 +305,31 @@ impl FunctionLower<'_, '_> {
         let functions = self.impl_block(imp.block().unwrap());
         self.source.out.impls.push(hir::Impl { struct_path, trait_path, functions });
 
-        hir::Stmt::Struct
+        None
       }
 
       _ => unimplemented!("lowering for {:?}", cst),
     };
 
-    self.span_map.stmts.push(Span { file: self.source.source, range: cst.syntax().text_range() });
-    let id = self.f.stmts.alloc(stmt);
-    self.ast_id_map.stmts.insert(SyntaxNodePtr::new(cst.syntax()), id);
+    if let Some(stmt) = stmt {
+      self
+        .span_map
+        .stmts
+        .push(Span { file: self.source.source, range: cst.syntax().text_range() });
+      let id = self.f.stmts.alloc(stmt);
+      self.ast_id_map.stmts.insert(SyntaxNodePtr::new(cst.syntax()), id);
 
-    if let cst::Stmt::Let(ref let_stmt) = cst {
-      let span =
-        Span { file: self.source.source, range: let_stmt.let_token().unwrap().text_range() };
+      if let cst::Stmt::Let(ref let_stmt) = cst {
+        let span =
+          Span { file: self.source.source, range: let_stmt.let_token().unwrap().text_range() };
 
-      self.span_map.let_stmts.insert(id, span);
+        self.span_map.let_stmts.insert(id, span);
+      }
+
+      Some(id)
+    } else {
+      None
     }
-
-    id
   }
 
   fn impl_block(&mut self, block: cst::Block) -> Vec<hir::FunctionId> {
@@ -429,7 +437,9 @@ impl FunctionLower<'_, '_> {
       cst::Expr::Block(ref block) => {
         let mut stmts = vec![];
         for stmt in block.stmts() {
-          stmts.push(self.stmt(stmt));
+          if let Some(id) = self.stmt(stmt) {
+            stmts.push(id);
+          }
         }
         hir::Expr::Block(stmts)
       }
