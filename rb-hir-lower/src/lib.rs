@@ -288,6 +288,17 @@ impl FunctionLower<'_, '_> {
         None
       }
 
+      cst::Stmt::Use(ref use_stmt) => {
+        let mut p = Path::new();
+        for tok in use_stmt.simple_path().unwrap().ident_tokens() {
+          p.push(tok.text().to_string());
+        }
+
+        self.source.out.uses.alloc(hir::Use { path: p, alias: None, is_glob: false });
+
+        None
+      }
+
       cst::Stmt::Impl(ref imp) => {
         let first_ty = type_expr(self.source.source, &imp.first_ty().unwrap());
         let second_ty = imp.second_ty().map(|t| type_expr(self.source.source, &t));

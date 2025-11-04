@@ -83,7 +83,7 @@ ExprStmt = Attr* Expr
 Stmt = Use | Mod | Struct | Function | Impl | Let | Assign | ExprStmt
 
 Mod = Attr* 'mod' 'ident' Block?
-Use = Attr* 'use' Path
+Use = Attr* 'use' SimplePath ('as' 'ident')?
 Impl = Attr* 'impl' Path ('for' Path)? Block
 
 Let = Attr* 'let' 'ident' (':' Type)? '=' Expr

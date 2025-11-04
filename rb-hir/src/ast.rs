@@ -12,6 +12,7 @@ pub type StructId = Idx<Struct>;
 pub struct Module {
   pub functions: Arena<Function>,
   pub structs:   Arena<Struct>,
+  pub uses:      Arena<Use>,
 
   pub standalone_functions: Vec<FunctionId>,
   pub impls:                Vec<Impl>,
@@ -21,6 +22,13 @@ pub struct Module {
   // If there are any statements outside of functions, they will be stored in a "main function,"
   // stored here.
   pub main_function: Option<FunctionId>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Use {
+  pub path:    Path,
+  pub alias:   Option<String>,
+  pub is_glob: bool,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
