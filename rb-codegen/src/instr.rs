@@ -88,13 +88,8 @@ impl FunctionBuilder {
 
   pub fn stack_slot(&mut self, size: u32, align: std::num::NonZero<u32>) -> StackId {
     let id = self.function.stack_slots.len() as u32;
-    let offset = self
-      .function
-      .stack_slots
-      .last()
-      .map_or(0, |slot| slot.offset + slot.size + (align.get() - 1))
-      .wrapping_add(!(align.get() - 1))
-      & !(align.get() - 1);
+    // TODO: Alignment!!
+    let offset = self.function.stack_slots.last().map_or(0, |slot| slot.offset + slot.size);
     self.function.stack_slots.push(crate::StackSlot { size, align: align.get(), offset });
     StackId(id)
   }
