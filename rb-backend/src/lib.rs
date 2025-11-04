@@ -128,11 +128,6 @@ impl FuncBuilder<'_> {
   }
 }
 
-#[derive(Debug)]
-pub enum Error {
-  MissingExpr,
-}
-
 impl FuncBuilder<'_> {
   const fn mir(&self) -> &MirContext { self.ctx.mir_ctx }
 
