@@ -2,7 +2,7 @@ fn write(fd: i64, buf: str) -> i64 {
   intrinsics::syscall4(
     1,
     fd,
-    intrinsics::slice_ptr(buf),
+    intrinsics::slice_ptr(buf) as i64,
     intrinsics::slice_len(buf),
   )
 }

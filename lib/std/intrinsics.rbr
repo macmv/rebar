@@ -1,5 +1,5 @@
 #[rebar::intrinsic]
-fn slice_ptr(str: str) -> i64
+fn slice_ptr(str: str) -> &u8
 
 #[rebar::intrinsic]
 fn slice_len(str: str) -> i64
