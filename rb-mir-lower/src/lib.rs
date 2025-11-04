@@ -250,6 +250,12 @@ impl Lower<'_> {
         mir::Expr::StructInit(strct, fields)
       }
 
+      hir::Expr::Field(base, ref field) => {
+        let base = self.lower_expr(base);
+
+        mir::Expr::Field(base, field.clone(), self.ty.type_of_expr(expr))
+      }
+
       ref v => unimplemented!("lowering expression {v:?}"),
     };
 

@@ -273,7 +273,21 @@ impl FuncBuilder<'_> {
           }
         }
 
-        RValue::nil()
+        RValue::slot(ValueType::Struct(id), slot)
+      }
+
+      mir::Expr::Field(lhs, ref field, _) => {
+        let lhs = self.compile_expr(lhs);
+
+        let (id, slot) = lhs.unwrap_slot();
+
+        let layout = self.mir().layout_struct(id);
+        let index = self.mir().structs[&id].fields.iter().position(|(n, _)| n == field).unwrap();
+
+        let offset = layout.offsets[index];
+
+        let value = self.builder.instr().stack_load(Bit64, slot, offset);
+        RValue::int(value)
       }
 
       /*

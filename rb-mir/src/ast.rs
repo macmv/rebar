@@ -54,6 +54,7 @@ pub enum Expr {
   Unary(ExprId, UnaryOp, Type),
   Binary(ExprId, BinaryOp, ExprId, Type),
   Index(ExprId, ExprId, Type),
+  Field(ExprId, String, Type),
 
   Local(VarId, Type),
   UserFunction(UserFunctionId, Type),
@@ -212,6 +213,10 @@ impl fmt::Display for DisplayExpr<'_> {
           self.func.display_expr(*index),
           ty
         )
+      }
+
+      Expr::Field(struct_expr, field_name, ty) => {
+        write!(f, "{}.{}::<{}>", self.func.display_expr(*struct_expr), field_name, ty)
       }
 
       Expr::Local(var_id, _) => write!(f, "{}", var_id),
