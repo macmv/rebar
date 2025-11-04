@@ -430,8 +430,13 @@ impl<'a> Typer<'a> {
       hir::Expr::Field(lhs, ref field) => {
         let lhs = self.synth_expr(lhs)?;
         let path = self.resolve_type(&lhs)?;
-        let ty = self.env.struct_field(&path, &field)?;
-        VType::from(ty.clone())
+        match self.env.struct_field(&path, &field) {
+          Some(t) => VType::from(t.clone()),
+          None => {
+            emit!(self.span(expr) => "field {} not found in {}", field, path);
+            return None;
+          }
+        }
       }
 
       hir::Expr::If { cond, then, els } => {
@@ -1244,6 +1249,25 @@ mod tests {
       expect![@r#"
         p: Struct Point
         a: i32
+      "#],
+    );
+
+    check(
+      r#"
+      struct Point {
+        x: i32
+        y: i32
+      }
+
+      let p = Point { x: 3, y: 4 }
+      let a = p.foo
+      "#,
+      expect![@r#"
+        error: field foo not found in Point
+         --> inline.rbr:8:15
+          |
+        8 |       let a = p.foo
+          |               ^^^^^
       "#],
     );
   }
