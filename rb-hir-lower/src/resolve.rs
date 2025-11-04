@@ -222,17 +222,33 @@ impl Package {
 }
 
 impl UseMap {
+  fn empty() -> Self { UseMap { uses: HashMap::new() } }
+
+  fn prelude() -> Self {
+    let mut uses = UseMap::empty();
+
+    uses.add(Path::from(["sys", "assert"]));
+    uses.add(Path::from(["sys", "assert_eq"]));
+
+    uses
+  }
+
+  fn add(&mut self, path: Path) {
+    let name = path.segments.last().unwrap().clone();
+    self.uses.insert(name, path);
+  }
+
   fn collect(uses: &[hir::Use]) -> Self {
-    let mut map = HashMap::new();
+    let mut map = UseMap::prelude();
 
     for u in uses {
       assert!(!u.is_glob);
 
       let name = u.alias.clone().unwrap_or_else(|| u.path.segments.last().unwrap().clone());
-      map.insert(name, u.path.clone());
+      map.uses.insert(name, u.path.clone());
     }
 
-    UseMap { uses: map }
+    map
   }
 
   fn lookup(&self, p: &hir::FullyQualifiedName) -> Option<hir::FullyQualifiedName> {
