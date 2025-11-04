@@ -181,6 +181,18 @@ impl Builder {
 pub fn lower(mut function: rb_codegen::Function) -> Builder {
   let mut builder = Builder::default();
 
+  if !function.stack_slots.is_empty() {
+    let size = function.stack_slots.iter().map(|s| s.size).sum::<u32>();
+
+    builder.instr(
+      Instruction::new(Opcode::MATH_EXT_IMM8)
+        .with_digit(5) // sub
+        .with_prefix(Prefix::RexW)
+        .with_mod(0b11, RegisterIndex::Esp)
+        .with_immediate(Immediate::i8(size.try_into().unwrap())),
+    );
+  }
+
   let reg = VariableRegisters::pass(&mut function);
 
   for id in function.blocks() {
@@ -595,7 +607,21 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           Instruction::new(Opcode::JMP).with_immediate(Immediate::i8(target.as_u32() as u8 + 3)),
         )
       }
-      rb_codegen::TerminatorInstruction::Return(_) => builder.instr(Instruction::new(Opcode::RET)),
+      rb_codegen::TerminatorInstruction::Return(_) => {
+        if !function.stack_slots.is_empty() {
+          let size = function.stack_slots.iter().map(|s| s.size).sum::<u32>();
+
+          builder.instr(
+            Instruction::new(Opcode::MATH_EXT_IMM8)
+              .with_digit(0) // add
+              .with_prefix(Prefix::RexW)
+              .with_mod(0b11, RegisterIndex::Esp)
+              .with_immediate(Immediate::i8(size.try_into().unwrap())),
+          );
+        }
+
+        builder.instr(Instruction::new(Opcode::RET))
+      }
       rb_codegen::TerminatorInstruction::Trap => builder.instr(Instruction::new(Opcode::INT3)),
     }
   }
@@ -997,6 +1023,44 @@ mod tests {
         0x0800025a      48c7c20e000000         mov rdx, 0xe
         0x08000261      0f05                   syscall
         0x08000263      c3                     ret
+      "#],
+    );
+  }
+
+  #[test]
+  fn stack_slots_work() {
+    let function = rb_codegen::Function {
+      sig: Signature { args: vec![], rets: vec![] },
+      blocks: vec![rb_codegen::Block {
+        phis:         vec![],
+        instructions: vec![],
+        terminator:   rb_codegen::TerminatorInstruction::Return(smallvec::smallvec![]),
+      }],
+      stack_slots: vec![
+        rb_codegen::StackSlot { size: 8, align: 8, offset: 0 },
+        rb_codegen::StackSlot { size: 16, align: 16, offset: 8 },
+      ],
+      ..Default::default()
+    };
+
+    let builder = lower(function);
+
+    let dir = temp_dir!();
+    let object_path = dir.path().join("foo.o");
+    Object {
+      text:         builder.text,
+      start_offset: 0,
+      ro_data:      vec![],
+      relocs:       builder.relocs,
+      data_symbols: vec![SymbolDef { offset: 0, name: "foo".to_string() }],
+    }
+    .save(&object_path);
+    disass(
+      &object_path,
+      expect![@r#"
+        0x08000250      4883ec18               sub rsp, 0x18
+        0x08000254      4883c418               add rsp, 0x18
+        0x08000258      c3                     ret
       "#],
     );
   }
