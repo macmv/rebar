@@ -260,12 +260,15 @@ impl FuncBuilder<'_> {
 
         let slot = self.builder.stack_slot(layout.layout.size, layout.layout.align);
 
-        for (offset, (_, field)) in layout.offsets.iter().zip(fields.iter()) {
+        for (name, field) in fields.iter() {
+          let index = self.mir().structs[&id].fields.iter().position(|(n, _)| n == name).unwrap();
+          let offset = layout.offsets[index];
+
           let field = self.compile_expr(*field);
           let ir = field.to_ir(self);
 
           for (i, ir) in ir.iter().enumerate() {
-            let off = (*offset as i32) + (i as i32 * 8);
+            let off = (offset as i32) + (i as i32 * 8);
             self.builder.instr().stack_store(slot, off as u32, *ir);
           }
         }

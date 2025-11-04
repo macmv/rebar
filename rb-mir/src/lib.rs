@@ -80,14 +80,15 @@ impl MirContext {
   pub fn layout_struct(&self, struct_id: StructId) -> StructLayout {
     let s = &self.structs[&struct_id];
 
-    let mut fields = s.fields.iter().map(|(_, ty)| self.layout_type(ty)).collect::<Vec<_>>();
-    fields.sort_by_key(|l| l.align.get());
+    let mut fields =
+      s.fields.iter().enumerate().map(|(i, (_, ty))| (i, self.layout_type(ty))).collect::<Vec<_>>();
+    fields.sort_by_key(|(_, l)| l.align.get());
 
-    let mut offsets = Vec::with_capacity(fields.len());
+    let mut offsets = vec![0; fields.len()];
     let mut offset: u32 = 0;
     let mut struct_align = 1;
 
-    for field in &fields {
+    for (index, field) in &fields {
       let align = field.align.get();
       struct_align = struct_align.max(align);
 
@@ -95,7 +96,7 @@ impl MirContext {
         offset += align - (offset % align);
       }
 
-      offsets.push(offset);
+      offsets[*index] = offset;
       offset += field.size;
     }
 
