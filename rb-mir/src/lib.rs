@@ -1,7 +1,10 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, num::NonZero};
 
 use ast::StructId;
-use rb_hir::ast::{FullyQualifiedName, Path, Type};
+use rb_hir::{
+  ast as hir,
+  ast::{FullyQualifiedName, Path, Type},
+};
 
 pub mod ast;
 
@@ -28,4 +31,78 @@ pub struct UserFunction {
 #[derive(Debug, Clone)]
 pub struct Struct {
   pub fields: Vec<(String, Type)>,
+}
+
+#[derive(Debug)]
+pub struct Layout {
+  pub size:  u32,
+  pub align: NonZero<u32>,
+}
+
+#[derive(Debug)]
+pub struct StructLayout {
+  pub layout:  Layout,
+  pub offsets: Vec<u32>,
+}
+
+impl Layout {
+  #[track_caller]
+  pub fn new(size: u32, align: u32) -> Self {
+    Self { size, align: NonZero::new(align).expect("non-zero align") }
+  }
+}
+
+impl MirContext {
+  pub fn layout_type(&self, ty: &Type) -> Layout {
+    use hir::PrimitiveType::*;
+
+    match ty {
+      Type::SelfT => panic!("self type should be resolved"),
+
+      Type::Primitive(Bool) => Layout::new(1, 1),
+      Type::Primitive(I8 | U8) => Layout::new(1, 1),
+      Type::Primitive(I16 | U16) => Layout::new(2, 2),
+      Type::Primitive(I32 | U32) => Layout::new(4, 4),
+      Type::Primitive(I64 | U64) => Layout::new(8, 8),
+      Type::Primitive(Str) => Layout::new(16, 8),
+      Type::Primitive(Never) => Layout::new(0, 1),
+
+      Type::Ref(_, _) | Type::Function(_, _) => Layout::new(8, 8),
+
+      Type::Struct(s) => self.layout_struct(self.struct_paths[&s]).layout,
+      Type::Tuple(_) => todo!(),
+
+      Type::Array(_) => todo!("arrays"),
+      Type::Union(_) => todo!("unions"),
+    }
+  }
+
+  pub fn layout_struct(&self, struct_id: StructId) -> StructLayout {
+    let s = &self.structs[&struct_id];
+
+    let mut fields = s.fields.iter().map(|(_, ty)| self.layout_type(ty)).collect::<Vec<_>>();
+    fields.sort_by_key(|l| l.align.get());
+
+    let mut offsets = Vec::with_capacity(fields.len());
+    let mut offset: u32 = 0;
+    let mut struct_align = 1;
+
+    for field in &fields {
+      let align = field.align.get();
+      struct_align = struct_align.max(align);
+
+      if offset % align != 0 {
+        offset += align - (offset % align);
+      }
+
+      offsets.push(offset);
+      offset += field.size;
+    }
+
+    if offset % struct_align != 0 {
+      offset += struct_align - (offset % struct_align);
+    }
+
+    StructLayout { layout: Layout::new(offset, struct_align), offsets }
+  }
 }
