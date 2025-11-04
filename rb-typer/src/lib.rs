@@ -57,6 +57,27 @@ pub fn type_of_type_expr(te: &hir::TypeExpr) -> Type {
   }
 }
 
+pub fn scan_module(module: &hir::Module, env: &mut rb_hir::Environment) {
+  for (path, module) in module.modules() {
+    for s in module.structs.values() {
+      let struct_path = path.join(s.name.clone());
+
+      env.structs.insert(
+        struct_path.clone(),
+        s.fields.iter().map(|(name, te)| (name.clone(), type_of_type_expr(te))).collect(),
+      );
+    }
+
+    for (_, f) in module.functions.iter() {
+      let path = path.join(f.name.clone());
+
+      env
+        .names
+        .insert(rb_hir::ast::FullyQualifiedName::new_bare(path).unwrap(), type_of_function(f));
+    }
+  }
+}
+
 impl<'a> Typer<'a> {
   fn new(env: &'a Environment, function: &'a hir::Function, span_map: &'a FunctionSpanMap) -> Self {
     Typer {

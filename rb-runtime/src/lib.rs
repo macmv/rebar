@@ -64,7 +64,8 @@ fn compile_diagnostics(
   span_map: rb_hir::SpanMap,
   out: &std::path::Path,
 ) -> Result<(), ()> {
-  let (mir_ctx, function_map, functions) = build_environment(&mut env, &module, &span_map);
+  rb_typer::scan_module(&module, &mut env);
+  let (mir_ctx, function_map, functions) = build_environment(&module, &span_map);
 
   let main_func = function_map
     .get(&rb_hir::ast::Path { segments: vec!["test".into(), "".into()] })
@@ -171,7 +172,6 @@ fn compile_mir(
 }
 
 fn build_environment<'a>(
-  env: &mut rb_hir::Environment,
   module: &'a rb_hir::ast::Module,
   span_map: &'a rb_hir::SpanMap,
 ) -> (
@@ -189,10 +189,6 @@ fn build_environment<'a>(
     for s in module.structs.values() {
       let struct_path = path.join(s.name.clone());
 
-      env.structs.insert(
-        struct_path.clone(),
-        s.fields.iter().map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te))).collect(),
-      );
       mir_ctx.struct_paths.insert(struct_path, struct_id);
       mir_ctx.structs.insert(
         struct_id,
@@ -215,10 +211,6 @@ fn build_environment<'a>(
       functions.push((mir_id, f, span_map));
       function_map.insert(path.clone(), mir_id);
       rb_mir_lower::declare_user_function(&mut mir_ctx, mir_id, path.clone(), f, span_map);
-      env.names.insert(
-        rb_hir::ast::FullyQualifiedName::new_bare(path).unwrap(),
-        rb_typer::type_of_function(f),
-      );
     }
   }
 
