@@ -12,7 +12,7 @@ struct Package {
 
 enum Item {
   Function,
-  Struct,
+  Struct { functions: HashMap<String, Item> },
 }
 
 struct Resolver<'a> {
@@ -23,16 +23,33 @@ struct Resolver<'a> {
 
 pub fn resolve_hir(env: &Environment, hir: &mut hir::Module, span_map: &SpanMap) {
   let mut package = Package { items: HashMap::new() };
-  collect_module(&mut package, &Path::new(), hir);
+  collect_structs(&mut package, &Path::new(), hir);
+  collect_functions(&mut package, &Path::new(), hir);
   let _ = Resolver { env, package: &package, span_map }.resolve_module(hir, Path::new());
 }
 
-fn collect_module(package: &mut Package, path: &Path, hir: &hir::Module) {
+fn collect_structs(package: &mut Package, path: &Path, hir: &hir::Module) {
   for (name, module) in &hir.modules {
     match module {
       hir::PartialModule::File => panic!("module wasn't filled in"),
       hir::PartialModule::Inline(submodule) => {
-        collect_module(package, &path.join(name.clone()), submodule);
+        collect_structs(package, &path.join(name.clone()), submodule);
+      }
+    }
+  }
+
+  for s in hir.structs.values() {
+    let path = path.join(s.name.clone());
+    package.items.insert(path.clone(), Item::Struct { functions: HashMap::new() });
+  }
+}
+
+fn collect_functions(package: &mut Package, path: &Path, hir: &hir::Module) {
+  for (name, module) in &hir.modules {
+    match module {
+      hir::PartialModule::File => panic!("module wasn't filled in"),
+      hir::PartialModule::Inline(submodule) => {
+        collect_functions(package, &path.join(name.clone()), submodule);
       }
     }
   }
@@ -47,9 +64,26 @@ fn collect_module(package: &mut Package, path: &Path, hir: &hir::Module) {
     }
   }
 
-  for s in hir.structs.values() {
-    let path = path.join(s.name.clone());
-    package.items.insert(path.clone(), Item::Struct);
+  for imp in &hir.impls {
+    match imp.struct_path {
+      hir::TypeExpr::Struct(ref s) => {
+        let struct_path = path.concat(s);
+        match package.items.get_mut(&struct_path) {
+          Some(Item::Struct { functions }) => {
+            for &id in &imp.functions {
+              let function = &hir.functions[id];
+              let prev = functions.insert(function.name.clone(), Item::Function);
+              if prev.is_some() {
+                panic!("function `{}` is already defined for struct `{}`", function.name, s);
+              }
+            }
+          }
+
+          _ => panic!("impl for non-struct `{}`", s),
+        }
+      }
+      _ => panic!(), // uhh
+    }
   }
 }
 
@@ -85,23 +119,11 @@ impl Resolver<'_> {
             panic!("impl for unknown struct `{}`", s);
           }
 
-          let path = s.clone();
-          match self.package.items.get(&path) {
-            Some(&Item::Struct) => {
-              for &id in &imp.functions {
-                let function = &mut hir.functions[id];
-                let span_map = &span_map.functions[&id];
+          for &id in &imp.functions {
+            let function = &mut hir.functions[id];
+            let span_map = &span_map.functions[&id];
 
-                self.resolve_function(function, span_map, &current);
-
-                // let prev = funcs.insert(function.name.clone(),
-                // Item::Function); if prev.is_some() {
-                //   panic!("function `{}` is already defined for struct `{}`",
-                // function.name, s); }
-              }
-            }
-
-            _ => panic!("impl for non-struct `{}`", s),
+            self.resolve_function(function, span_map, &current);
           }
         }
         _ => panic!(), // uhh
