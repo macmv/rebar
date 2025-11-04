@@ -3,5 +3,4 @@ struct Foo {
   b: str
 }
 
-let structs = [Foo { a: 1, b: "hi" }, Foo { a: 2, b: "bye" }]
-println("structs: #{structs}")
+let f = Foo { a: 1, b: "hi" }

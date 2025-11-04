@@ -166,9 +166,9 @@ impl Resolver<'_> {
             {
               // local variable
               function.exprs[id] = hir::Expr::Local(local);
-            } else if let Some(path) = uses.lookup(p) {
+            } else if let Some(path) = p.to_path().and_then(|p| uses.lookup(&p)) {
               // imported
-              *p = path;
+              *p = hir::FullyQualifiedName::new_bare(path).unwrap();
             } else if self.env.lookup_type(p).is_some() {
               // absolute path
             } else if let Some(path) = p.to_path() {
@@ -188,6 +188,21 @@ impl Resolver<'_> {
               }
             } else {
               emit!(span_map[id] => format!("unresolved name `{p}`"));
+            }
+          }
+
+          hir::Expr::StructInit(p, _) => {
+            if let Some(path) = uses.lookup(p) {
+              // imported
+              *p = path;
+            } else {
+              let abs = current.concat(&p);
+              if self.package.contains(&abs) {
+                // relative path
+                *p = abs;
+              } else {
+                emit!(span_map[id] => format!("unresolved name `{p}`"));
+              }
             }
           }
 
@@ -251,22 +266,12 @@ impl UseMap {
     map
   }
 
-  fn lookup(&self, p: &hir::FullyQualifiedName) -> Option<hir::FullyQualifiedName> {
-    match p {
-      hir::FullyQualifiedName::Bare { path, name } => {
-        let full_path = path.join(name.clone());
-        let prefix = full_path.segments.first().unwrap();
-        if let Some(resolved) = self.uses.get(prefix) {
-          Some(
-            hir::FullyQualifiedName::new_bare(resolved.concat_slice(&full_path.segments[1..]))
-              .unwrap(),
-          )
-        } else {
-          None
-        }
-      }
-
-      hir::FullyQualifiedName::TraitImpl { .. } => None,
+  fn lookup(&self, p: &Path) -> Option<Path> {
+    let prefix = p.segments.first().unwrap();
+    if let Some(resolved) = self.uses.get(prefix) {
+      Some(resolved.concat_slice(&p.segments[1..]))
+    } else {
+      None
     }
   }
 }
