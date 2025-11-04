@@ -619,7 +619,8 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           builder.instr(
             Instruction::new(Opcode::MOV_RM_32)
               .with_prefix(Prefix::RexW)
-              .with_mod(0b00, output.index)
+              .with_sib(0, RegisterIndex::Esp, RegisterIndex::Esp)
+              .with_reg(output.index)
               .with_displacement(Immediate::i8(offset as u8)),
           );
         }
@@ -1099,6 +1100,7 @@ mod tests {
     let s0 = rb_codegen::StackId(0);
     let s1 = rb_codegen::StackId(1);
     let v0 = Variable::new(0, VariableSize::Bit64);
+    let v1 = Variable::new(1, VariableSize::Bit64);
 
     let function = rb_codegen::Function {
       sig: Signature { args: vec![], rets: vec![] },
@@ -1128,6 +1130,11 @@ mod tests {
             opcode: rb_codegen::Opcode::StackStore(s1, 0),
             input:  smallvec::smallvec![v0.into()],
             output: smallvec::smallvec![],
+          },
+          rb_codegen::Instruction {
+            opcode: rb_codegen::Opcode::StackLoad(s1, 0),
+            input:  smallvec::smallvec![],
+            output: smallvec::smallvec![v1.into()],
           },
         ],
         terminator:   rb_codegen::TerminatorInstruction::Return(smallvec::smallvec![]),
@@ -1159,8 +1166,9 @@ mod tests {
         0x0800025c      48c74424084c000000     mov qword [rsp + 8], 0x4c
         0x08000265      b801000000             mov eax, 1
         0x0800026a      4889442408             mov qword [rsp + 8], rax
-        0x0800026f      4883c418               add rsp, 0x18
-        0x08000273      c3                     ret
+        0x0800026f      488b442408             mov rax, qword [rsp + 8]
+        0x08000274      4883c418               add rsp, 0x18
+        0x08000278      c3                     ret
       "#],
     );
   }
