@@ -28,33 +28,31 @@ fn main() -> ExitCode {
         let out = out_dir.join("out.o");
 
         for path in chunk {
-          if path.extension().unwrap() == "rbr" {
-            let stringified = path.display().to_string();
-            if stringified.contains(f) {
-              let res = catch_unwind(|| match rb_runtime::compile_test(path, std, &out) {
-                (_, Ok(_)) => println!("{}... \x1b[32mok\x1b[0m", stringified),
-                (sources, Err(diagnostics)) => {
-                  failed.fetch_or(true, Ordering::AcqRel);
-                  println!("{}... \x1b[31mfail\x1b[0m", stringified);
-                  for d in diagnostics {
-                    println!("{}", d.render_with_color(&sources));
-                  }
+          let stringified = path.display().to_string();
+          if stringified.contains(f) {
+            let res = catch_unwind(|| match rb_runtime::compile_test(path, std, &out) {
+              (_, Ok(_)) => println!("{}... \x1b[32mok\x1b[0m", stringified),
+              (sources, Err(diagnostics)) => {
+                failed.fetch_or(true, Ordering::AcqRel);
+                println!("{}... \x1b[31mfail\x1b[0m", stringified);
+                for d in diagnostics {
+                  println!("{}", d.render_with_color(&sources));
                 }
-              });
+              }
+            });
 
-              match res {
-                Ok(_) => {}
-                Err(e) => {
-                  failed.fetch_or(true, Ordering::AcqRel);
-                  println!("{}... \x1b[31mpanic\x1b[0m", stringified);
+            match res {
+              Ok(_) => {}
+              Err(e) => {
+                failed.fetch_or(true, Ordering::AcqRel);
+                println!("{}... \x1b[31mpanic\x1b[0m", stringified);
 
-                  if let Some(s) = e.downcast_ref::<String>() {
-                    println!("{}", s);
-                  } else if let Some(s) = e.downcast_ref::<&str>() {
-                    println!("{}", s);
-                  } else {
-                    println!("{:?}", e);
-                  }
+                if let Some(s) = e.downcast_ref::<String>() {
+                  println!("{}", s);
+                } else if let Some(s) = e.downcast_ref::<&str>() {
+                  println!("{}", s);
+                } else {
+                  println!("{:?}", e);
                 }
               }
             }
@@ -81,7 +79,7 @@ fn gather_files_inner(dir: &Path, files: &mut Vec<PathBuf>) {
     let path = entry.path();
     if path.is_dir() {
       files.extend(gather_files(&path));
-    } else {
+    } else if path.extension().is_some_and(|e| e == "rbr") {
       files.push(path);
     }
   }
