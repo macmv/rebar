@@ -26,13 +26,13 @@ pub use fs::FileSystem;
 pub use resolve::resolve_hir;
 
 #[cfg(feature = "test")]
-pub fn parse_body(env: &Environment, body: &str) -> (Arc<Sources>, hir::Function, FunctionSpanMap) {
+pub fn parse_body(env: &Environment, body: &str) -> (Arc<Sources>, hir::Module, ModuleSpanMap) {
   use rb_diagnostic::Source;
 
   let mut sources = Sources::new();
   let id = sources.add(Source::new("inline.rbr".to_string(), body.to_string()));
   let sources_arc = Arc::new(sources);
-  let (func, span_map) = rb_diagnostic::run_or_exit(sources_arc.clone(), || {
+  let (module, module_span_map) = rb_diagnostic::run_or_exit(sources_arc.clone(), || {
     use rb_hir::SpanMap;
 
     let res = cst::SourceFile::parse(&body);
@@ -54,16 +54,12 @@ pub fn parse_body(env: &Environment, body: &str) -> (Arc<Sources>, hir::Function
     let mut span_map = SpanMap::default();
     span_map.modules.insert(Path::new(), module_span_map);
     crate::resolve_hir(&env, &mut module, &span_map);
-    let mut module_span_map = span_map.modules.remove(&Path::new()).unwrap();
+    let module_span_map = span_map.modules.remove(&Path::new()).unwrap();
 
-    let function = module.functions[module.main_function.unwrap()].clone();
-    let function_span_map =
-      module_span_map.functions.remove(&module.main_function.unwrap()).unwrap();
-
-    (function, function_span_map)
+    (module, module_span_map)
   });
 
-  (sources_arc, func, span_map)
+  (sources_arc, module, module_span_map)
 }
 
 pub fn lower_source(

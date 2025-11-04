@@ -712,8 +712,12 @@ fn check(body: &str, expected: rb_test::Expect) { check_inner(body, expected); }
 fn check_inner(body: &str, expected: rb_test::Expect) {
   use std::fmt::Write;
 
-  let env = Environment::mini();
-  let (sources, body, span_map) = rb_hir_lower::parse_body(&env, body);
+  let mut env = Environment::mini();
+  let (sources, module, mut module_span_map) = rb_hir_lower::parse_body(&env, body);
+  scan_module(&module, &mut env);
+  let body = module.functions[module.main_function.unwrap()].clone();
+  let span_map = module_span_map.functions.remove(&module.main_function.unwrap()).unwrap();
+
   let mut out = String::new();
   let res = rb_diagnostic::run(sources.clone(), || {
     let typer = crate::Typer::check(&env, &body, &span_map);
@@ -1221,6 +1225,25 @@ mod tests {
           |
         4 |       let c = a == b
           |               ^^^^^^
+      "#],
+    );
+  }
+
+  #[test]
+  fn struct_fields() {
+    check(
+      r#"
+      struct Point {
+        x: i32
+        y: i32
+      }
+
+      let p = Point { x: 3, y: 4 }
+      let a = p.x
+      "#,
+      expect![@r#"
+        p: Struct Point
+        a: i32
       "#],
     );
   }

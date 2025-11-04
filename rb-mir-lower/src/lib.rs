@@ -262,8 +262,12 @@ fn check(body: &str, expected: rb_test::Expect) {
   use rb_hir::Environment;
   use std::fmt::Write;
 
-  let env = Environment::mini();
-  let (sources, body, span_map) = rb_hir_lower::parse_body(&env, body);
+  let mut env = Environment::mini();
+  let (sources, module, mut module_span_map) = rb_hir_lower::parse_body(&env, body);
+  rb_typer::scan_module(&module, &mut env);
+  let body = module.functions[module.main_function.unwrap()].clone();
+  let span_map = module_span_map.functions.remove(&module.main_function.unwrap()).unwrap();
+
   let mut out = String::new();
   let res = rb_diagnostic::run(sources.clone(), || {
     let mir_ctx = MirContext::default();
