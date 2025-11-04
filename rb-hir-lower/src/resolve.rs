@@ -34,7 +34,8 @@ fn collect_module(hir: &hir::Module) -> Item {
     }
   }
 
-  for function in hir.functions.values() {
+  for &id in &hir.standalone_functions {
+    let function = &hir.functions[id];
     let prev = children.insert(function.name.clone(), Item::Function);
 
     if prev.is_some() {
@@ -59,7 +60,8 @@ impl Resolver<'_> {
 
     let span_map = &self.span_map.modules[&current];
 
-    for (id, function) in hir.functions.iter_mut() {
+    for &id in &hir.standalone_functions {
+      let function = &mut hir.functions[id];
       let span_map = &span_map.functions[&id];
 
       self.resolve_function(function, span_map, &current);

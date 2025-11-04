@@ -12,7 +12,9 @@ pub type StructId = Idx<Struct>;
 pub struct Module {
   pub functions: Arena<Function>,
   pub structs:   Arena<Struct>,
-  pub impls:     Vec<Impl>,
+
+  pub standalone_functions: Vec<FunctionId>,
+  pub impls:                Vec<Impl>,
 
   pub modules: BTreeMap<String, PartialModule>,
 
@@ -176,7 +178,7 @@ pub enum Stmt {
 
   Let(String, Option<LocalId>, Option<TypeExpr>, ExprId),
 
-  FunctionDef(FunctionDef),
+  FunctionDef(FunctionId, FunctionDef),
 
   // TODO: Do we need this?
   Struct,

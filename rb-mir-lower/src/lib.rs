@@ -104,7 +104,7 @@ impl Lower<'_> {
         self.locals.insert(hir_id.unwrap(), id);
         mir::Stmt::Let(id, ty, mir_expr)
       }
-      hir::Stmt::FunctionDef(_) | hir::Stmt::Struct => return None,
+      hir::Stmt::FunctionDef(_, _) | hir::Stmt::Struct => return None,
     };
 
     Some(self.mir.stmts.alloc(stmt))

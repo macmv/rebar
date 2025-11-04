@@ -87,7 +87,7 @@ impl<'a> Typer<'a> {
     }
 
     for &item in function.body.iter().flatten() {
-      if let hir::Stmt::FunctionDef(ref func) = function.stmts[item] {
+      if let hir::Stmt::FunctionDef(_, ref func) = function.stmts[item] {
         let args = func.args.iter().map(|(_, ty)| type_of_type_expr(ty)).collect();
         let ret = match func.ret {
           Some(ref ty) => Box::new(type_of_type_expr(ty)),
@@ -174,7 +174,7 @@ impl<'a> Typer<'a> {
         None
       }
 
-      hir::Stmt::FunctionDef(_) => None,
+      hir::Stmt::FunctionDef(_, _) => None,
       hir::Stmt::Struct => None,
     }
   }

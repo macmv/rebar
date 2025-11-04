@@ -111,6 +111,10 @@ impl ModuleLower<'_> {
     let mut body = vec![];
     for stmt in cst.stmts() {
       if let Some(item) = lower.stmt(stmt) {
+        if let hir::Stmt::FunctionDef(id, _) = &lower.f.stmts[item] {
+          lower.source.out.standalone_functions.push(*id);
+        }
+
         body.push(item);
       }
     }
@@ -239,7 +243,7 @@ impl FunctionLower<'_, '_> {
 
       // TODO: Allow inner defs to capture local variables.
       cst::Stmt::Function(ref def) => {
-        self.source.function(def);
+        let id = self.source.function(def);
 
         let name = def.ident_token().unwrap().to_string();
         let args = def
@@ -260,7 +264,7 @@ impl FunctionLower<'_, '_> {
           .return_type()
           .map(|ret| type_expr(self.source.source, &ret.ty().unwrap()));
 
-        Some(hir::Stmt::FunctionDef(hir::FunctionDef { name, args, ret }))
+        Some(hir::Stmt::FunctionDef(id, hir::FunctionDef { name, args, ret }))
       }
 
       cst::Stmt::Struct(ref strct) => {
