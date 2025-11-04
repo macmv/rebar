@@ -1082,18 +1082,28 @@ mod tests {
   #[test]
   fn stack_slots_work() {
     let s0 = rb_codegen::StackId(0);
+    let s1 = rb_codegen::StackId(1);
 
     let function = rb_codegen::Function {
       sig: Signature { args: vec![], rets: vec![] },
       blocks: vec![rb_codegen::Block {
         phis:         vec![],
-        instructions: vec![rb_codegen::Instruction {
-          opcode: rb_codegen::Opcode::StackStore(s0),
-          input:  smallvec::smallvec![rb_codegen::InstructionInput::Imm(
-            rb_codegen::Immediate::Unsigned(42)
-          )],
-          output: smallvec::smallvec![],
-        }],
+        instructions: vec![
+          rb_codegen::Instruction {
+            opcode: rb_codegen::Opcode::StackStore(s0),
+            input:  smallvec::smallvec![rb_codegen::InstructionInput::Imm(
+              rb_codegen::Immediate::Unsigned(0x2a)
+            )],
+            output: smallvec::smallvec![],
+          },
+          rb_codegen::Instruction {
+            opcode: rb_codegen::Opcode::StackStore(s1),
+            input:  smallvec::smallvec![rb_codegen::InstructionInput::Imm(
+              rb_codegen::Immediate::Unsigned(0x4c)
+            )],
+            output: smallvec::smallvec![],
+          },
+        ],
         terminator:   rb_codegen::TerminatorInstruction::Return(smallvec::smallvec![]),
       }],
       stack_slots: vec![
@@ -1120,8 +1130,9 @@ mod tests {
       expect![@r#"
         0x08000250      4883ec18               sub rsp, 0x18
         0x08000254      48c7c52a000000         mov rbp, 0x2a
-        0x0800025b      4883c418               add rsp, 0x18
-        0x0800025f      c3                     ret
+        0x0800025b      48c7c54c000000         mov rbp, 0x4c
+        0x08000262      4883c418               add rsp, 0x18
+        0x08000266      c3                     ret
       "#],
     );
   }
