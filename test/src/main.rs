@@ -9,6 +9,7 @@ fn main() -> ExitCode {
   let filter = std::env::args().nth(1).unwrap_or_default();
 
   let mut files = gather_files(Path::new("test/integration"));
+  let total = files.len();
   files.retain(|path| path.display().to_string().contains(&filter));
 
   println!("running tests...");
@@ -16,7 +17,7 @@ fn main() -> ExitCode {
   const NUM_CPUS: usize = 32;
   let chunk_size = (files.len() / NUM_CPUS).max(1);
 
-  let failed = std::sync::atomic::AtomicBool::new(false);
+  let failed = std::sync::atomic::AtomicU32::new(0);
   let std = Path::new("lib/std/lib.rbr");
 
   let out_dir = Path::new("out");
@@ -38,7 +39,7 @@ fn main() -> ExitCode {
               let status =
                 std::process::Command::new(binary).status().expect("failed to execute binary");
               if !status.success() {
-                failed.fetch_or(true, Ordering::AcqRel);
+                failed.fetch_add(1, Ordering::Relaxed);
                 println!("{}... \x1b[31mfail\x1b[0m", stringified);
               } else {
                 println!("{}... \x1b[32mok\x1b[0m", stringified);
@@ -46,7 +47,7 @@ fn main() -> ExitCode {
             }
 
             (sources, Err(diagnostics)) => {
-              failed.fetch_or(true, Ordering::AcqRel);
+              failed.fetch_add(1, Ordering::Relaxed);
               println!("{}... \x1b[31mfail\x1b[0m", stringified);
               for d in diagnostics {
                 println!("{}", d.render_with_color(&sources));
@@ -57,7 +58,7 @@ fn main() -> ExitCode {
           match res {
             Ok(_) => {}
             Err(e) => {
-              failed.fetch_or(true, Ordering::AcqRel);
+              failed.fetch_add(1, Ordering::Relaxed);
               println!("{}... \x1b[31mpanic\x1b[0m", stringified);
 
               if let Some(s) = e.downcast_ref::<String>() {
@@ -74,7 +75,14 @@ fn main() -> ExitCode {
     }
   });
 
-  if failed.into_inner() { ExitCode::FAILURE } else { ExitCode::SUCCESS }
+  let failed = failed.into_inner();
+  println!(
+    "\nresult: {res}, {passed} passed, {failed} failed, {skipped} skipped",
+    res = if failed > 0 { "\x1b[31mfailed\x1b[0m" } else { "\x1b[32mok\x1b[0m" },
+    passed = files.len() - failed as usize,
+    skipped = total - files.len(),
+  );
+  if failed > 0 { ExitCode::FAILURE } else { ExitCode::SUCCESS }
 }
 
 fn gather_files(dir: &Path) -> Vec<PathBuf> {
