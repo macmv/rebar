@@ -3,10 +3,12 @@ use bitflags::bitflags;
 use crate::RegisterSize;
 
 pub struct Instruction {
-  pub prefix:    Prefix,
-  pub opcode:    Opcode,
-  pub mod_reg:   Option<ModReg>,
-  pub immediate: Immediate,
+  pub prefix:       Prefix,
+  pub opcode:       Opcode,
+  pub mod_reg:      Option<ModReg>,
+  pub sib:          Option<Sib>,
+  pub displacement: Immediate,
+  pub immediate:    Immediate,
 }
 
 bitflags! {
@@ -17,7 +19,8 @@ bitflags! {
   }
 }
 
-const _INSTR_SIZE: () = assert!(std::mem::size_of::<Instruction>() == 16);
+// TODO: Make this sucker smaller
+// const _INSTR_SIZE: () = assert!(std::mem::size_of::<Instruction>() == 16);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u8)]
@@ -50,6 +53,9 @@ pub struct Opcode {
 #[derive(Default, Clone, Copy)]
 pub struct ModReg(u8);
 
+#[derive(Default, Clone, Copy)]
+pub struct Sib(u8);
+
 #[derive(Clone, Copy)]
 #[repr(packed)]
 pub struct Immediate {
@@ -80,6 +86,7 @@ impl ModReg {
 
   pub const fn set_reg(&mut self, reg: RegisterIndex) { self.set_reg_bits(reg as u8); }
   pub const fn set_reg_bits(&mut self, reg: u8) { self.0 = (self.0 & 0b11000111) | (reg << 3); }
+  pub const fn set_mod(&mut self, m: u8) { self.0 = (self.0 & 0b00111111) | ((m & 0b11) << 6); }
   pub const fn set_mod_rm(&mut self, m: u8, rm: u8) {
     self.0 = (self.0 & 0b00111000) | ((m & 0b11) << 6) | (rm & 0b111);
   }
@@ -87,6 +94,16 @@ impl ModReg {
   pub const fn mod_bits(&self) -> u8 { (self.0 >> 6) & 0b11 }
   pub const fn reg_bits(&self) -> u8 { (self.0 >> 3) & 0b111 }
   pub const fn rm_bits(&self) -> u8 { self.0 & 0b111 }
+}
+
+impl Sib {
+  pub const fn from_parts(scale: u8, index: u8, base: u8) -> Self {
+    debug_assert!(scale < 4);
+    debug_assert!(index < 8);
+    debug_assert!(base < 8);
+
+    Sib((scale << 6) | (index << 3) | base)
+  }
 }
 
 impl Opcode {
@@ -130,7 +147,14 @@ impl Immediate {
 
 impl Instruction {
   pub const fn new(opcode: Opcode) -> Self {
-    Instruction { prefix: Prefix::empty(), opcode, mod_reg: None, immediate: Immediate::empty() }
+    Instruction {
+      prefix: Prefix::empty(),
+      opcode,
+      mod_reg: None,
+      sib: None,
+      displacement: Immediate::empty(),
+      immediate: Immediate::empty(),
+    }
   }
 
   pub fn encode(&self) -> ([u8; 15], usize) {
@@ -152,6 +176,17 @@ impl Instruction {
     if let Some(ModReg(mod_rm)) = self.mod_reg {
       buf[len] = mod_rm;
       len += 1;
+    }
+    if let Some(Sib(sib)) = self.sib {
+      buf[len] = sib;
+      len += 1;
+    }
+
+    if !self.displacement.is_empty() {
+      let imm_bytes = self.displacement.value().to_le_bytes();
+      let imm_len = self.displacement.len() as usize;
+      buf[len..len + imm_len].copy_from_slice(&imm_bytes[..imm_len]);
+      len += imm_len;
     }
 
     if !self.immediate.is_empty() {
@@ -214,6 +249,34 @@ impl Instruction {
   pub const fn with_immediate(mut self, immediate: Immediate) -> Self {
     self.immediate = immediate;
     self
+  }
+
+  /// Sets the Mod/RM and SIB bytes.
+  pub const fn with_sib(mut self, scale: u8, index: RegisterIndex, base: RegisterIndex) -> Self {
+    let mod_rm = ModReg::from_parts(
+      0b00,
+      match self.mod_reg {
+        Some(mod_reg) => mod_reg.reg_bits(),
+        None => 0,
+      },
+      0b100,
+    );
+    self.sib = Some(Sib::from_parts(scale, index as u8, base as u8));
+    self.with_mod_reg(mod_rm)
+  }
+
+  pub const fn with_displacement(mut self, displacement: Immediate) -> Self {
+    match displacement.len() {
+      1 => {
+        if self.mod_reg.is_none() {
+          self.mod_reg = Some(ModReg::ZERO);
+        }
+        self.mod_reg.as_mut().unwrap().set_mod(0b01);
+        self.displacement = displacement;
+        self
+      }
+      _ => self,
+    }
   }
 
   pub fn immediate(&self) -> Immediate { self.immediate }

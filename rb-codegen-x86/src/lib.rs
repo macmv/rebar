@@ -635,13 +635,20 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
                 .with_mod(0b00, reg.get(v).index)
                 .with_immediate(Immediate::i8(slot.offset as u8)),
             ),
-            InstructionInput::Imm(v) => builder.instr(
-              // TODO: Encode displacements and SIB
-              Instruction::new(Opcode::MOV_RM_IMM_16)
+            InstructionInput::Imm(v) => {
+              let instruction = Instruction::new(Opcode::MOV_RM_IMM_16)
                 .with_prefix(Prefix::RexW)
-                .with_mod(0b11, RegisterIndex::Ebp)
-                .with_immediate(Immediate::i32(v.bits() as u32)),
-            ),
+                .with_sib(0, RegisterIndex::Esp, RegisterIndex::Esp)
+                .with_immediate(Immediate::i32(v.bits() as u32));
+
+              let instruction = if slot.offset == 0 {
+                instruction
+              } else {
+                instruction.with_displacement(Immediate::i8(slot.offset as u8))
+              };
+
+              builder.instr(instruction);
+            }
           };
         }
       }
@@ -1129,10 +1136,10 @@ mod tests {
       &object_path,
       expect![@r#"
         0x08000250      4883ec18               sub rsp, 0x18
-        0x08000254      48c7c52a000000         mov rbp, 0x2a
-        0x0800025b      48c7c54c000000         mov rbp, 0x4c
-        0x08000262      4883c418               add rsp, 0x18
-        0x08000266      c3                     ret
+        0x08000254      48c704242a000000       mov qword [rsp], 0x2a
+        0x0800025c      48c74424084c000000     mov qword [rsp + 8], 0x4c
+        0x08000265      4883c418               add rsp, 0x18
+        0x08000269      c3                     ret
       "#],
     );
   }
