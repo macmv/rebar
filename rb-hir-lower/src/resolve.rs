@@ -46,6 +46,11 @@ fn collect_module(package: &mut Package, path: &Path, hir: &hir::Module) {
       panic!();
     }
   }
+
+  for s in hir.structs.values() {
+    let path = path.join(s.name.clone());
+    package.items.insert(path.clone(), Item::Struct { functions: HashMap::new() });
+  }
 }
 
 impl Resolver<'_> {
@@ -66,6 +71,22 @@ impl Resolver<'_> {
       let span_map = &span_map.functions[&id];
 
       self.resolve_function(function, span_map, &current);
+    }
+
+    for imp in &mut hir.impls {
+      assert!(imp.trait_path.is_none());
+
+      match imp.struct_path {
+        hir::TypeExpr::Struct(ref mut s) => {
+          if self.package.contains(s) {
+          } else if self.package.contains(&current.concat(s)) {
+            *s = current.concat(s);
+          } else {
+            panic!("impl for unknown struct `{}`", s);
+          }
+        }
+        _ => panic!(), // uhh
+      }
     }
 
     Ok(())
