@@ -6,54 +6,55 @@ use rb_hir::{
   ast::{self as hir, Path},
 };
 
+struct Package {
+  items: HashMap<Path, Item>,
+}
+
 enum Item {
-  Module { children: HashMap<String, Item> },
   Function,
+  Struct { functions: HashMap<String, Item> },
 }
 
 struct Resolver<'a> {
   env:      &'a Environment,
-  root:     &'a Item,
+  package:  &'a Package,
   span_map: &'a SpanMap,
 }
 
 pub fn resolve_hir(env: &Environment, hir: &mut hir::Module, span_map: &SpanMap) {
-  let root = collect_module(hir);
-  let _ = Resolver { env, root: &root, span_map }.resolve_module(hir, Path::new(), &root);
+  let mut package = Package { items: HashMap::new() };
+  collect_module(&mut package, &Path::new(), hir);
+  let _ = Resolver { env, package: &package, span_map }.resolve_module(hir, Path::new());
 }
 
-fn collect_module(hir: &hir::Module) -> Item {
-  let mut children = HashMap::new();
-
+fn collect_module(package: &mut Package, path: &Path, hir: &hir::Module) {
   for (name, module) in &hir.modules {
     match module {
       hir::PartialModule::File => panic!("module wasn't filled in"),
       hir::PartialModule::Inline(submodule) => {
-        children.insert(name.clone(), collect_module(submodule));
+        collect_module(package, &path.join(name.clone()), submodule);
       }
     }
   }
 
   for &id in &hir.standalone_functions {
     let function = &hir.functions[id];
-    let prev = children.insert(function.name.clone(), Item::Function);
+    let path = path.join(function.name.clone());
+    let prev = package.items.insert(path, Item::Function);
 
     if prev.is_some() {
       panic!();
     }
   }
-
-  Item::Module { children }
 }
 
 impl Resolver<'_> {
-  fn resolve_module(&self, hir: &mut hir::Module, current: Path, item: &Item) -> Result<(), ()> {
+  fn resolve_module(&self, hir: &mut hir::Module, current: Path) -> Result<(), ()> {
     for (name, module) in &mut hir.modules {
       match module {
         hir::PartialModule::File => panic!("module wasn't filled in"),
         hir::PartialModule::Inline(submodule) => {
-          let child_item = item.get(name).unwrap();
-          let _ = self.resolve_module(submodule, current.join(name.clone()), child_item);
+          let _ = self.resolve_module(submodule, current.join(name.clone()));
         }
       }
     }
@@ -99,14 +100,14 @@ impl Resolver<'_> {
             } else if self.env.lookup_type(p).is_some() {
               // absolute path
             } else if let Some(path) = p.to_path() {
-              if self.root.contains(&path) {
+              if self.package.contains(&path) {
                 // absolute path
               } else if let Some(fqn) = self.env.resolve_trait_call(&path) {
                 // absolute path via environment
                 *p = fqn;
               } else {
                 let abs = current.concat(&path);
-                if self.root.contains(&abs) {
+                if self.package.contains(&abs) {
                   // relative path
                   *p = hir::FullyQualifiedName::new_bare(abs).unwrap();
                 } else {
@@ -144,22 +145,6 @@ impl Resolver<'_> {
   }
 }
 
-impl Item {
-  pub fn contains(&self, path: &Path) -> bool {
-    let mut current = self;
-    for segment in &path.segments {
-      match current.get(segment) {
-        Some(it) => current = it,
-        None => return false,
-      }
-    }
-    true
-  }
-
-  pub fn get(&self, name: &str) -> Option<&Item> {
-    match self {
-      Item::Module { children } => children.get(name),
-      Item::Function => None,
-    }
-  }
+impl Package {
+  pub fn contains(&self, path: &Path) -> bool { self.items.contains_key(path) }
 }
