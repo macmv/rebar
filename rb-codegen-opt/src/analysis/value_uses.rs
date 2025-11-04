@@ -111,7 +111,7 @@ impl AnalysisPass for ValueUses {
 
 impl ValueUses {
   fn pass_instr(&mut self, instr: &Instruction) {
-    if matches!(instr.opcode, Opcode::Syscall | Opcode::Call(_)) {
+    if matches!(instr.opcode, Opcode::Syscall | Opcode::Call(_) | Opcode::StackStore(_, _)) {
       for input in &instr.input {
         if let InstructionInput::Var(var) = input {
           self.mark_required(*var);
