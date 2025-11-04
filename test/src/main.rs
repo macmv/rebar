@@ -31,10 +31,20 @@ fn main() -> ExitCode {
           let name = path.file_stem().unwrap().to_string_lossy();
           let stringified = path.display().to_string();
           let object = out_dir.join(format!("{name}.o"));
-          let _binary = out_dir.join(&*name);
+          let binary = out_dir.join(&*name);
 
           let res = catch_unwind(|| match rb_runtime::compile_test(path, std, &object) {
-            (_, Ok(_)) => println!("{}... \x1b[32mok\x1b[0m", stringified),
+            (_, Ok(_)) => {
+              let status =
+                std::process::Command::new(binary).status().expect("failed to execute binary");
+              if !status.success() {
+                failed.fetch_or(true, Ordering::AcqRel);
+                println!("{}... \x1b[31mfail\x1b[0m", stringified);
+              } else {
+                println!("{}... \x1b[32mok\x1b[0m", stringified);
+              }
+            }
+
             (sources, Err(diagnostics)) => {
               failed.fetch_or(true, Ordering::AcqRel);
               println!("{}... \x1b[31mfail\x1b[0m", stringified);
