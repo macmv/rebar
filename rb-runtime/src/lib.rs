@@ -1,7 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use rb_diagnostic::{Diagnostic, Sources};
-use rb_hir::ast::{Path, Type};
+use rb_hir::ast::Type;
 use rb_mir::{MirContext, ast as mir};
 
 const NUM_CPUS: usize = 32;
@@ -65,7 +65,7 @@ fn compile_diagnostics(
   out: &std::path::Path,
 ) -> Result<(), ()> {
   rb_typer::scan_module(&module, &mut env);
-  let (mir_ctx, function_map, functions) = build_environment(&module, &span_map);
+  let (mir_ctx, function_map, functions) = rb_mir_lower::scan_module(&module, &span_map);
 
   let main_func = function_map
     .get(&rb_hir::ast::Path { segments: vec!["test".into(), "".into()] })
@@ -169,52 +169,6 @@ fn compile_mir(
   if !status.success() {
     panic!("linker failed");
   }
-}
-
-fn build_environment<'a>(
-  module: &'a rb_hir::ast::Module,
-  span_map: &'a rb_hir::SpanMap,
-) -> (
-  rb_mir::MirContext,
-  HashMap<Path, rb_mir::ast::UserFunctionId>,
-  Vec<(rb_mir::ast::UserFunctionId, &'a rb_hir::ast::Function, &'a rb_hir::FunctionSpanMap)>,
-) {
-  let mut mir_ctx = MirContext::default();
-  let mut functions = vec![];
-  let mut function_map = HashMap::new();
-  let mut struct_id = rb_mir::ast::StructId(0);
-
-  for (path, module) in module.modules() {
-    let span_map = &span_map.modules[&path];
-    for s in module.structs.values() {
-      let struct_path = path.join(s.name.clone());
-
-      mir_ctx.struct_paths.insert(struct_path, struct_id);
-      mir_ctx.structs.insert(
-        struct_id,
-        rb_mir::Struct {
-          fields: s
-            .fields
-            .iter()
-            .map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te)))
-            .collect(),
-        },
-      );
-      struct_id.0 += 1;
-    }
-
-    for (hir_id, f) in module.functions.iter() {
-      let path = path.join(f.name.clone());
-      let span_map = &span_map.functions[&hir_id];
-
-      let mir_id = rb_mir::ast::UserFunctionId(functions.len() as u64);
-      functions.push((mir_id, f, span_map));
-      function_map.insert(path.clone(), mir_id);
-      rb_mir_lower::declare_user_function(&mut mir_ctx, mir_id, path.clone(), f, span_map);
-    }
-  }
-
-  (mir_ctx, function_map, functions)
 }
 
 pub fn run_parallel<I: Send + Sync, C: Send, O: Send + Sync>(

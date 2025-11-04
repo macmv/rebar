@@ -17,6 +17,52 @@ use rb_typer::Typer;
 #[macro_use]
 extern crate rb_test;
 
+pub fn scan_module<'a>(
+  module: &'a hir::Module,
+  span_map: &'a rb_hir::SpanMap,
+) -> (
+  rb_mir::MirContext,
+  HashMap<Path, rb_mir::ast::UserFunctionId>,
+  Vec<(rb_mir::ast::UserFunctionId, &'a rb_hir::ast::Function, &'a rb_hir::FunctionSpanMap)>,
+) {
+  let mut mir_ctx = MirContext::default();
+  let mut functions = vec![];
+  let mut function_map = HashMap::new();
+  let mut struct_id = rb_mir::ast::StructId(0);
+
+  for (path, module) in module.modules() {
+    let span_map = &span_map.modules[&path];
+    for s in module.structs.values() {
+      let struct_path = path.join(s.name.clone());
+
+      mir_ctx.struct_paths.insert(struct_path, struct_id);
+      mir_ctx.structs.insert(
+        struct_id,
+        rb_mir::Struct {
+          fields: s
+            .fields
+            .iter()
+            .map(|(name, te)| (name.clone(), rb_typer::type_of_type_expr(te)))
+            .collect(),
+        },
+      );
+      struct_id.0 += 1;
+    }
+
+    for (hir_id, f) in module.functions.iter() {
+      let path = path.join(f.name.clone());
+      let span_map = &span_map.functions[&hir_id];
+
+      let mir_id = rb_mir::ast::UserFunctionId(functions.len() as u64);
+      functions.push((mir_id, f, span_map));
+      function_map.insert(path.clone(), mir_id);
+      declare_user_function(&mut mir_ctx, mir_id, path.clone(), f, span_map);
+    }
+  }
+
+  (mir_ctx, function_map, functions)
+}
+
 pub fn declare_user_function(
   ctx: &mut MirContext,
   id: UserFunctionId,
@@ -269,19 +315,22 @@ fn check(body: &str, expected: rb_test::Expect) {
   use std::fmt::Write;
 
   let mut env = Environment::mini();
-  let (sources, module, mut module_span_map) = rb_hir_lower::parse_body(&env, body);
+  let (sources, module, module_span_map) = rb_hir_lower::parse_body(&env, body);
   rb_typer::scan_module(&module, &mut env);
+  let mut span_map = rb_hir::SpanMap { modules: HashMap::from([(Path::new(), module_span_map)]) };
+  let (mir_ctx, _, _) = scan_module(&module, &span_map);
+  let mut module_span_map = span_map.modules.remove(&Path::new()).unwrap();
+
   let body = module.functions[module.main_function.unwrap()].clone();
   let span_map = module_span_map.functions.remove(&module.main_function.unwrap()).unwrap();
 
   let mut out = String::new();
   let res = rb_diagnostic::run(sources.clone(), || {
-    let mir_ctx = MirContext::default();
-
     let typer = crate::Typer::check(&env, &body, &span_map);
     if !rb_diagnostic::is_ok() {
       return;
     }
+
     let func = crate::lower_function(&mir_ctx, &typer, &body).unwrap();
 
     write!(&mut out, "{}", func).unwrap();
@@ -314,6 +363,26 @@ mod tests {
         function 0:
           let v1: i32 = 3;
           let v2: i32 = ((v1 * 1)::<i32> + 2)::<i32>;
+      "#],
+    );
+  }
+
+  #[test]
+  fn struct_value() {
+    check(
+      r#"
+      struct Foo {
+        x: i64
+        y: i64
+      }
+
+      let a = Foo { x: 10, y: 20 }
+      let b = a.x
+      "#,
+      expect![@r#"
+        function 0:
+          let v0: Struct Foo = StructInit 0 { x: 10, y: 20 };
+          let v1: i64 = v0.x::<i64>;
       "#],
     );
   }
