@@ -143,7 +143,8 @@ fn atom_expr(p: &mut Parser, m: Marker, cond: bool) -> Option<CompletedMarker> {
     // test ok
     // !!false
     // -true
-    T![!] | T![-] => {
+    // &*foo
+    T![!] | T![-] | T![&] | T![*] => {
       {
         let m = p.start();
         p.bump();

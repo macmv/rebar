@@ -95,6 +95,8 @@ pub enum Literal {
 pub enum UnaryOp {
   Neg,
   Not,
+  Ref,
+  Deref,
 }
 
 #[derive(Debug)]
@@ -189,6 +191,8 @@ impl fmt::Display for DisplayExpr<'_> {
         let op_str = match op {
           UnaryOp::Neg => "-",
           UnaryOp::Not => "!",
+          UnaryOp::Ref => "&",
+          UnaryOp::Deref => "*",
         };
         write!(f, "({}{})::<{}>", op_str, self.func.display_expr(*arg), ty)
       }

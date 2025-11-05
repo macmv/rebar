@@ -24,7 +24,7 @@ SimplePath = 'ident'* '::'*
 FullyQualifiedPath = '<' struct_type:SimplePath 'as' trait_type:SimplePath '>' 'ident'
 
 BinaryOp = '+' | '-' | '*' | '/' | '%' | '==' | '!=' | '<' | '<=' | '>' | '>=' | '&&' | '||' | '&' | '|' | '^' | '<<' | '>>'
-PrefixOp = '-' | '!'
+PrefixOp = '-' | '!' | '*' | '&'
 PostfixOp = '-' // TODO
 TypeOp = '|'
 

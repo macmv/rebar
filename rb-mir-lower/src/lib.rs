@@ -209,6 +209,8 @@ impl Lower<'_> {
         let op = match op {
           hir::UnaryOp::Not => mir::UnaryOp::Not,
           hir::UnaryOp::Neg => mir::UnaryOp::Neg,
+          hir::UnaryOp::Ref => mir::UnaryOp::Ref,
+          hir::UnaryOp::Deref => mir::UnaryOp::Deref,
         };
 
         mir::Expr::Unary(inner, op, self.ty.type_of_expr(expr))

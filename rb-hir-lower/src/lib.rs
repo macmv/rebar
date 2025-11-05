@@ -702,6 +702,8 @@ fn unary_op_from_cst(cst: &cst::PrefixOp) -> hir::UnaryOp {
     match cst {
       minus_token(_) => Neg,
       bang_token(_) => Not,
+      bit_and_token(_) => Ref,
+      star_token(_) => Deref,
     }
   }
 }

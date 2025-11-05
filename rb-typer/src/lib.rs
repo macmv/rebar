@@ -332,6 +332,23 @@ impl<'a> Typer<'a> {
         inferred
       }
 
+      hir::Expr::UnaryOp(expr, hir::UnaryOp::Ref) => {
+        let inferred = self.synth_expr(expr)?;
+
+        VType::Ref(Box::new(inferred), hir::Mutability::Imm)
+      }
+
+      hir::Expr::UnaryOp(expr, hir::UnaryOp::Deref) => {
+        let inferred = self.synth_expr(expr)?;
+        match inferred {
+          VType::Ref(t, _) => *t,
+          _ => {
+            emit!(self.span(expr) => "cannot dereference {}", self.display_type(&inferred));
+            return None;
+          }
+        }
+      }
+
       hir::Expr::BinaryOp(
         lhs_expr,
         hir::BinaryOp::Add
@@ -1268,6 +1285,45 @@ mod tests {
           |
         8 |       let a = p.foo
           |               ^^^^^
+      "#],
+    );
+  }
+
+  #[test]
+  fn type_ref() {
+    check(
+      r#"
+      let a = 3
+      let b = &a
+      "#,
+      expect![@r#"
+        a: i64
+        b: &i64
+      "#],
+    );
+
+    check(
+      r#"
+      let a = 3
+      let b = *&a
+      "#,
+      expect![@r#"
+        a: i64
+        b: i64
+      "#],
+    );
+
+    check(
+      r#"
+      let a = 3
+      let b = *a
+      "#,
+      expect![@r#"
+        error: cannot dereference integer
+         --> inline.rbr:3:16
+          |
+        3 |       let b = *a
+          |                ^
       "#],
     );
   }
