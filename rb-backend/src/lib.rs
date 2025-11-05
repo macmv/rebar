@@ -288,6 +288,8 @@ impl FuncBuilder<'_> {
         RValue::new(vt, values)
       }
 
+      mir::Expr::StoreStack(_) => todo!("store stack"),
+
       mir::Expr::Unary(lhs, ref op, _) => {
         let lhs = self.compile_expr(lhs);
         let lhs = lhs.unwrap_single(self);
@@ -296,6 +298,7 @@ impl FuncBuilder<'_> {
           mir::UnaryOp::Neg => RValue::int(self.builder.instr().math1(Math::Neg, Bit64, lhs)),
           // TODO: Use `bit1`?
           mir::UnaryOp::Not => RValue::bool(self.builder.instr().math2(Math::Xor, Bit64, lhs, 1)),
+          mir::UnaryOp::Deref => todo!("deref"),
         };
 
         res

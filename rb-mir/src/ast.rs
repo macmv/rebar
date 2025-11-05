@@ -55,6 +55,7 @@ pub enum Expr {
   Binary(ExprId, BinaryOp, ExprId, Type),
   Index(ExprId, ExprId, Type),
   Field(ExprId, String, Type),
+  StoreStack(ExprId),
 
   Local(VarId, Type),
   UserFunction(UserFunctionId, Type),
@@ -95,7 +96,6 @@ pub enum Literal {
 pub enum UnaryOp {
   Neg,
   Not,
-  Ref,
   Deref,
 }
 
@@ -191,7 +191,6 @@ impl fmt::Display for DisplayExpr<'_> {
         let op_str = match op {
           UnaryOp::Neg => "-",
           UnaryOp::Not => "!",
-          UnaryOp::Ref => "&",
           UnaryOp::Deref => "*",
         };
         write!(f, "({}{})::<{}>", op_str, self.func.display_expr(*arg), ty)
@@ -216,6 +215,10 @@ impl fmt::Display for DisplayExpr<'_> {
           self.func.display_expr(*index),
           ty
         )
+      }
+
+      Expr::StoreStack(value) => {
+        write!(f, "store_stack({})", self.func.display_expr(*value))
       }
 
       Expr::Field(struct_expr, field_name, ty) => {

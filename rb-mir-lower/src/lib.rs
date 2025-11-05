@@ -203,14 +203,20 @@ impl Lower<'_> {
 
       hir::Expr::Paren(inner) => return self.lower_expr(inner),
 
+      hir::Expr::UnaryOp(inner, hir::UnaryOp::Ref) => {
+        let inner = self.lower_expr(inner);
+
+        mir::Expr::StoreStack(inner)
+      }
+
       hir::Expr::UnaryOp(inner, ref op) => {
         let inner = self.lower_expr(inner);
 
         let op = match op {
           hir::UnaryOp::Not => mir::UnaryOp::Not,
           hir::UnaryOp::Neg => mir::UnaryOp::Neg,
-          hir::UnaryOp::Ref => mir::UnaryOp::Ref,
           hir::UnaryOp::Deref => mir::UnaryOp::Deref,
+          hir::UnaryOp::Ref => unreachable!(),
         };
 
         mir::Expr::Unary(inner, op, self.ty.type_of_expr(expr))
@@ -383,6 +389,20 @@ mod tests {
         function 0:
           let v0: Struct Foo = StructInit 0 { x: 10, y: 20 };
           let v1: i64 = v0.x::<i64>;
+      "#],
+    );
+  }
+
+  #[test]
+  fn temporary_ref() {
+    check(
+      r#"
+      fn foo(a: &u8) {}
+      foo(&3)
+      "#,
+      expect![@r#"
+        function 0:
+          call 0::<fn(&u8) -> ()>(store_stack(3));
       "#],
     );
   }
