@@ -539,11 +539,7 @@ impl<'a> Typer<'a> {
       _ => match self.synth_expr(expr) {
         Some(inferred) => {
           if self.is_subtype(&inferred, expected) {
-            match inferred {
-              VType::Integer(_) => self.pin_integer(&inferred, expected),
-
-              _ => {}
-            }
+            self.link_types(&inferred, expected, self.span(expr));
 
             true
           } else {
@@ -562,6 +558,7 @@ impl<'a> Typer<'a> {
   fn is_subtype(&self, a: &VType, b: &VType) -> bool {
     match (a, b) {
       (a, b) if a == b => true,
+      (VType::Ref(at, _), VType::Ref(bt, _)) if self.is_subtype(at, bt) => true,
       (VType::Integer(_), VType::Primitive(prim)) if prim.is_integer() => true,
       (VType::Primitive(hir::PrimitiveType::Never), _) => true,
 
@@ -601,6 +598,10 @@ impl<'a> Typer<'a> {
       }
       (VType::Primitive(prim), VType::Integer(_)) if prim.is_integer() => {
         self.pin_integer(rhs, lhs);
+      }
+
+      (VType::Ref(at, _), VType::Ref(bt, _)) if self.is_subtype(at, bt) => {
+        self.link_types(at, bt, span);
       }
 
       _ => {
@@ -1324,6 +1325,20 @@ mod tests {
           |
         3 |       let b = *a
           |                ^
+      "#],
+    );
+  }
+
+  #[test]
+  fn coerce_ref() {
+    check(
+      r#"
+      let a = 3
+      let b: &i32 = &a
+      "#,
+      expect![@r#"
+        a: i32
+        b: &i32
       "#],
     );
   }
