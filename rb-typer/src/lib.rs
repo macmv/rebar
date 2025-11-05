@@ -588,6 +588,9 @@ impl<'a> Typer<'a> {
     match (lhs, rhs) {
       (a, b) if a == b => {}
 
+      (VType::Primitive(hir::PrimitiveType::Never), _) => {}
+      (_, VType::Primitive(hir::PrimitiveType::Never)) => {}
+
       (VType::Integer(l), VType::Integer(r)) => {
         self.integers.as_mut()[l.into_raw().into_u32() as usize].deps.push(*r);
         self.integers.as_mut()[r.into_raw().into_u32() as usize].deps.push(*l);
