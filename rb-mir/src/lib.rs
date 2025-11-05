@@ -13,13 +13,7 @@ pub mod ast;
 pub struct MirContext {
   pub struct_paths: HashMap<Path, StructId>,
   pub structs:      HashMap<StructId, Struct>,
-  pub items:        HashMap<FullyQualifiedName, Item>,
-}
-
-#[derive(Clone)]
-pub enum Item {
-  NativeFunction(ast::NativeFunctionId),
-  UserFunction(UserFunction),
+  pub items:        HashMap<FullyQualifiedName, UserFunction>,
 }
 
 #[derive(Clone)]

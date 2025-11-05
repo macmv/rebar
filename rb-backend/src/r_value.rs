@@ -33,7 +33,6 @@ impl RValue {
 
   pub fn bool(ir: Variable) -> Self { RValue::single(ValueType::Bool, ir) }
   pub fn int(ir: Variable) -> Self { RValue::single(ValueType::Int, ir) }
-  pub fn function(ir: Variable) -> Self { RValue::single(ValueType::Function, ir) }
   pub fn slice(ptr: Variable, len: Variable) -> Self {
     RValue::new(ValueType::Slice, vec![ptr, len])
   }

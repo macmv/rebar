@@ -58,7 +58,6 @@ pub enum Expr {
 
   Local(VarId, Type),
   UserFunction(UserFunctionId, Type),
-  Native(NativeFunctionId, Type),
   StructInit(StructId, Vec<(String, ExprId)>),
 
   Block(Vec<StmtId>),
@@ -222,7 +221,6 @@ impl fmt::Display for DisplayExpr<'_> {
       Expr::Local(var_id, _) => write!(f, "{}", var_id),
 
       Expr::UserFunction(_, _) => todo!(),
-      Expr::Native(_, _) => todo!(),
 
       Expr::StructInit(struct_id, fields) => {
         write!(f, "StructInit {} {{ ", struct_id.0)?;

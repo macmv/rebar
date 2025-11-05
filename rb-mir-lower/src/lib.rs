@@ -8,7 +8,7 @@ use rb_hir::{
   ast::{self as hir, FullyQualifiedName, Path, Type},
 };
 use rb_mir::{
-  Item, MirContext, UserFunction,
+  MirContext, UserFunction,
   ast::{self as mir, UserFunctionId},
 };
 use rb_typer::Typer;
@@ -91,7 +91,7 @@ pub fn declare_user_function(
     }
   }
 
-  ctx.items.insert(FullyQualifiedName::new_bare(path).unwrap(), Item::UserFunction(func));
+  ctx.items.insert(FullyQualifiedName::new_bare(path).unwrap(), func);
 }
 
 pub fn lower_function(ctx: &MirContext, ty: &Typer, hir: &hir::Function) -> Option<mir::Function> {
@@ -180,13 +180,11 @@ impl Lower<'_> {
         mir::Expr::Array(exprs, ty)
       }
 
-      hir::Expr::Name(ref v) => match self.ctx.items[v] {
-        Item::UserFunction(ref func) => {
-          self.mir.deps.insert(func.id);
-          mir::Expr::UserFunction(func.id, self.ty.type_of_expr(expr))
-        }
-        Item::NativeFunction(id) => mir::Expr::Native(id, self.ty.type_of_expr(expr)),
-      },
+      hir::Expr::Name(ref v) => {
+        let func = &self.ctx.items[v];
+        self.mir.deps.insert(func.id);
+        mir::Expr::UserFunction(func.id, self.ty.type_of_expr(expr))
+      }
 
       hir::Expr::Local(id) => mir::Expr::Local(self.locals[&id], self.ty.type_of_expr(expr)),
 
@@ -261,7 +259,7 @@ impl Lower<'_> {
 
       hir::Expr::Call(lhs, ref args) => match self.hir.exprs[lhs] {
         hir::Expr::Name(ref name) => {
-          if let Some(Item::UserFunction(func)) = self.ctx.items.get(&name) {
+          if let Some(func) = self.ctx.items.get(&name) {
             self.mir.deps.insert(func.id);
 
             let lhs_ty = self.ty.type_of_expr(lhs);

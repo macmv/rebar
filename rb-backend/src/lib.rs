@@ -161,8 +161,6 @@ impl FuncBuilder<'_> {
 
       mir::Expr::UserFunction(id, _) => RValue::const_user_function(id.0),
 
-      mir::Expr::Native(ref id, _) => RValue::function(self.builder.instr().mov(Bit64, id.0)),
-
       mir::Expr::Block(ref stmts) => {
         let mut return_value = RValue::nil();
 
