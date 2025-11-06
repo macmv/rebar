@@ -302,7 +302,7 @@ impl FuncBuilder<'_> {
       mir::Expr::StoreStack(expr) => {
         let inner = self.compile_expr(expr);
 
-        let size = inner.ty.len(self.mir());
+        let size = inner.ty.len(self.mir()) * 8;
         let slot = self.builder.stack_slot(size, NonZero::new(8).unwrap());
 
         match inner.kind {
@@ -322,7 +322,7 @@ impl FuncBuilder<'_> {
           }
         }
 
-        todo!("stack slots")
+        RValue::pointer(self.builder.instr().stack_addr(Bit64, slot, 0))
       }
 
       mir::Expr::Unary(lhs, ref op, _) => {

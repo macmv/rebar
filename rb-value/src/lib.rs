@@ -17,6 +17,7 @@ pub enum ValueType {
   Function,
   UserFunction, // FIXME: Fix names
   Slice,
+  Ptr,
 
   /// Array is a bit mystical. The value that lives on the stack is always a
   /// pointer (arrays are thin pointers, so that they can be grown/shrunk
@@ -39,7 +40,8 @@ impl ValueType {
       ValueType::Function => 3,
       ValueType::UserFunction => 4,
       ValueType::Slice => 5,
-      ValueType::Array => 6,
+      ValueType::Ptr => 6,
+      ValueType::Array => 7,
 
       // Leave the first 32 ids for the built-in types.
       ValueType::Struct(id) => id.0 as i64 + 32,
@@ -96,6 +98,7 @@ impl ValueType {
       ValueType::Int => 1,
       ValueType::Bool => 1,
       ValueType::Slice => 2,
+      ValueType::Ptr => 1,
       ValueType::Array => 1,
 
       ValueType::Function => 1,

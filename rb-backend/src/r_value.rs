@@ -35,6 +35,7 @@ impl RValue {
   pub fn slice(ptr: Variable, len: Variable) -> Self {
     RValue::new(ValueType::Slice, vec![ptr, len])
   }
+  pub fn pointer(ptr: Variable) -> Self { RValue::new(ValueType::Ptr, vec![ptr]) }
 }
 
 impl RValue {
