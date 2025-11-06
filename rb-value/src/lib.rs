@@ -31,44 +31,6 @@ pub enum ValueType {
   Struct(StructId),
 }
 
-impl ValueType {
-  pub fn as_i64(&self) -> i64 {
-    match self {
-      ValueType::Nil => 0,
-      ValueType::Bool => 1,
-      ValueType::Int => 2,
-      ValueType::Function => 3,
-      ValueType::UserFunction => 4,
-      ValueType::Slice => 5,
-      ValueType::Ptr => 6,
-      ValueType::Array => 7,
-
-      // Leave the first 32 ids for the built-in types.
-      ValueType::Struct(id) => id.0 as i64 + 32,
-    }
-  }
-}
-
-impl TryFrom<i64> for ValueType {
-  type Error = ();
-
-  fn try_from(value: i64) -> Result<Self, Self::Error> {
-    match value {
-      0 => Ok(ValueType::Nil),
-      1 => Ok(ValueType::Bool),
-      2 => Ok(ValueType::Int),
-      3 => Ok(ValueType::Function),
-      4 => Ok(ValueType::UserFunction),
-      5 => Ok(ValueType::Slice),
-      6 => Ok(ValueType::Array),
-
-      v if v >= 32 => Ok(ValueType::Struct(StructId(v as u64 - 32))),
-
-      _ => Err(()),
-    }
-  }
-}
-
 /// The parameter kind for passing a value around. This is most commonly used
 /// for local variables. Compact values have their static type known, wheras
 /// extended types have a static type that is a union or unknown.
