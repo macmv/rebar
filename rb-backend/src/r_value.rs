@@ -1,6 +1,6 @@
 use crate::FuncBuilder;
 
-use rb_codegen::{StackId, Variable, VariableSize::*};
+use rb_codegen::{Variable, VariableSize::*};
 use rb_value::ValueType;
 
 #[derive(Debug, Clone)]
@@ -13,7 +13,6 @@ pub struct RValue {
 pub enum RValueKind {
   Const(Vec<u64>),
   Dyn(Vec<Variable>),
-  Slot(StackId),
 }
 
 impl RValue {
@@ -36,7 +35,6 @@ impl RValue {
   pub fn slice(ptr: Variable, len: Variable) -> Self {
     RValue::new(ValueType::Slice, vec![ptr, len])
   }
-  pub fn slot(ty: ValueType, slot: StackId) -> Self { RValue { ty, kind: RValueKind::Slot(slot) } }
 }
 
 impl RValue {
@@ -52,24 +50,6 @@ impl RValue {
 
         v[0]
       }
-      RValueKind::Slot(_) => todo!(),
-      /*
-      Self::Untyped(slot) => match slot {
-        Slot::Empty => panic!(),
-        Slot::Single(_) => panic!(),
-        Slot::Multiple(_, _) => slot.get(&mut func.builder, 1),
-      },
-
-      Self::TypedPtr(_, ptr) => func.builder.ins().load(ir::types::I64, MemFlags::new(), *ptr, 0),
-      Self::UntypedPtr(_, ptr) => func.builder.ins().load(ir::types::I64, MemFlags::new(), *ptr, 8),
-      */
-    }
-  }
-
-  pub fn unwrap_slot(&self) -> (rb_mir::ast::StructId, StackId) {
-    match (self.ty, &self.kind) {
-      (ValueType::Struct(s), RValueKind::Slot(slot)) => (s, *slot),
-      _ => panic!("expected slot value, got {self:?}"),
     }
   }
 
@@ -184,7 +164,6 @@ impl RValue {
         items.iter().map(|it| func.builder.instr().mov(Bit64, *it)).collect()
       }
       RValueKind::Dyn(ref v) => v.clone(),
-      RValueKind::Slot(_) => todo!(),
     }
   }
 

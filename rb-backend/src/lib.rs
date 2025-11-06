@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, num::NonZero};
 
 use rb_codegen::{
   Condition, Function, FunctionBuilder, FunctionId, InstructionInput, Math, Signature,
@@ -250,45 +250,80 @@ impl FuncBuilder<'_> {
 
       mir::Expr::StructInit(id, ref fields) => {
         let layout = self.mir().layout_struct(id);
+        assert!(layout.layout.size % 8 == 0, "todo: handle non-8-byte aligned structs");
 
-        let slot = self.builder.stack_slot(layout.layout.size, layout.layout.align);
+        let mut slot = vec![None; layout.layout.size as usize / 8];
 
         for (name, field) in fields.iter() {
           let index = self.mir().structs[&id].fields.iter().position(|(n, _)| n == name).unwrap();
-          let offset = layout.offsets[index];
+          let offset = layout.offsets[index] / 8;
 
           let field = self.compile_expr(*field);
           let ir = field.to_ir(self);
 
           for (i, ir) in ir.iter().enumerate() {
-            let off = (offset as i32) + (i as i32 * 8);
-            self.builder.instr().stack_store(slot, off as u32, *ir);
+            let off = (offset as usize) + i;
+            slot[off] = Some(*ir);
           }
         }
 
-        RValue::slot(ValueType::Struct(id), slot)
+        RValue {
+          ty:   ValueType::Struct(id),
+          kind: r_value::RValueKind::Dyn(slot.into_iter().map(|v| v.unwrap()).collect()),
+        }
       }
 
       mir::Expr::Field(lhs, ref field, ref ty) => {
         let lhs = self.compile_expr(lhs);
 
-        let (id, slot) = lhs.unwrap_slot();
+        match lhs.ty {
+          ValueType::Struct(id) => {
+            let ir = lhs.to_ir(self);
 
-        let layout = self.mir().layout_struct(id);
-        let index = self.mir().structs[&id].fields.iter().position(|(n, _)| n == field).unwrap();
+            let layout = self.mir().layout_struct(id);
+            let index =
+              self.mir().structs[&id].fields.iter().position(|(n, _)| n == field).unwrap();
 
-        let offset = layout.offsets[index];
+            let offset = layout.offsets[index] / 8;
 
-        let vt = ValueType::for_type(self.mir(), ty);
-        let mut values = vec![];
-        for i in 0..vt.len(self.mir()) {
-          values.push(self.builder.instr().stack_load(Bit64, slot, offset + i * 8));
+            let vt = ValueType::for_type(self.mir(), ty);
+            let mut values = vec![];
+            for i in 0..vt.len(self.mir()) {
+              values.push(ir[(offset + i) as usize]);
+            }
+
+            RValue::new(vt, values)
+          }
+
+          _ => unreachable!("cannot access field of {lhs:?}"),
         }
-
-        RValue::new(vt, values)
       }
 
-      mir::Expr::StoreStack(_) => todo!("store stack"),
+      mir::Expr::StoreStack(expr) => {
+        let inner = self.compile_expr(expr);
+
+        let size = inner.ty.len(self.mir());
+        let slot = self.builder.stack_slot(size, NonZero::new(8).unwrap());
+
+        match inner.kind {
+          r_value::RValueKind::Const(items) => {
+            let mut offset = 0;
+            for it in items {
+              self.builder.instr().stack_store(slot, offset, it);
+              offset += 8;
+            }
+          }
+          r_value::RValueKind::Dyn(items) => {
+            let mut offset = 0;
+            for it in items {
+              self.builder.instr().stack_store(slot, offset, it);
+              offset += 8;
+            }
+          }
+        }
+
+        todo!("stack slots")
+      }
 
       mir::Expr::Unary(lhs, ref op, _) => {
         let lhs = self.compile_expr(lhs);
