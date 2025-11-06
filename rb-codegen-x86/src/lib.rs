@@ -629,6 +629,23 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           );
         }
 
+        rb_codegen::Opcode::Load => {
+          let input = match inst.input[0] {
+            InstructionInput::Var(v) => reg.get(v),
+            _ => panic!("expected variable input for stack load"),
+          };
+          let output = match inst.output[0] {
+            InstructionOutput::Var(v) => reg.get(v),
+          };
+
+          builder.instr(
+            Instruction::new(Opcode::MOV_RM_32)
+              .with_prefix(Prefix::RexW)
+              .with_mod(0b00, input.index)
+              .with_reg(output.index),
+          );
+        }
+
         rb_codegen::Opcode::StackStore(id, offset) => {
           let slot = &function.stack_slots[id.0 as usize];
 

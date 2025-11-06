@@ -167,7 +167,10 @@ impl ValueUses {
         self.mark_required(out);
       }
 
-      Opcode::StackAddr(_, _) | Opcode::StackLoad(_, _) | Opcode::StackStore(_, _) => {
+      Opcode::StackAddr(_, _)
+      | Opcode::StackLoad(_, _)
+      | Opcode::StackStore(_, _)
+      | Opcode::Load => {
         self.set(out, VariableValue::Unknown);
       }
     }

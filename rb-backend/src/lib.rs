@@ -327,13 +327,17 @@ impl FuncBuilder<'_> {
 
       mir::Expr::Unary(lhs, ref op, _) => {
         let lhs = self.compile_expr(lhs);
-        let lhs = lhs.unwrap_single(self);
+        let v = lhs.unwrap_single(self);
 
         let res = match op {
-          mir::UnaryOp::Neg => RValue::int(self.builder.instr().math1(Math::Neg, Bit64, lhs)),
+          mir::UnaryOp::Neg => RValue::int(self.builder.instr().math1(Math::Neg, Bit64, v)),
           // TODO: Use `bit1`?
-          mir::UnaryOp::Not => RValue::bool(self.builder.instr().math2(Math::Xor, Bit64, lhs, 1)),
-          mir::UnaryOp::Deref => todo!("deref"),
+          mir::UnaryOp::Not => RValue::bool(self.builder.instr().math2(Math::Xor, Bit64, v, 1)),
+          mir::UnaryOp::Deref => {
+            assert_eq!(lhs.ty, ValueType::Ptr, "dereference non-pointer");
+
+            RValue::int(self.builder.instr().load(Bit64, v))
+          }
         };
 
         res
