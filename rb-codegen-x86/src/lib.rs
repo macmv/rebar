@@ -593,7 +593,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
         // syscall
         rb_codegen::Opcode::Syscall => builder.instr(Instruction::new(Opcode::SYSCALL)),
 
-        rb_codegen::Opcode::StackAddr(id) => {
+        rb_codegen::Opcode::StackAddr(id, offset) => {
           let slot = &function.stack_slots[id.0 as usize];
           let output = match inst.output[0] {
             InstructionOutput::Var(v) => reg.get(v),
@@ -601,10 +601,14 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
 
           debug_assert_eq!(output.size, RegisterSize::Bit64, "stack addresses must be 64-bit");
 
+          let offset = slot.offset + offset;
+
           builder.instr(
             Instruction::new(Opcode::LEA)
               .with_prefix(Prefix::RexW)
-              .with_disp(output.index, slot.offset as i32),
+              .with_sib(0, RegisterIndex::Esp, RegisterIndex::Esp)
+              .with_reg(output.index)
+              .with_displacement(Immediate::i8(offset as u8)),
           );
         }
 
@@ -1101,6 +1105,8 @@ mod tests {
     let s1 = rb_codegen::StackId(1);
     let v0 = Variable::new(0, VariableSize::Bit64);
     let v1 = Variable::new(1, VariableSize::Bit64);
+    let v2 = Variable::new(2, VariableSize::Bit64);
+    let v3 = Variable::new(3, VariableSize::Bit64);
 
     let function = rb_codegen::Function {
       sig: Signature { args: vec![], rets: vec![] },
@@ -1136,6 +1142,16 @@ mod tests {
             input:  smallvec::smallvec![],
             output: smallvec::smallvec![v1.into()],
           },
+          rb_codegen::Instruction {
+            opcode: rb_codegen::Opcode::StackAddr(s0, 0),
+            input:  smallvec::smallvec![],
+            output: smallvec::smallvec![v2.into()],
+          },
+          rb_codegen::Instruction {
+            opcode: rb_codegen::Opcode::StackAddr(s1, 0),
+            input:  smallvec::smallvec![],
+            output: smallvec::smallvec![v3.into()],
+          },
         ],
         terminator:   rb_codegen::TerminatorInstruction::Return(smallvec::smallvec![]),
       }],
@@ -1167,8 +1183,10 @@ mod tests {
         0x08000265      b801000000             mov eax, 1
         0x0800026a      4889442408             mov qword [rsp + 8], rax
         0x0800026f      488b442408             mov rax, qword [rsp + 8]
-        0x08000274      4883c418               add rsp, 0x18
-        0x08000278      c3                     ret
+        0x08000274      488d442400             lea rax, [rsp]
+        0x08000279      488d442408             lea rax, [rsp + 8]
+        0x0800027e      4883c418               add rsp, 0x18
+        0x08000282      c3                     ret
       "#],
     );
   }
