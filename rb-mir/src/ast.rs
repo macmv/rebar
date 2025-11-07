@@ -34,7 +34,7 @@ pub struct Function {
 pub struct VarId(pub u32);
 
 /// A user-defined function ID. These are assigned just before lowering to MIR.
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct FunctionId(pub u64);
 
 /// A user-defined struct ID. These are assigned just before lowering to MIR.

@@ -1,4 +1,7 @@
-use std::{collections::HashMap, num::NonZero};
+use std::{
+  collections::{BTreeMap, HashMap},
+  num::NonZero,
+};
 
 use rb_codegen::{
   Condition, Function, FunctionBuilder, FunctionId, InstructionInput, Math, Signature,
@@ -17,7 +20,7 @@ use crate::r_value::RValue;
 pub struct Compiler {
   mir_ctx:          MirContext,
   function_ids:     HashMap<mir::FunctionId, FunctionId>,
-  extern_functions: HashMap<mir::FunctionId, String>,
+  extern_functions: BTreeMap<mir::FunctionId, String>,
 
   functions: Vec<Function>,
 }
@@ -26,7 +29,7 @@ pub struct Compiler {
 pub struct ThreadCtx<'a> {
   mir_ctx:          &'a MirContext,
   function_ids:     &'a HashMap<mir::FunctionId, FunctionId>,
-  extern_functions: &'a HashMap<mir::FunctionId, String>,
+  extern_functions: &'a BTreeMap<mir::FunctionId, String>,
 }
 
 pub struct FuncBuilder<'a> {
@@ -43,7 +46,7 @@ impl Compiler {
     Compiler {
       mir_ctx,
       function_ids: HashMap::new(),
-      extern_functions: HashMap::new(),
+      extern_functions: BTreeMap::new(),
       functions: vec![],
     }
   }
