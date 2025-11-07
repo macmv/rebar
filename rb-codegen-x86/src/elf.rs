@@ -18,6 +18,8 @@ pub fn generate(filename: &Path, object: &Object) {
   writer.reserve_file_header();
 
   let start = writer.add_string(b"_start");
+  let extern_symbols =
+    object.extern_symbols.iter().map(|s| (s, writer.add_string(s.as_bytes()))).collect::<Vec<_>>();
   let data_symbols = object
     .data_symbols
     .iter()
@@ -44,6 +46,9 @@ pub fn generate(filename: &Path, object: &Object) {
     writer.reserve_symbol_index(Some(ro_data_section));
   }
   writer.reserve_symbol_index(Some(text_section));
+  for _ in &extern_symbols {
+    writer.reserve_symbol_index(None);
+  }
 
   writer.reserve_strtab();
   writer.reserve_shstrtab();
@@ -135,6 +140,17 @@ pub fn generate(filename: &Path, object: &Object) {
     st_value: object.start_offset,
     st_size:  object.text.len() as u64,
   });
+  for (_, id) in extern_symbols {
+    writer.write_symbol(&Sym {
+      name:     Some(id),
+      section:  None,
+      st_info:  (elf::STB_GLOBAL << 4) | elf::STT_FUNC,
+      st_other: 0,
+      st_shndx: elf::SHN_UNDEF,
+      st_value: 0,
+      st_size:  0,
+    });
+  }
 
   for reloc in &object.relocs {
     writer.write_relocation(true, reloc);

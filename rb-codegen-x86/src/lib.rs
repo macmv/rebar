@@ -33,11 +33,12 @@ struct Call {
 
 #[derive(Default)]
 pub struct Object {
-  text:         Vec<u8>,
-  start_offset: u64,
-  ro_data:      Vec<u8>,
-  relocs:       Vec<Rel>,
-  data_symbols: Vec<SymbolDef>,
+  text:           Vec<u8>,
+  start_offset:   u64,
+  ro_data:        Vec<u8>,
+  relocs:         Vec<Rel>,
+  extern_symbols: Vec<String>,
+  data_symbols:   Vec<SymbolDef>,
 }
 
 #[derive(Default)]
@@ -987,11 +988,12 @@ mod tests {
     let object_path = dir.path().join("foo.o");
     let binary_path = dir.path().join("a.out");
     Object {
-      text:         builder.text,
+      text: builder.text,
       start_offset: 0,
-      ro_data:      data.to_vec(),
-      relocs:       builder.relocs,
+      ro_data: data.to_vec(),
+      relocs: builder.relocs,
       data_symbols: vec![SymbolDef { offset: 0, name: "foo".to_string() }],
+      ..Default::default()
     }
     .save(&object_path);
     link(&[object_path], &binary_path);
@@ -1052,6 +1054,53 @@ mod tests {
       ..Default::default()
     }
     .save(&dir.path().join("foo.o"));
+  }
+
+  #[test]
+  fn call_extern() {
+    let mut text = vec![];
+
+    let data = b"Hello, world!\n";
+
+    let instructions = [
+      // `call reloc.bar`
+      Instruction::new(Opcode::CALL).with_immediate(Immediate::i32(0)),
+    ];
+
+    for inst in &instructions {
+      let (bytes, len) = inst.encode();
+      text.extend_from_slice(&bytes[..len]);
+    }
+
+    let dir = temp_dir!();
+    Object {
+      text,
+      ro_data: data.to_vec(),
+      relocs: vec![Rel {
+        r_offset: 1,
+        r_sym:    2,
+        r_type:   object::elf::R_X86_64_PC32,
+        r_addend: -4,
+      }],
+      extern_symbols: vec!["bar".to_string()],
+      ..Default::default()
+    }
+    .save(&dir.path().join("foo.o"));
+
+    disass(
+      &dir.path().join("foo.o"),
+      expect![@r#"
+        0x080002a0      e800000000             call str.Hello__world__n
+        ;-- section..rodata:
+        ;-- str.Hello__world__n:
+        0x080002a5     .string "Hello, world!\n" ; len=14
+        0x080002b3      ff                     invalid
+        0x080002b4      ff                     invalid
+        0x080002b5      ff                     invalid
+        0x080002b6      ff                     invalid
+        0x080002b7      ff                     invalid
+      "#],
+    );
   }
 
   #[test]
@@ -1184,11 +1233,12 @@ mod tests {
     let dir = temp_dir!();
     let object_path = dir.path().join("foo.o");
     Object {
-      text:         builder.text,
+      text: builder.text,
       start_offset: 0,
-      ro_data:      vec![],
-      relocs:       builder.relocs,
+      ro_data: vec![],
+      relocs: builder.relocs,
       data_symbols: vec![SymbolDef { offset: 0, name: "foo".to_string() }],
+      ..Default::default()
     }
     .save(&object_path);
     disass(
