@@ -103,40 +103,40 @@ fn compile_diagnostics(
 
   let mut functions = functions.into_iter().flatten().collect::<Vec<_>>();
 
-  let start_id = rb_mir::ast::FunctionId(functions.len() as u64);
-  functions.push(Func::UserDefined(generate_start_func(main_func, start_id)));
+  let entry_id = rb_mir::ast::FunctionId(functions.len() as u64);
+  functions.push(Func::UserDefined(generate_entry_func(main_func, entry_id)));
 
   // If we get to this point, all checks have passed, and we can compile to
   // cranelift IR. Collect all the functions, split them into chunks, and compile
   // them on a thread pool.
 
-  compile_mir(mir_ctx, functions, start_id, out);
+  compile_mir(mir_ctx, functions, entry_id, out);
 
   Ok(())
 }
 
-fn generate_start_func(main_func: mir::FunctionId, start_id: mir::FunctionId) -> mir::Function {
-  let mut start_func = mir::Function::default();
-  start_func.id = start_id;
+fn generate_entry_func(main_func: mir::FunctionId, entry_id: mir::FunctionId) -> mir::Function {
+  let mut entry_func = mir::Function::default();
+  entry_func.id = entry_id;
 
-  let call = start_func.exprs.alloc(mir::Expr::Call(
+  let call = entry_func.exprs.alloc(mir::Expr::Call(
     main_func,
     Type::Function(vec![], Box::new(Type::unit())),
     vec![],
   ));
-  start_func.items.push(start_func.stmts.alloc(mir::Stmt::Expr(call)));
+  entry_func.items.push(entry_func.stmts.alloc(mir::Stmt::Expr(call)));
 
-  let exit_syscall = start_func.exprs.alloc(mir::Expr::Literal(mir::Literal::Int(60)));
-  let exit_code = start_func.exprs.alloc(mir::Expr::Literal(mir::Literal::Int(0)));
-  let exit = start_func
+  let exit_syscall = entry_func.exprs.alloc(mir::Expr::Literal(mir::Literal::Int(60)));
+  let exit_code = entry_func.exprs.alloc(mir::Expr::Literal(mir::Literal::Int(0)));
+  let exit = entry_func
     .exprs
     .alloc(mir::Expr::CallIntrinsic(mir::Intrinsic::Syscall, vec![exit_syscall, exit_code]));
-  start_func.items.push(start_func.stmts.alloc(mir::Stmt::Expr(exit)));
+  entry_func.items.push(entry_func.stmts.alloc(mir::Stmt::Expr(exit)));
 
-  let trap = start_func.exprs.alloc(mir::Expr::CallIntrinsic(mir::Intrinsic::Trap, vec![]));
-  start_func.items.push(start_func.stmts.alloc(mir::Stmt::Expr(trap)));
+  let trap = entry_func.exprs.alloc(mir::Expr::CallIntrinsic(mir::Intrinsic::Trap, vec![]));
+  entry_func.items.push(entry_func.stmts.alloc(mir::Stmt::Expr(trap)));
 
-  start_func
+  entry_func
 }
 
 enum Func {
@@ -147,7 +147,7 @@ enum Func {
 fn compile_mir(
   mir_ctx: MirContext,
   functions: Vec<Func>,
-  main_func: rb_mir::ast::FunctionId,
+  entry_func: rb_mir::ast::FunctionId,
   out: &std::path::Path,
 ) {
   let mut compiler = rb_backend::Compiler::new(mir_ctx);
@@ -172,11 +172,12 @@ fn compile_mir(
     compiler.finish_function(func);
   }
 
-  compiler.finish(main_func, out);
+  compiler.finish(entry_func, out);
 
   let name = out.file_stem().unwrap().to_string_lossy();
 
-  let status = std::process::Command::new("wild")
+  let status = std::process::Command::new("clang")
+    .arg("-fuse-ld=/usr/bin/wild")
     .arg(out)
     .arg("-o")
     .arg(out.parent().unwrap().join(&*name))

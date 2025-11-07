@@ -17,7 +17,7 @@ pub fn generate(filename: &Path, object: &Object) {
 
   writer.reserve_file_header();
 
-  let start = writer.add_string(b"_start");
+  let start = writer.add_string(b"main");
   let extern_symbols =
     object.extern_symbols.iter().map(|s| (s, writer.add_string(s.as_bytes()))).collect::<Vec<_>>();
   let internal_symbols = object
