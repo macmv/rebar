@@ -138,6 +138,13 @@ impl ModuleLower<'_> {
       Some(Span { file: lower.source.source, range: cst.ident_token().unwrap().text_range() });
     lower.f.name = cst.ident_token().unwrap().to_string();
 
+    if let Some(ext) = cst.ext() {
+      if let Some(s) = ext.string() {
+        let text = s.syntax().text().to_string();
+        lower.f.ext = Some(text[1..text.len() - 1].to_string());
+      }
+    }
+
     for attr in cst.attrs() {
       let path = attr.path().unwrap();
       match path {

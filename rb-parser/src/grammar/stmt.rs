@@ -121,12 +121,14 @@ pub fn stmt(p: &mut Parser) {
       // extern fn foo()
       // extern "syscall" fn foo()
       if p.at(T![extern]) {
+        let m = p.start();
         p.eat(T![extern]);
         if p.at(T!['"']) {
           let m = p.start();
           super::expr::string(p);
           m.complete(p, STRING);
         }
+        m.complete(p, EXTERN);
         p.expect(T![fn]);
       } else {
         p.eat(T![fn]);
@@ -344,12 +346,13 @@ mod tests {
           NL_KW '\n'
           WHITESPACE '        '
           FUNCTION
-            EXTERN_KW 'extern'
-            WHITESPACE ' '
-            STRING
-              DOUBLE_QUOTE '"'
-              IDENT 'syscall'
-              DOUBLE_QUOTE '"'
+            EXTERN
+              EXTERN_KW 'extern'
+              WHITESPACE ' '
+              STRING
+                DOUBLE_QUOTE '"'
+                IDENT 'syscall'
+                DOUBLE_QUOTE '"'
             WHITESPACE ' '
             FN_KW 'fn'
             WHITESPACE ' '

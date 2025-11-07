@@ -18,8 +18,15 @@ pub struct MirContext {
 
 #[derive(Clone)]
 pub struct UserFunction {
-  pub id:        ast::FunctionId,
-  pub intrinsic: Option<ast::Intrinsic>,
+  pub id:   ast::FunctionId,
+  pub kind: FunctionKind,
+}
+
+#[derive(Clone)]
+pub enum FunctionKind {
+  UserDefined,
+  Intrinsic(ast::Intrinsic),
+  Extern(String),
 }
 
 #[derive(Debug, Clone)]

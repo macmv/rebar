@@ -70,7 +70,15 @@ pub fn declare_user_function(
   function: &hir::Function,
   span: &FunctionSpanMap,
 ) {
-  let mut func = UserFunction { id, intrinsic: None };
+  let mut func = UserFunction { id, kind: rb_mir::FunctionKind::UserDefined };
+
+  if let Some(ext) = &function.ext {
+    if ext != "C" {
+      emit!(span.name_span.unwrap() => "only extern 'C' functions are supported");
+    }
+
+    func.kind = rb_mir::FunctionKind::Extern(function.name.clone());
+  }
 
   for attr in &function.attrs {
     if attr.path == "rebar::intrinsic" {
@@ -87,7 +95,7 @@ pub fn declare_user_function(
         }
       };
 
-      func.intrinsic = Some(syscall);
+      func.kind = rb_mir::FunctionKind::Intrinsic(syscall);
     }
   }
 
@@ -273,10 +281,11 @@ impl Lower<'_> {
             let lhs_ty = self.ty.type_of_expr(lhs);
             let args = args.iter().map(|&arg| self.lower_expr(arg)).collect();
 
-            if let Some(intrinsic) = func.intrinsic {
-              mir::Expr::CallIntrinsic(intrinsic, args)
-            } else {
-              mir::Expr::Call(func.id, lhs_ty, args)
+            match func.kind {
+              rb_mir::FunctionKind::Intrinsic(i) => mir::Expr::CallIntrinsic(i, args),
+              rb_mir::FunctionKind::UserDefined | rb_mir::FunctionKind::Extern(_) => {
+                mir::Expr::Call(func.id, lhs_ty, args)
+              }
             }
           } else {
             panic!("unresolved function {name}");

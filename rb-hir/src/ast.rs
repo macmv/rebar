@@ -52,6 +52,7 @@ pub enum PartialModule {
 pub struct Function {
   pub name: String,
 
+  pub ext:   Option<String>,
   pub attrs: Vec<Attribute>,
   pub sig:   Signature,
 
