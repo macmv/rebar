@@ -15,16 +15,18 @@ use rb_value::ValueType;
 use crate::r_value::RValue;
 
 pub struct Compiler {
-  mir_ctx:      MirContext,
-  function_ids: HashMap<mir::FunctionId, FunctionId>,
+  mir_ctx:          MirContext,
+  function_ids:     HashMap<mir::FunctionId, FunctionId>,
+  extern_functions: HashMap<mir::FunctionId, String>,
 
   functions: Vec<Function>,
 }
 
 #[derive(Clone, Copy)]
 pub struct ThreadCtx<'a> {
-  mir_ctx:      &'a MirContext,
-  function_ids: &'a HashMap<mir::FunctionId, FunctionId>,
+  mir_ctx:          &'a MirContext,
+  function_ids:     &'a HashMap<mir::FunctionId, FunctionId>,
+  extern_functions: &'a HashMap<mir::FunctionId, String>,
 }
 
 pub struct FuncBuilder<'a> {
@@ -38,11 +40,20 @@ pub struct FuncBuilder<'a> {
 
 impl Compiler {
   pub fn new(mir_ctx: MirContext) -> Self {
-    Compiler { mir_ctx, function_ids: HashMap::new(), functions: vec![] }
+    Compiler {
+      mir_ctx,
+      function_ids: HashMap::new(),
+      extern_functions: HashMap::new(),
+      functions: vec![],
+    }
   }
 
   pub fn new_thread(&self) -> ThreadCtx<'_> {
-    ThreadCtx { mir_ctx: &self.mir_ctx, function_ids: &self.function_ids }
+    ThreadCtx {
+      mir_ctx:          &self.mir_ctx,
+      function_ids:     &self.function_ids,
+      extern_functions: &self.extern_functions,
+    }
   }
 
   pub fn declare_function(&mut self, mir: &mir::Function) {
@@ -59,6 +70,10 @@ impl Compiler {
     let _sig = Signature { args, rets: vec![] };
     let func_id = FunctionId::new(self.function_ids.len() as u32);
     self.function_ids.insert(mir.id, func_id);
+  }
+
+  pub fn declare_extern_function(&mut self, id: &mir::FunctionId, name: &str) {
+    self.extern_functions.insert(*id, name.into());
   }
 
   pub fn finish_function(&mut self, func: Function) { self.functions.push(func); }
@@ -191,8 +206,14 @@ impl FuncBuilder<'_> {
           _ => unreachable!(),
         };
 
-        let output = self.builder.instr().call(self.ctx.function_ids[&function], &arg_values);
-        RValue::int(output)
+        if let Some(id) = self.ctx.function_ids.get(&function) {
+          let output = self.builder.instr().call(*id, &arg_values);
+          RValue::int(output)
+        } else if let Some(id) = self.ctx.extern_functions.get(&function) {
+          todo!("call extern function {}", id);
+        } else {
+          panic!("call to undeclared function {:?}", function);
+        }
       }
 
       mir::Expr::CallIntrinsic(mir::Intrinsic::Syscall, ref args) => {
@@ -334,7 +355,7 @@ impl FuncBuilder<'_> {
           // TODO: Use `bit1`?
           mir::UnaryOp::Not => RValue::bool(self.builder.instr().math2(Math::Xor, Bit64, v, 1)),
           mir::UnaryOp::Deref => {
-            assert_eq!(lhs.ty, ValueType::Ptr, "dereference non-pointer");
+            // assert_eq!(lhs.ty, ValueType::Ptr, "dereference non-pointer");
 
             RValue::int(self.builder.instr().load(Bit64, v))
           }

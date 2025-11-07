@@ -102,7 +102,7 @@ pub fn declare_user_function(
   ctx.items.insert(FullyQualifiedName::new_bare(path).unwrap(), func);
 }
 
-pub fn lower_function(ctx: &MirContext, ty: &Typer, hir: &hir::Function) -> Option<mir::Function> {
+pub fn lower_function(ctx: &MirContext, ty: &Typer, hir: &hir::Function) -> mir::Function {
   let mut mir = mir::Function::default();
 
   let mut lower = Lower { ctx, ty, hir, mir: &mut mir, locals: HashMap::new() };
@@ -125,11 +125,9 @@ pub fn lower_function(ctx: &MirContext, ty: &Typer, hir: &hir::Function) -> Opti
         lower.mir.items.push(stmt);
       }
     }
-  } else {
-    return None;
   }
 
-  Some(mir)
+  mir
 }
 
 struct Lower<'a> {
@@ -346,7 +344,7 @@ fn check(body: &str, expected: rb_test::Expect) {
       return;
     }
 
-    let func = crate::lower_function(&mir_ctx, &typer, &body).unwrap();
+    let func = crate::lower_function(&mir_ctx, &typer, &body);
 
     write!(&mut out, "{}", func).unwrap();
   });

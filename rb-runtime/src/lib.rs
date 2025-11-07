@@ -83,14 +83,16 @@ fn compile_diagnostics(
       let typer = rb_typer::Typer::check(&env, function, span_map);
 
       if rb_diagnostic::is_ok() {
-        if let Some(mut func) = rb_mir_lower::lower_function(&mir_ctx, &typer, function) {
+        Some(if function.ext.is_some() {
+          Func::Extern(*id, function.name.clone())
+        } else {
+          let mut func = rb_mir_lower::lower_function(&mir_ctx, &typer, function);
           func.id = *id;
-
-          return Some(func);
-        }
+          Func::UserDefined(func)
+        })
+      } else {
+        None
       }
-
-      None
     },
   );
 
@@ -99,7 +101,7 @@ fn compile_diagnostics(
   let mut functions = functions.into_iter().flatten().collect::<Vec<_>>();
 
   let start_id = rb_mir::ast::FunctionId(functions.len() as u64);
-  functions.push(generate_start_func(main_func, start_id));
+  functions.push(Func::UserDefined(generate_start_func(main_func, start_id)));
 
   // If we get to this point, all checks have passed, and we can compile to
   // cranelift IR. Collect all the functions, split them into chunks, and compile
@@ -134,22 +136,36 @@ fn generate_start_func(main_func: mir::FunctionId, start_id: mir::FunctionId) ->
   start_func
 }
 
+enum Func {
+  UserDefined(mir::Function),
+  Extern(mir::FunctionId, String),
+}
+
 fn compile_mir(
   mir_ctx: MirContext,
-  functions: Vec<rb_mir::ast::Function>,
+  functions: Vec<Func>,
   main_func: rb_mir::ast::FunctionId,
   out: &std::path::Path,
 ) {
   let mut compiler = rb_backend::Compiler::new(mir_ctx);
 
   for func in &functions {
-    compiler.declare_function(func);
+    match func {
+      Func::UserDefined(f) => compiler.declare_function(f),
+      Func::Extern(f, name) => compiler.declare_extern_function(f, name),
+    }
   }
 
-  let compiled =
-    run_parallel(&functions, || compiler.new_thread(), |ctx, f| ctx.compile_function(f));
+  let compiled = run_parallel(
+    &functions,
+    || compiler.new_thread(),
+    |ctx, f| match f {
+      Func::UserDefined(f) => Some(ctx.compile_function(f)),
+      Func::Extern(_, _) => None,
+    },
+  );
 
-  for func in compiled.into_iter() {
+  for func in compiled.into_iter().flatten() {
     compiler.finish_function(func);
   }
 
