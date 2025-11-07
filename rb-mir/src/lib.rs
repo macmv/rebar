@@ -18,7 +18,7 @@ pub struct MirContext {
 
 #[derive(Clone)]
 pub struct UserFunction {
-  pub id:        ast::UserFunctionId,
+  pub id:        ast::FunctionId,
   pub intrinsic: Option<ast::Intrinsic>,
 }
 

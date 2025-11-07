@@ -8,7 +8,7 @@ pub type StmtId = Idx<Stmt>;
 
 #[derive(Debug, Default)]
 pub struct Function {
-  pub id: UserFunctionId,
+  pub id: FunctionId,
 
   pub exprs: Arena<Expr>,
   pub stmts: Arena<Stmt>,
@@ -24,7 +24,7 @@ pub struct Function {
   pub vars: Vec<Type>,
 
   /// Other user-defined functions that this function calls.
-  pub deps: HashSet<UserFunctionId>,
+  pub deps: HashSet<FunctionId>,
 }
 
 /// A local variable ID. Variable ids reset at the start of each function
@@ -34,7 +34,7 @@ pub struct VarId(pub u32);
 
 /// A user-defined function ID. These are assigned just before lowering to MIR.
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct UserFunctionId(pub u64);
+pub struct FunctionId(pub u64);
 
 /// A user-defined struct ID. These are assigned just before lowering to MIR.
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -43,7 +43,7 @@ pub struct StructId(pub u64);
 #[derive(Debug)]
 pub enum Expr {
   Literal(Literal),
-  Call(UserFunctionId, Type, Vec<ExprId>),
+  Call(FunctionId, Type, Vec<ExprId>),
 
   Array(Vec<ExprId>, Type),
 
@@ -54,7 +54,7 @@ pub enum Expr {
   StoreStack(ExprId),
 
   Local(VarId, Type),
-  UserFunction(UserFunctionId, Type),
+  UserFunction(FunctionId, Type),
   StructInit(StructId, Vec<(String, ExprId)>),
 
   Block(Vec<StmtId>),

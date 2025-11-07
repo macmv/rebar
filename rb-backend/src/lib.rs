@@ -16,7 +16,7 @@ use crate::r_value::RValue;
 
 pub struct Compiler {
   mir_ctx:      MirContext,
-  function_ids: HashMap<mir::UserFunctionId, FunctionId>,
+  function_ids: HashMap<mir::FunctionId, FunctionId>,
 
   functions: Vec<Function>,
 }
@@ -24,7 +24,7 @@ pub struct Compiler {
 #[derive(Clone, Copy)]
 pub struct ThreadCtx<'a> {
   mir_ctx:      &'a MirContext,
-  function_ids: &'a HashMap<mir::UserFunctionId, FunctionId>,
+  function_ids: &'a HashMap<mir::FunctionId, FunctionId>,
 }
 
 pub struct FuncBuilder<'a> {
@@ -63,7 +63,7 @@ impl Compiler {
 
   pub fn finish_function(&mut self, func: Function) { self.functions.push(func); }
 
-  pub fn finish(self, start: mir::UserFunctionId, out: &std::path::Path) {
+  pub fn finish(self, start: mir::FunctionId, out: &std::path::Path) {
     let mut builder = rb_codegen_x86::ObjectBuilder::default();
     for function in self.functions {
       builder.add_function(function);

@@ -9,7 +9,7 @@ use rb_hir::{
 };
 use rb_mir::{
   MirContext, UserFunction,
-  ast::{self as mir, UserFunctionId},
+  ast::{self as mir, FunctionId},
 };
 use rb_typer::Typer;
 
@@ -22,8 +22,8 @@ pub fn scan_module<'a>(
   span_map: &'a rb_hir::SpanMap,
 ) -> (
   rb_mir::MirContext,
-  HashMap<Path, rb_mir::ast::UserFunctionId>,
-  Vec<(rb_mir::ast::UserFunctionId, &'a rb_hir::ast::Function, &'a rb_hir::FunctionSpanMap)>,
+  HashMap<Path, rb_mir::ast::FunctionId>,
+  Vec<(rb_mir::ast::FunctionId, &'a rb_hir::ast::Function, &'a rb_hir::FunctionSpanMap)>,
 ) {
   let mut mir_ctx = MirContext::default();
   let mut functions = vec![];
@@ -53,7 +53,7 @@ pub fn scan_module<'a>(
       let path = path.join(f.name.clone());
       let span_map = &span_map.functions[&hir_id];
 
-      let mir_id = rb_mir::ast::UserFunctionId(functions.len() as u64);
+      let mir_id = rb_mir::ast::FunctionId(functions.len() as u64);
       functions.push((mir_id, f, span_map));
       function_map.insert(path.clone(), mir_id);
       declare_user_function(&mut mir_ctx, mir_id, path.clone(), f, span_map);
@@ -65,7 +65,7 @@ pub fn scan_module<'a>(
 
 pub fn declare_user_function(
   ctx: &mut MirContext,
-  id: UserFunctionId,
+  id: FunctionId,
   path: Path,
   function: &hir::Function,
   span: &FunctionSpanMap,

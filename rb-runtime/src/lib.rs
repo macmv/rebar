@@ -98,7 +98,7 @@ fn compile_diagnostics(
 
   let mut functions = functions.into_iter().flatten().collect::<Vec<_>>();
 
-  let start_id = rb_mir::ast::UserFunctionId(functions.len() as u64);
+  let start_id = rb_mir::ast::FunctionId(functions.len() as u64);
   functions.push(generate_start_func(main_func, start_id));
 
   // If we get to this point, all checks have passed, and we can compile to
@@ -110,10 +110,7 @@ fn compile_diagnostics(
   Ok(())
 }
 
-fn generate_start_func(
-  main_func: mir::UserFunctionId,
-  start_id: mir::UserFunctionId,
-) -> mir::Function {
+fn generate_start_func(main_func: mir::FunctionId, start_id: mir::FunctionId) -> mir::Function {
   let mut start_func = mir::Function::default();
   start_func.id = start_id;
 
@@ -140,7 +137,7 @@ fn generate_start_func(
 fn compile_mir(
   mir_ctx: MirContext,
   functions: Vec<rb_mir::ast::Function>,
-  main_func: rb_mir::ast::UserFunctionId,
+  main_func: rb_mir::ast::FunctionId,
   out: &std::path::Path,
 ) {
   let mut compiler = rb_backend::Compiler::new(mir_ctx);
