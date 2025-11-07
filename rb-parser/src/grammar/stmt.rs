@@ -127,9 +127,11 @@ pub fn stmt(p: &mut Parser) {
           super::expr::string(p);
           m.complete(p, STRING);
         }
+        p.expect(T![fn]);
+      } else {
+        p.eat(T![fn]);
       }
 
-      p.eat(T![fn]);
       p.expect(T![ident]);
 
       params(p);
