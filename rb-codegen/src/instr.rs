@@ -196,6 +196,18 @@ impl InstrBuilder<'_> {
     output
   }
 
+  pub fn call_extern(self, _name: String, args: &[InstructionInput]) -> Variable {
+    let output = self.function.var(VariableSize::Bit64);
+
+    self.function.function.blocks[self.block.0 as usize].instructions.push(crate::Instruction {
+      opcode: crate::Opcode::CallExtern,
+      input:  args.iter().copied().collect(),
+      output: smallvec![output.into()],
+    });
+
+    output
+  }
+
   pub fn stack_store(&mut self, slot: StackId, offset: u32, value: impl Into<InstructionInput>) {
     self.function.function.blocks[self.block.0 as usize].instructions.push(crate::Instruction {
       opcode: crate::Opcode::StackStore(slot, offset),

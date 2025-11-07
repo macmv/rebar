@@ -28,7 +28,12 @@ pub struct ObjectBuilder {
 
 struct Call {
   offset: u64,
-  target: FunctionId,
+  target: CallTarget,
+}
+
+enum CallTarget {
+  Local(FunctionId),
+  Extern,
 }
 
 #[derive(Default)]
@@ -60,6 +65,10 @@ pub struct Jump {
 impl ObjectBuilder {
   pub fn set_start_function(&mut self, function: FunctionId) {
     self.object.start_offset = self.functions[function.as_u32() as usize];
+  }
+
+  pub fn add_external_symbol(&mut self, name: &str) {
+    self.object.extern_symbols.push(name.into());
   }
 
   pub fn add_internal_symbol(&mut self, name: &str) {
@@ -94,12 +103,25 @@ impl ObjectBuilder {
 
   pub fn finish(mut self) -> Object {
     for call in self.calls {
-      let rel = self.functions[call.target.as_u32() as usize] as i64 - (call.offset as i64 + 4);
-      if let Ok(offset) = i32::try_from(rel) {
-        self.object.text[call.offset as usize..call.offset as usize + 4]
-          .copy_from_slice(&offset.to_le_bytes());
-      } else {
-        panic!("call target too far away");
+      match call.target {
+        CallTarget::Local(func) => {
+          let rel = self.functions[func.as_u32() as usize] as i64 - (call.offset as i64 + 4);
+          if let Ok(offset) = i32::try_from(rel) {
+            self.object.text[call.offset as usize..call.offset as usize + 4]
+              .copy_from_slice(&offset.to_le_bytes());
+          } else {
+            panic!("call target too far away");
+          }
+        }
+
+        CallTarget::Extern => {
+          self.object.relocs.push(Rel {
+            r_offset: call.offset,
+            r_sym:    20, // TODO: Find the symbol!
+            r_type:   object::elf::R_X86_64_PC32,
+            r_addend: -4,
+          });
+        }
       }
     }
 
@@ -177,7 +199,7 @@ impl Builder {
     self.jumps.push(Jump { size, offset: self.text.len() as u64 + 1, target });
   }
 
-  fn call(&mut self, target: FunctionId) {
+  fn call(&mut self, target: CallTarget) {
     self.calls.push(Call { offset: self.text.len() as u64 + 1, target });
   }
 
@@ -595,7 +617,12 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
         }
 
         rb_codegen::Opcode::Call(func) => {
-          builder.call(func);
+          builder.call(CallTarget::Local(func));
+          builder.instr(Instruction::new(Opcode::CALL).with_immediate(Immediate::i32(0)))
+        }
+
+        rb_codegen::Opcode::CallExtern => {
+          builder.call(CallTarget::Extern);
           builder.instr(Instruction::new(Opcode::CALL).with_immediate(Immediate::i32(0)))
         }
 

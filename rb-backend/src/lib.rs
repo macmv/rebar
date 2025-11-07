@@ -80,6 +80,10 @@ impl Compiler {
 
   pub fn finish(self, start: mir::FunctionId, out: &std::path::Path) {
     let mut builder = rb_codegen_x86::ObjectBuilder::default();
+    for func in self.extern_functions.values() {
+      builder.add_external_symbol(func);
+    }
+
     for function in self.functions {
       if let Some(ref name) = function.debug_name {
         builder.add_internal_symbol(name);
@@ -217,7 +221,8 @@ impl FuncBuilder<'_> {
           let output = self.builder.instr().call(*id, &arg_values);
           RValue::int(output)
         } else if let Some(id) = self.ctx.extern_functions.get(&function) {
-          todo!("call extern function {}", id);
+          let output = self.builder.instr().call_extern(id.clone(), &arg_values);
+          RValue::int(output)
         } else {
           panic!("call to undeclared function {:?}", function);
         }

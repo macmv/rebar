@@ -137,7 +137,7 @@ impl ValueUses {
         self.set(out, v);
       }
       Opcode::Lea(_) => {}
-      Opcode::Call(_) => {
+      Opcode::Call(_) | Opcode::CallExtern => {
         self.set(out, VariableValue::Unknown);
         self.mark_required(out);
       }
