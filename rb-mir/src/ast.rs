@@ -32,10 +32,6 @@ pub struct Function {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VarId(pub u32);
 
-/// A native function ID. These are static from the perspective of the JIT.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct NativeFunctionId(pub u64);
-
 /// A user-defined function ID. These are assigned just before lowering to MIR.
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct UserFunctionId(pub u64);
