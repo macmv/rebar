@@ -33,12 +33,13 @@ struct Call {
 
 #[derive(Default)]
 pub struct Object {
-  text:           Vec<u8>,
-  start_offset:   u64,
-  ro_data:        Vec<u8>,
-  relocs:         Vec<Rel>,
-  extern_symbols: Vec<String>,
-  data_symbols:   Vec<SymbolDef>,
+  text:             Vec<u8>,
+  start_offset:     u64,
+  ro_data:          Vec<u8>,
+  relocs:           Vec<Rel>,
+  extern_symbols:   Vec<String>,
+  internal_symbols: Vec<SymbolDef>,
+  data_symbols:     Vec<SymbolDef>,
 }
 
 #[derive(Default)]
@@ -1099,6 +1100,43 @@ mod tests {
         0x080002b5      ff                     invalid
         0x080002b6      ff                     invalid
         0x080002b7      ff                     invalid
+      "#],
+    );
+  }
+
+  #[test]
+  fn internal_symbol() {
+    let mut text = vec![];
+
+    let data = b"Hello, world!\n";
+
+    let instructions = [
+      // `ret`
+      Instruction::new(Opcode::RET),
+      // `ret`
+      Instruction::new(Opcode::RET),
+    ];
+
+    for inst in &instructions {
+      let (bytes, len) = inst.encode();
+      text.extend_from_slice(&bytes[..len]);
+    }
+
+    let dir = temp_dir!();
+    Object {
+      text,
+      ro_data: data.to_vec(),
+      internal_symbols: vec![SymbolDef { name: "bar".to_string(), offset: 1 }],
+      ..Default::default()
+    }
+    .save(&dir.path().join("foo.o"));
+
+    disass(
+      &dir.path().join("foo.o"),
+      expect![@r#"
+        0x08000250      c3                     ret
+        ;-- bar:
+        0x08000251      c3                     ret
       "#],
     );
   }
