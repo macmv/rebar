@@ -81,6 +81,9 @@ impl Compiler {
   pub fn finish(self, start: mir::FunctionId, out: &std::path::Path) {
     let mut builder = rb_codegen_x86::ObjectBuilder::default();
     for function in self.functions {
+      if let Some(ref name) = function.debug_name {
+        builder.add_internal_symbol(name);
+      }
       builder.add_function(function);
     }
     builder.set_start_function(self.function_ids[&start]);
@@ -100,8 +103,12 @@ impl ThreadCtx<'_> {
       }
     }
 
-    let builder = FunctionBuilder::new(Signature { args, rets: vec![] });
+    let mut builder = FunctionBuilder::new(Signature { args, rets: vec![] });
     let mut locals = HashMap::new();
+
+    if let Some(name) = &mir.debug_name {
+      builder.set_debug_name(name);
+    }
 
     let mut i = 0;
     for (var, arg) in mir.params.iter().enumerate() {

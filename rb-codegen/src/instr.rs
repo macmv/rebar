@@ -29,6 +29,7 @@ impl FunctionBuilder {
     FunctionBuilder {
       next_variable: sig.args.len() as u32,
       function:      Function {
+        debug_name: None,
         sig,
         blocks: vec![Block::default()],
         data: vec![],
@@ -38,6 +39,10 @@ impl FunctionBuilder {
       terminated:    vec![false],
       block:         BlockId(0),
     }
+  }
+
+  pub fn set_debug_name(&mut self, name: &str) {
+    self.function.debug_name = Some(name.to_string());
   }
 
   pub fn add_data(&mut self, data: &[u8]) -> Symbol {

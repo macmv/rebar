@@ -88,6 +88,9 @@ fn compile_diagnostics(
         } else {
           let mut func = rb_mir_lower::lower_function(&mir_ctx, &typer, function);
           func.id = *id;
+          if !function.name.is_empty() {
+            func.debug_name = Some(function.name.clone());
+          }
           Func::UserDefined(func)
         })
       } else {

@@ -62,6 +62,13 @@ impl ObjectBuilder {
     self.object.start_offset = self.functions[function.as_u32() as usize];
   }
 
+  pub fn add_internal_symbol(&mut self, name: &str) {
+    self
+      .object
+      .internal_symbols
+      .push(SymbolDef { name: name.into(), offset: self.object.text.len() as u32 });
+  }
+
   pub fn add_function(&mut self, mut function: rb_codegen::Function) {
     let ro_offset = self.object.ro_data.len() as u32;
     self.object.ro_data.extend_from_slice(&function.data);

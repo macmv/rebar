@@ -16,6 +16,7 @@ pub struct Signature {
 
 #[derive(Default, PartialEq, Eq)]
 pub struct Function {
+  pub debug_name:   Option<String>,
   pub sig:          Signature,
   pub blocks:       Vec<Block>,
   pub data:         Vec<u8>,

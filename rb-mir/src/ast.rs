@@ -8,7 +8,8 @@ pub type StmtId = Idx<Stmt>;
 
 #[derive(Debug, Default)]
 pub struct Function {
-  pub id: FunctionId,
+  pub debug_name: Option<String>,
+  pub id:         FunctionId,
 
   pub exprs: Arena<Expr>,
   pub stmts: Arena<Stmt>,
