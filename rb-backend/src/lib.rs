@@ -78,7 +78,7 @@ impl Compiler {
 
   pub fn finish_function(&mut self, func: Function) { self.functions.push(func); }
 
-  pub fn finish(self, start: mir::FunctionId, out: &std::path::Path) {
+  pub fn finish(self, entry: mir::FunctionId, out: &std::path::Path) {
     let mut builder = rb_codegen_x86::ObjectBuilder::default();
     for func in self.extern_functions.values() {
       builder.add_external_symbol(func);
@@ -90,7 +90,7 @@ impl Compiler {
       }
       builder.add_function(function);
     }
-    builder.set_start_function(self.function_ids[&start]);
+    builder.add_internal_symbol_for("main", self.function_ids[&entry]);
     let object = builder.finish();
     object.save(out);
   }

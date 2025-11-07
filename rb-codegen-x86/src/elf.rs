@@ -17,7 +17,6 @@ pub fn generate(filename: &Path, object: &Object) {
 
   writer.reserve_file_header();
 
-  let start = writer.add_string(b"main");
   let extern_symbols =
     object.extern_symbols.iter().map(|s| (s, writer.add_string(s.as_bytes()))).collect::<Vec<_>>();
   let internal_symbols = object
@@ -50,7 +49,6 @@ pub fn generate(filename: &Path, object: &Object) {
   for _ in &data_symbols {
     writer.reserve_symbol_index(Some(ro_data_section));
   }
-  writer.reserve_symbol_index(Some(text_section));
   for _ in &internal_symbols {
     writer.reserve_symbol_index(Some(text_section));
   }
@@ -139,15 +137,6 @@ pub fn generate(filename: &Path, object: &Object) {
   }
 
   // all non-local symbols must be defined after.
-  writer.write_symbol(&Sym {
-    name:     Some(start),
-    section:  Some(text_section),
-    st_info:  (elf::STB_GLOBAL << 4) | elf::STT_FUNC,
-    st_other: 0,
-    st_shndx: 0,
-    st_value: object.start_offset,
-    st_size:  object.text.len() as u64,
-  });
   for (symbol, id) in internal_symbols {
     writer.write_symbol(&Sym {
       name:     Some(id),

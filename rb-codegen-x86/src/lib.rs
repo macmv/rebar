@@ -39,7 +39,6 @@ enum CallTarget {
 #[derive(Default)]
 pub struct Object {
   text:             Vec<u8>,
-  start_offset:     u64,
   ro_data:          Vec<u8>,
   relocs:           Vec<Rel>,
   extern_symbols:   Vec<String>,
@@ -63,8 +62,11 @@ pub struct Jump {
 }
 
 impl ObjectBuilder {
-  pub fn set_start_function(&mut self, function: FunctionId) {
-    self.object.start_offset = self.functions[function.as_u32() as usize];
+  pub fn add_internal_symbol_for(&mut self, name: &str, function: FunctionId) {
+    self.object.internal_symbols.push(SymbolDef {
+      name:   name.into(),
+      offset: self.functions[function.as_u32() as usize] as u32,
+    });
   }
 
   pub fn add_external_symbol(&mut self, name: &str) {
@@ -940,7 +942,13 @@ mod tests {
 
     let dir = temp_dir!();
     let object_path = dir.path().join("foo.o");
-    Object { text: builder.text, relocs: builder.relocs, ..Default::default() }.save(&object_path);
+    Object {
+      text: builder.text,
+      relocs: builder.relocs,
+      internal_symbols: vec![SymbolDef { offset: 0, name: "_start".to_string() }],
+      ..Default::default()
+    }
+    .save(&object_path);
     disass(
       &object_path,
       expect![@r#"
@@ -1024,10 +1032,10 @@ mod tests {
     let binary_path = dir.path().join("a.out");
     Object {
       text: builder.text,
-      start_offset: 0,
       ro_data: data.to_vec(),
       relocs: builder.relocs,
       data_symbols: vec![SymbolDef { offset: 0, name: "foo".to_string() }],
+      internal_symbols: vec![SymbolDef { offset: 0, name: "_start".to_string() }],
       ..Default::default()
     }
     .save(&object_path);
@@ -1118,6 +1126,7 @@ mod tests {
         r_addend: -4,
       }],
       extern_symbols: vec!["bar".to_string()],
+      internal_symbols: vec![SymbolDef { offset: 0, name: "_start".to_string() }],
       ..Default::default()
     }
     .save(&dir.path().join("foo.o"));
@@ -1160,7 +1169,10 @@ mod tests {
     Object {
       text,
       ro_data: data.to_vec(),
-      internal_symbols: vec![SymbolDef { name: "bar".to_string(), offset: 1 }],
+      internal_symbols: vec![
+        SymbolDef { offset: 0, name: "_start".to_string() },
+        SymbolDef { offset: 1, name: "bar".to_string() },
+      ],
       ..Default::default()
     }
     .save(&dir.path().join("foo.o"));
@@ -1219,7 +1231,12 @@ mod tests {
     }
 
     let dir = temp_dir!();
-    Object { text, ..Default::default() }.save(&dir.path().join("foo.o"));
+    Object {
+      text,
+      internal_symbols: vec![SymbolDef { offset: 0, name: "_start".to_string() }],
+      ..Default::default()
+    }
+    .save(&dir.path().join("foo.o"));
     disass(
       &dir.path().join("foo.o"),
       expect![@r#"
@@ -1306,10 +1323,10 @@ mod tests {
     let object_path = dir.path().join("foo.o");
     Object {
       text: builder.text,
-      start_offset: 0,
       ro_data: vec![],
       relocs: builder.relocs,
       data_symbols: vec![SymbolDef { offset: 0, name: "foo".to_string() }],
+      internal_symbols: vec![SymbolDef { offset: 0, name: "_start".to_string() }],
       ..Default::default()
     }
     .save(&object_path);
