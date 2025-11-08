@@ -222,8 +222,8 @@ impl FuncBuilder<'_> {
         };
 
         if let Some(id) = self.ctx.function_ids.get(&function) {
-          let output = self.builder.instr().call(*id, &arg_values);
-          RValue::int(output)
+          let output = self.builder.instr().call(*id, &arg_values, &[Bit64]);
+          RValue::int(output[0])
         } else if let Some(id) = self.ctx.extern_functions.get(&function) {
           let output = self.builder.instr().call_extern(*id, &arg_values);
           RValue::int(output)

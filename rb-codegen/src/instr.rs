@@ -184,16 +184,21 @@ instructions! {
 }
 
 impl InstrBuilder<'_> {
-  pub fn call(self, function: FunctionId, args: &[InstructionInput]) -> Variable {
-    let output = self.function.var(VariableSize::Bit64);
+  pub fn call(
+    self,
+    function: FunctionId,
+    args: &[InstructionInput],
+    rets: &[VariableSize],
+  ) -> Vec<Variable> {
+    let variables: Vec<Variable> = rets.iter().map(|s| self.function.var(*s)).collect();
 
     self.function.function.blocks[self.block.0 as usize].instructions.push(crate::Instruction {
       opcode: crate::Opcode::Call(function),
       input:  args.iter().copied().collect(),
-      output: smallvec![output.into()],
+      output: variables.iter().copied().map(Into::into).collect(),
     });
 
-    output
+    variables
   }
 
   pub fn call_extern(self, id: ExternId, args: &[InstructionInput]) -> Variable {
