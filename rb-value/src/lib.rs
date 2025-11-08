@@ -74,6 +74,7 @@ impl ValueType {
 
   pub fn for_type(ctx: &MirContext, ty: &Type) -> Self {
     match ty {
+      Type::Tuple(t) if t.is_empty() => ValueType::Nil,
       Type::Array(_) => ValueType::Array,
       Type::Primitive(rb_hir::ast::PrimitiveType::Str) => ValueType::Slice,
       Type::Primitive(_) => ValueType::Int,
@@ -86,7 +87,9 @@ impl ValueType {
         ValueType::Struct(id)
       }
 
-      _ => todo!(),
+      Type::Ref(_, _) => ValueType::Ptr,
+
+      _ => todo!("value type for {ty}"),
     }
   }
 }

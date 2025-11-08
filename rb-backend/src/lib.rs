@@ -202,8 +202,8 @@ impl FuncBuilder<'_> {
       }
 
       mir::Expr::Call(function, ref sig_ty, ref args) => {
-        let arg_types = match sig_ty {
-          Type::Function(args, _) => args,
+        let (arg_types, ret_ty) = match sig_ty {
+          Type::Function(args, ret) => (args, ret),
           _ => unreachable!(),
         };
 
@@ -216,14 +216,15 @@ impl FuncBuilder<'_> {
           arg_values.extend(v.into_iter().map(InstructionInput::from));
         }
 
-        let _ret_ty = match *sig_ty {
-          Type::Function(_, ref ret) => ret,
-          _ => unreachable!(),
-        };
-
         if let Some(id) = self.ctx.function_ids.get(&function) {
-          let output = self.builder.instr().call(*id, &arg_values, &[Bit64]);
-          RValue::int(output[0])
+          let vt = ValueType::for_type(self.mir(), ret_ty);
+          let mut outputs = vec![];
+          for _ in 0..vt.len(self.mir()) {
+            outputs.push(Bit64);
+          }
+
+          let output = self.builder.instr().call(*id, &arg_values, &outputs);
+          RValue { ty: vt, kind: r_value::RValueKind::Dyn(output) }
         } else if let Some(id) = self.ctx.extern_functions.get(&function) {
           let output = self.builder.instr().call_extern(*id, &arg_values);
           RValue::int(output)
