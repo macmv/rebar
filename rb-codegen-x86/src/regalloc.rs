@@ -545,7 +545,7 @@ impl Requirement {
         _ => unreachable!(),
       },
       // TODO: Calling convention?
-      Opcode::Call(_) => match index {
+      Opcode::Call(_) | Opcode::CallExtern(_) => match index {
         0 => Specific(RegisterIndex::Edi),
         1 => Specific(RegisterIndex::Esi),
         2 => Specific(RegisterIndex::Edx),
@@ -588,7 +588,7 @@ impl Requirement {
           Math::Irem | Math::Urem => Some(RegisterIndex::Edx),
         }
       }
-      Opcode::Call(_) => match index {
+      Opcode::Call(_) | Opcode::CallExtern(_) => match index {
         0 => Some(RegisterIndex::Eax),
         _ => todo!("more than 1 return"),
       },
