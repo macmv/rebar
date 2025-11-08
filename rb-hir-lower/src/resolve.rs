@@ -147,35 +147,9 @@ impl Resolver<'_> {
     uses: &UseMap,
   ) {
     for arg in &mut function.sig.args {
-      if let hir::TypeExpr::Struct(ref mut p) = arg.1 {
-        if let Some(path) = uses.lookup(p) {
-          // imported
-          *p = path;
-        } else {
-          let abs = current.concat(&p);
-          if self.package.contains(&abs) {
-            // relative path
-            *p = abs;
-          } else {
-            emit!(span_map.name_span.unwrap() => format!("unresolved type `{p}`"));
-          }
-        }
-      }
+      self.resolve_type_expr(&mut arg.1, span_map, current, uses);
     }
-    if let hir::TypeExpr::Struct(p) = &mut function.sig.ret {
-      if let Some(path) = uses.lookup(p) {
-        // imported
-        *p = path;
-      } else {
-        let abs = current.concat(&p);
-        if self.package.contains(&abs) {
-          // relative path
-          *p = abs;
-        } else {
-          emit!(span_map.name_span.unwrap() => format!("unresolved type `{p}`"));
-        }
-      }
-    }
+    self.resolve_type_expr(&mut function.sig.ret, span_map, current, uses);
 
     let Some(ref body) = function.body else { return };
 
@@ -258,6 +232,42 @@ impl Resolver<'_> {
         }
 
         _ => {}
+      }
+    }
+  }
+
+  fn resolve_type_expr(
+    &self,
+    te: &mut hir::TypeExpr,
+    span_map: &FunctionSpanMap,
+    current: &Path,
+    uses: &UseMap,
+  ) {
+    match te {
+      hir::TypeExpr::Primitive(_) => {}
+      hir::TypeExpr::Struct(p) => {
+        if let Some(path) = uses.lookup(p) {
+          // imported
+          *p = path;
+        } else {
+          let abs = current.concat(&p);
+          if self.package.contains(&abs) {
+            // relative path
+            *p = abs;
+          } else {
+            emit!(span_map.name_span.unwrap() => format!("unresolved type `{p}`"));
+          }
+        }
+      }
+
+      hir::TypeExpr::Ref(inner, _) => {
+        self.resolve_type_expr(inner, span_map, current, uses);
+      }
+
+      hir::TypeExpr::Tuple(items) => {
+        for it in items {
+          self.resolve_type_expr(it, span_map, current, uses);
+        }
       }
     }
   }
