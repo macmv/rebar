@@ -146,6 +146,37 @@ impl Resolver<'_> {
     current: &Path,
     uses: &UseMap,
   ) {
+    for arg in &mut function.sig.args {
+      if let hir::TypeExpr::Struct(ref mut p) = arg.1 {
+        if let Some(path) = uses.lookup(p) {
+          // imported
+          *p = path;
+        } else {
+          let abs = current.concat(&p);
+          if self.package.contains(&abs) {
+            // relative path
+            *p = abs;
+          } else {
+            emit!(span_map.name_span.unwrap() => format!("unresolved type `{p}`"));
+          }
+        }
+      }
+    }
+    if let hir::TypeExpr::Struct(p) = &mut function.sig.ret {
+      if let Some(path) = uses.lookup(p) {
+        // imported
+        *p = path;
+      } else {
+        let abs = current.concat(&p);
+        if self.package.contains(&abs) {
+          // relative path
+          *p = abs;
+        } else {
+          emit!(span_map.name_span.unwrap() => format!("unresolved type `{p}`"));
+        }
+      }
+    }
+
     let Some(ref body) = function.body else { return };
 
     let mut expr = 0;
@@ -299,13 +330,13 @@ mod tests {
       use foo::Bar
       use foo::baz
 
-      fn main(x: Bar) {
+      fn main(x: Bar) -> Bar {
         assert(x)
         baz()
       }
       "#,
       expect![@r#"
-        fn main(x: Bar) {
+        fn main(x: foo::Bar) -> foo::Bar {
           sys::assert(x)
           foo::baz()
         }"#],
