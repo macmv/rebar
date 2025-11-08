@@ -122,27 +122,26 @@ impl ValueUses {
       }
     }
 
-    let out = match *instr.output.as_slice() {
-      [] => return,
-      [InstructionOutput::Var(v)] => v,
-      _ => todo!("handle non-variable outputs in ValueUses analysis"),
-    };
-
     for input in &instr.input {
       if let InstructionInput::Var(var) = input {
-        self.attach_use(out, *var);
+        for output in &instr.output {
+          let InstructionOutput::Var(out) = output;
+          self.attach_use(*out, *var);
+        }
       }
     }
 
     match instr.opcode {
       Opcode::Move => {
         let v = self.input_to_value(instr.input[0]);
-        self.set(out, v);
+        self.set(instr.output[0].unwrap_var(), v);
       }
       Opcode::Lea(_) => {}
       Opcode::Call(_) | Opcode::CallExtern(_) => {
-        self.set(out, VariableValue::Unknown);
-        self.mark_required(out);
+        for out in &instr.output {
+          self.set(out.unwrap_var(), VariableValue::Unknown);
+          self.mark_required(out.unwrap_var());
+        }
       }
       Opcode::Syscall => {}
       Opcode::Compare(_) => {
@@ -153,11 +152,11 @@ impl ValueUses {
           )),
         };
 
-        self.set(out, cmp);
+        self.set(instr.output[0].unwrap_var(), cmp);
       }
       Opcode::Math(math) => {
         self.set(
-          out,
+          instr.output[0].unwrap_var(),
           VariableValue::Math {
             math,
             input: instr.input.iter().map(|i| self.actual_value(*i)).collect(),
@@ -166,15 +165,17 @@ impl ValueUses {
       }
 
       Opcode::Branch(_, _) => {
-        self.set(out, VariableValue::Unknown);
-        self.mark_required(out);
+        self.set(instr.output[0].unwrap_var(), VariableValue::Unknown);
+        self.mark_required(instr.output[0].unwrap_var());
       }
 
       Opcode::StackAddr(_, _)
       | Opcode::StackLoad(_, _)
       | Opcode::StackStore(_, _)
       | Opcode::Load => {
-        self.set(out, VariableValue::Unknown);
+        for out in &instr.output {
+          self.set(out.unwrap_var(), VariableValue::Unknown);
+        }
       }
     }
 
