@@ -95,8 +95,16 @@ impl<'a> Render<'a> {
         let line_num = start_line_num + i as u32;
         let line_str = line.trim_end();
 
-        writeln!(out, "{} {} {}", self.blue(self.bold(line_num)), self.blue("|"), line_str)
-          .unwrap();
+        let line_num_len = line_num.ilog10() as usize + 1;
+        writeln!(
+          out,
+          "{}{} {} {}",
+          " ".repeat(margin_str.len() - line_num_len),
+          self.blue(self.bold(line_num)),
+          self.blue("|"),
+          line_str
+        )
+        .unwrap();
       }
 
       writeln!(out, "{} {}", margin_str, self.blue("|")).unwrap();
