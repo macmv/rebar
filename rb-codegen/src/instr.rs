@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 use smallvec::smallvec;
 
 use crate::{
-  Block, BlockId, Condition, Function, FunctionId, InstructionInput, Math, Signature, StackId,
-  Symbol, SymbolDef, Variable, VariableSize,
+  Block, BlockId, Condition, ExternId, Function, FunctionId, InstructionInput, Math, Signature,
+  StackId, Symbol, SymbolDef, Variable, VariableSize,
 };
 
 pub struct FunctionBuilder {
@@ -196,11 +196,11 @@ impl InstrBuilder<'_> {
     output
   }
 
-  pub fn call_extern(self, _name: String, args: &[InstructionInput]) -> Variable {
+  pub fn call_extern(self, id: ExternId, args: &[InstructionInput]) -> Variable {
     let output = self.function.var(VariableSize::Bit64);
 
     self.function.function.blocks[self.block.0 as usize].instructions.push(crate::Instruction {
-      opcode: crate::Opcode::CallExtern,
+      opcode: crate::Opcode::CallExtern(id),
       input:  args.iter().copied().collect(),
       output: smallvec![output.into()],
     });

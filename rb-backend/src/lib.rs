@@ -1,10 +1,7 @@
-use std::{
-  collections::{BTreeMap, HashMap},
-  num::NonZero,
-};
+use std::{collections::HashMap, num::NonZero};
 
 use rb_codegen::{
-  Condition, Function, FunctionBuilder, FunctionId, InstructionInput, Math, Signature,
+  Condition, ExternId, Function, FunctionBuilder, FunctionId, InstructionInput, Math, Signature,
   TerminatorInstruction, Variable, VariableSize::*,
 };
 use rb_mir::{MirContext, ast as mir};
@@ -20,7 +17,8 @@ use crate::r_value::RValue;
 pub struct Compiler {
   mir_ctx:          MirContext,
   function_ids:     HashMap<mir::FunctionId, FunctionId>,
-  extern_functions: BTreeMap<mir::FunctionId, String>,
+  extern_names:     Vec<String>,
+  extern_functions: HashMap<mir::FunctionId, ExternId>,
 
   functions: Vec<Function>,
 }
@@ -29,7 +27,7 @@ pub struct Compiler {
 pub struct ThreadCtx<'a> {
   mir_ctx:          &'a MirContext,
   function_ids:     &'a HashMap<mir::FunctionId, FunctionId>,
-  extern_functions: &'a BTreeMap<mir::FunctionId, String>,
+  extern_functions: &'a HashMap<mir::FunctionId, ExternId>,
 }
 
 pub struct FuncBuilder<'a> {
@@ -46,7 +44,8 @@ impl Compiler {
     Compiler {
       mir_ctx,
       function_ids: HashMap::new(),
-      extern_functions: BTreeMap::new(),
+      extern_functions: HashMap::new(),
+      extern_names: vec![],
       functions: vec![],
     }
   }
@@ -75,15 +74,17 @@ impl Compiler {
     self.function_ids.insert(mir.id, func_id);
   }
 
-  pub fn declare_extern_function(&mut self, id: &mir::FunctionId, name: &str) {
-    self.extern_functions.insert(*id, name.into());
+  pub fn declare_extern_function(&mut self, mir: mir::FunctionId, name: &str) {
+    let id = ExternId(self.extern_names.len() as u32);
+    self.extern_functions.insert(mir, id);
+    self.extern_names.push(name.into());
   }
 
   pub fn finish_function(&mut self, func: Function) { self.functions.push(func); }
 
   pub fn finish(self, entry: mir::FunctionId, out: &std::path::Path) {
     let mut builder = rb_codegen_x86::ObjectBuilder::default();
-    for func in self.extern_functions.values() {
+    for func in &self.extern_names {
       builder.add_external_symbol(func);
     }
 
@@ -224,7 +225,7 @@ impl FuncBuilder<'_> {
           let output = self.builder.instr().call(*id, &arg_values);
           RValue::int(output)
         } else if let Some(id) = self.ctx.extern_functions.get(&function) {
-          let output = self.builder.instr().call_extern(id.clone(), &arg_values);
+          let output = self.builder.instr().call_extern(*id, &arg_values);
           RValue::int(output)
         } else {
           panic!("call to undeclared function {:?}", function);

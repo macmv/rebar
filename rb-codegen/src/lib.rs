@@ -46,6 +46,8 @@ pub struct FunctionId(u32);
 pub struct BlockId(u32);
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Variable(u32);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ExternId(pub u32);
 
 impl<T> TIndex<T> for BlockId {
   fn from_index(index: usize) -> Self { BlockId(index as u32) }
@@ -116,7 +118,7 @@ pub enum Opcode {
   Branch(Condition, BlockId),
   Compare(Condition),
   Call(FunctionId),
-  CallExtern,
+  CallExtern(ExternId),
   Lea(Symbol),
   Move,
   Load,
@@ -522,7 +524,7 @@ impl fmt::Display for Opcode {
       Opcode::Branch(c, target) => write!(f, "branch {c:?} to {target}"),
       Opcode::Compare(c) => write!(f, "compare {c:?}"),
       Opcode::Call(func) => write!(f, "call function {}", func.0),
-      Opcode::CallExtern => write!(f, "call extern"),
+      Opcode::CallExtern(id) => write!(f, "call extern {}", id.0),
       Opcode::Lea(symbol) => write!(f, "lea symbol {}", symbol.index),
       Opcode::Move => write!(f, "mov"),
       Opcode::Load => write!(f, "load"),

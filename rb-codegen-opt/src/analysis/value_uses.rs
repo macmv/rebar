@@ -113,7 +113,7 @@ impl ValueUses {
   fn pass_instr(&mut self, instr: &Instruction) {
     if matches!(
       instr.opcode,
-      Opcode::Syscall | Opcode::Call(_) | Opcode::CallExtern | Opcode::StackStore(_, _)
+      Opcode::Syscall | Opcode::Call(_) | Opcode::CallExtern(_) | Opcode::StackStore(_, _)
     ) {
       for input in &instr.input {
         if let InstructionInput::Var(var) = input {
@@ -140,7 +140,7 @@ impl ValueUses {
         self.set(out, v);
       }
       Opcode::Lea(_) => {}
-      Opcode::Call(_) | Opcode::CallExtern => {
+      Opcode::Call(_) | Opcode::CallExtern(_) => {
         self.set(out, VariableValue::Unknown);
         self.mark_required(out);
       }

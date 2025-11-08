@@ -155,7 +155,7 @@ fn compile_mir(
   for func in &functions {
     match func {
       Func::UserDefined(f) => compiler.declare_function(f),
-      Func::Extern(f, name) => compiler.declare_extern_function(f, name),
+      Func::Extern(f, name) => compiler.declare_extern_function(*f, name),
     }
   }
 

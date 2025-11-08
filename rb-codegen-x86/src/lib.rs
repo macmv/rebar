@@ -5,8 +5,8 @@ pub use elf::generate;
 pub use instruction::{Immediate, Instruction, ModReg, Opcode, Prefix};
 use object::write::elf::Rel;
 use rb_codegen::{
-  BlockId, FunctionId, InstructionInput, InstructionOutput, Math, Symbol, SymbolDef, VariableSize,
-  immediate,
+  BlockId, ExternId, FunctionId, InstructionInput, InstructionOutput, Math, Symbol, SymbolDef,
+  VariableSize, immediate,
 };
 
 use crate::regalloc::VariableRegisters;
@@ -33,7 +33,7 @@ struct Call {
 
 enum CallTarget {
   Local(FunctionId),
-  Extern,
+  Extern(ExternId),
 }
 
 #[derive(Default)]
@@ -116,10 +116,13 @@ impl ObjectBuilder {
           }
         }
 
-        CallTarget::Extern => {
+        CallTarget::Extern(id) => {
           self.object.relocs.push(Rel {
             r_offset: call.offset,
-            r_sym:    20, // TODO: Find the symbol!
+            r_sym:    1
+              + self.object.data_symbols.len() as u32
+              + self.object.internal_symbols.len() as u32
+              + id.0,
             r_type:   object::elf::R_X86_64_PC32,
             r_addend: -4,
           });
@@ -623,8 +626,8 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           builder.instr(Instruction::new(Opcode::CALL).with_immediate(Immediate::i32(0)))
         }
 
-        rb_codegen::Opcode::CallExtern => {
-          builder.call(CallTarget::Extern);
+        rb_codegen::Opcode::CallExtern(id) => {
+          builder.call(CallTarget::Extern(id));
           builder.instr(Instruction::new(Opcode::CALL).with_immediate(Immediate::i32(0)))
         }
 

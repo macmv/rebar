@@ -13,6 +13,9 @@ fn exit(code: i64) -> ! {
 }
 fn kill(pid: i64, sig: i64) -> i64 { intrinsic::syscall3(62, pid, sig) }
 
+extern "C" fn malloc(size: i64) -> &u8
+extern "C" fn free(ptr: &u8)
+
 fn abort() -> ! {
   kill(getpid(), 6)
   intrinsic::trap()
