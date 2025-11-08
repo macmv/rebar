@@ -45,7 +45,7 @@ pub fn compile_test(
   };
 
   hir.modules.insert("test".into(), rb_hir::ast::PartialModule::Inline(test_module));
-  span_map.modules.insert(rb_hir::ast::Path { segments: vec!["test".into()] }, test_span_map);
+  span_map.append(&rb_hir::ast::Path { segments: vec!["test".into()] }, test_span_map);
 
   let sources = Arc::new(sources);
   let env = rb_hir::Environment::empty();
