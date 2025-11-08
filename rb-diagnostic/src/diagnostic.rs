@@ -130,20 +130,35 @@ impl<'a> Render<'a> {
         .unwrap_or(source.source.len());
 
       let line_str = &source.source[start..end].trim_end();
-
       let margin_str = spaces(line_num.ilog10() as usize + 1);
-      let underline_str =
-        format!("{}{}", spaces(start_col), self.red(self.bold(carrots(end_col - start_col))));
 
       let mut out = String::new();
+      let bar = self.blue("|");
 
-      writeln!(out, "{}: {}", self.red(self.bold("error")), self.bold(&diagnostic.message))
+      writeln!(
+        out,
+        "{error}: {message}",
+        error = self.red(self.bold("error")),
+        message = self.bold(&diagnostic.message)
+      )
+      .unwrap();
+      writeln!(
+        out,
+        "{margin_str}{arrow} {source}:{line_num}:{col_num}",
+        arrow = self.blue("-->"),
+        source = source.name,
+      )
+      .unwrap();
+      writeln!(out, "{margin_str} {bar}").unwrap();
+      writeln!(out, "{line_num} {bar} {line_str}", line_num = self.blue(self.bold(line_num)))
         .unwrap();
-      writeln!(out, "{}{} {}:{}:{}", margin_str, self.blue("-->"), source.name, line_num, col_num)
-        .unwrap();
-      writeln!(out, "{} {}", margin_str, self.blue("|")).unwrap();
-      writeln!(out, "{} {} {}", self.blue(self.bold(line_num)), self.blue("|"), line_str).unwrap();
-      writeln!(out, "{} {} {}", margin_str, self.blue("|"), underline_str).unwrap();
+      writeln!(
+        out,
+        "{margin_str} {bar} {spaces}{underline}",
+        spaces = spaces(start_col),
+        underline = self.red(self.bold(carrots(end_col - start_col)))
+      )
+      .unwrap();
 
       out
     }
