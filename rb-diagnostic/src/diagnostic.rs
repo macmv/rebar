@@ -73,7 +73,7 @@ impl<'a> Render<'a> {
         .map(|o| u32::from(o) as usize)
         .unwrap_or(source.source.len());
 
-      let margin_str = " ".repeat(end_line_num.ilog10() as usize + 1);
+      let margin_str = spaces(end_line_num.ilog10() as usize + 1);
 
       let mut out = String::new();
 
@@ -99,7 +99,7 @@ impl<'a> Render<'a> {
         writeln!(
           out,
           "{}{} {} {}",
-          " ".repeat(margin_str.len() - line_num_len),
+          spaces(margin_str.len - line_num_len),
           self.blue(self.bold(line_num)),
           self.blue("|"),
           line_str
@@ -131,8 +131,8 @@ impl<'a> Render<'a> {
 
       let line_str = &source.source[start..end].trim_end();
 
-      let margin_str = " ".repeat(line_num.ilog10() as usize + 1);
-      let underline_str = format!("{}{}", " ".repeat(start_col), "^".repeat(end_col - start_col));
+      let margin_str = spaces(line_num.ilog10() as usize + 1);
+      let underline_str = format!("{}{}", spaces(start_col), carrots(end_col - start_col));
 
       let mut out = String::new();
 
@@ -146,6 +146,23 @@ impl<'a> Render<'a> {
 
       out
     }
+  }
+}
+
+struct Repeated {
+  len: usize,
+  c:   char,
+}
+
+fn spaces(len: usize) -> Repeated { Repeated { len, c: ' ' } }
+fn carrots(len: usize) -> Repeated { Repeated { len, c: '^' } }
+
+impl Display for Repeated {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    for _ in 0..self.len {
+      f.write_char(self.c)?;
+    }
+    Ok(())
   }
 }
 
