@@ -132,7 +132,8 @@ impl<'a> Render<'a> {
       let line_str = &source.source[start..end].trim_end();
 
       let margin_str = spaces(line_num.ilog10() as usize + 1);
-      let underline_str = format!("{}{}", spaces(start_col), carrots(end_col - start_col));
+      let underline_str =
+        format!("{}{}", spaces(start_col), self.red(self.bold(carrots(end_col - start_col))));
 
       let mut out = String::new();
 
