@@ -1,0 +1,2 @@
+let ptr = sys::malloc(16)
+sys::free(ptr)
