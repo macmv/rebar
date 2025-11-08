@@ -11,7 +11,7 @@ use rb_hir::{
 use rb_syntax::{AstNode, SyntaxNodePtr, cst};
 
 #[cfg(any(test, feature = "test"))]
-use rb_diagnostic::Sources;
+use rb_diagnostic::{Diagnostic, Sources};
 #[cfg(any(test, feature = "test"))]
 use rb_hir::Environment;
 #[cfg(any(test, feature = "test"))]
@@ -26,36 +26,61 @@ pub use fs::FileSystem;
 pub use resolve::resolve_hir;
 
 #[cfg(any(test, feature = "test"))]
+pub fn parse_body_err(
+  env: &Environment,
+  body: &str,
+) -> (Arc<Sources>, Result<(hir::Module, ModuleSpanMap), Vec<Diagnostic>>) {
+  use rb_diagnostic::Source;
+
+  let mut sources = Sources::new();
+  let source = sources.add(Source::new("inline.rbr".to_string(), body.to_string()));
+  let sources_arc = Arc::new(sources);
+
+  let res = rb_diagnostic::run(sources_arc.clone(), || parse_body_inner(env, source, body));
+
+  (sources_arc, res)
+}
+
+#[cfg(any(test, feature = "test"))]
 pub fn parse_body(env: &Environment, body: &str) -> (Arc<Sources>, hir::Module, ModuleSpanMap) {
   use rb_diagnostic::Source;
 
   let mut sources = Sources::new();
-  let id = sources.add(Source::new("inline.rbr".to_string(), body.to_string()));
+  let source = sources.add(Source::new("inline.rbr".to_string(), body.to_string()));
   let sources_arc = Arc::new(sources);
-  let (module, module_span_map) = rb_diagnostic::run_or_exit(sources_arc.clone(), || {
-    let res = cst::SourceFile::parse(&body);
-    if !res.errors().is_empty() {
-      for error in res.errors() {
-        emit!(Span { file: id, range: error.span() } => error.message());
-      }
-    }
 
-    if !rb_diagnostic::is_ok() {
-      return Default::default();
-    }
-
-    let (mut module, mut span_map, _) = crate::lower_source(res.tree(), id);
-    if !rb_diagnostic::is_ok() {
-      return Default::default();
-    }
-
-    crate::resolve_hir(&env, &mut module, &span_map);
-    let module_span_map = span_map.modules.remove(&Path::new()).unwrap();
-
-    (module, module_span_map)
-  });
+  let (module, module_span_map) =
+    rb_diagnostic::run_or_exit(sources_arc.clone(), || parse_body_inner(env, source, body));
 
   (sources_arc, module, module_span_map)
+}
+
+#[cfg(any(test, feature = "test"))]
+fn parse_body_inner(
+  env: &Environment,
+  source: SourceId,
+  body: &str,
+) -> (hir::Module, ModuleSpanMap) {
+  let res = cst::SourceFile::parse(&body);
+  if !res.errors().is_empty() {
+    for error in res.errors() {
+      emit!(Span { file: source, range: error.span() } => error.message());
+    }
+  }
+
+  if !rb_diagnostic::is_ok() {
+    return Default::default();
+  }
+
+  let (mut module, mut span_map, _) = crate::lower_source(res.tree(), source);
+  if !rb_diagnostic::is_ok() {
+    return Default::default();
+  }
+
+  crate::resolve_hir(&env, &mut module, &span_map);
+  let module_span_map = span_map.modules.remove(&Path::new()).unwrap();
+
+  (module, module_span_map)
 }
 
 pub fn lower_source(

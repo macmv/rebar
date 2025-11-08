@@ -323,9 +323,23 @@ mod tests {
   use rb_test::expect;
 
   fn check(src: &str, expected: rb_test::Expect) {
+    use std::fmt::Write;
+
     let env = Environment::mini();
-    let (_, hir, _) = crate::parse_body(&env, src);
-    expected.assert_eq(&hir.functions.iter().next().unwrap().1.to_string());
+    let (sources, res) = crate::parse_body_err(&env, src);
+
+    match res {
+      Err(errors) => {
+        let mut out = String::new();
+        for e in errors {
+          write!(out, "{}", e.render(&sources)).unwrap();
+        }
+        expected.assert_eq(&out);
+      }
+      Ok((hir, _span_map)) => {
+        expected.assert_eq(&hir.functions.iter().next().unwrap().1.to_string());
+      }
+    }
   }
 
   #[test]
@@ -350,6 +364,22 @@ mod tests {
           sys::assert(x)
           foo::baz()
         }"#],
+    );
+  }
+
+  #[test]
+  fn unresolved_arg() {
+    check(
+      r#"
+      fn foo(a: &Bar) {}
+      "#,
+      expect![@r#"
+        error: unresolved type `Bar`
+         --> inline.rbr:2:10
+          |
+        2 |       fn foo(a: &Bar) {}
+          |          ^^^
+      "#],
     );
   }
 }
