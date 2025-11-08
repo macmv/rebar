@@ -35,7 +35,8 @@ pub fn handle_semantic_tokens_full(
       }
     });
 
-    let highlight = Highlight::from_ast(cst, hir, &span_maps, &ast_id_maps);
+    let highlight =
+      Highlight::from_ast(cst, hir, span_maps.modules.iter().next().unwrap().1, &ast_id_maps);
 
     let tokens = to_semantic_tokens(snap, file_id, &highlight)?;
 

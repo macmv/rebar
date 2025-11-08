@@ -424,7 +424,7 @@ fn check(src: &str) -> Vec<Diagnostic> {
 
   let mut span_map = SpanMap::default();
   let mut env = rb_hir::Environment::empty();
-  span_map.modules.insert(rb_hir::ast::Path { segments: vec![] }, hir.1);
+  span_map.append(&rb_hir::ast::Path::new(), hir.1);
   let res = rb_diagnostic::run(sources.clone(), || {
     rb_hir_lower::resolve_hir(&env, &mut hir.0, &span_map);
   });
