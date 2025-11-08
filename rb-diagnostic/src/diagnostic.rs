@@ -1,12 +1,13 @@
 use line_index::LineCol;
 use rb_syntax::{TextRange, TextSize};
-use std::fmt::{Display, Write};
+use std::fmt::{self, Display, Write};
 
 use crate::{Sources, sources::SourceId};
 
-pub struct Render<'a> {
-  sources: &'a Sources,
-  color:   bool,
+pub struct DiagnosticRender<'a> {
+  sources:    &'a Sources,
+  diagnostic: &'a Diagnostic,
+  color:      bool,
 }
 
 pub struct Diagnostic {
@@ -37,31 +38,37 @@ impl Diagnostic {
     Diagnostic { message: message.into(), span }
   }
 
-  pub fn render(&self, sources: &Sources) -> String { Render::new(sources).render(self) }
-  pub fn render_with_color(&self, sources: &Sources) -> String {
-    Render::new(sources).with_color().render(self)
+  pub fn render<'a>(&'a self, sources: &'a Sources) -> DiagnosticRender<'a> {
+    DiagnosticRender::new(sources, self)
+  }
+  pub fn render_with_color<'a>(&'a self, sources: &'a Sources) -> DiagnosticRender<'a> {
+    DiagnosticRender::new(sources, self).with_color()
   }
 }
 
-impl<'a> Render<'a> {
-  pub fn new(sources: &'a Sources) -> Self { Render { sources, color: false } }
+impl<'a> DiagnosticRender<'a> {
+  pub fn new(sources: &'a Sources, diagnostic: &'a Diagnostic) -> Self {
+    DiagnosticRender { sources, diagnostic, color: false }
+  }
 
   pub fn with_color(mut self) -> Self {
     self.color = true;
     self
   }
+}
 
-  pub fn render(&self, diagnostic: &Diagnostic) -> String {
-    let source = &self.sources[diagnostic.span.file];
+impl fmt::Display for DiagnosticRender<'_> {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    let source = &self.sources[self.diagnostic.span.file];
 
-    let mut lines = source.line_index.lines(diagnostic.span.range);
+    let mut lines = source.line_index.lines(self.diagnostic.span.range);
     let _ = lines.next();
     if lines.next().is_some() {
-      let start = source.line_index.line_col(diagnostic.span.range.start());
+      let start = source.line_index.line_col(self.diagnostic.span.range.start());
       let start_line_num = start.line + 1;
       let start_col_num = start.col + 1;
 
-      let end = source.line_index.line_col(diagnostic.span.range.end());
+      let end = source.line_index.line_col(self.diagnostic.span.range.end());
       let end_line_num = end.line + 1;
       let _end_col_num = end.col + 1;
 
@@ -75,21 +82,17 @@ impl<'a> Render<'a> {
 
       let margin_str = spaces(end_line_num.ilog10() as usize + 1);
 
-      let mut out = String::new();
-
-      writeln!(out, "{}: {}", self.red(self.bold("error")), self.bold(&diagnostic.message))
-        .unwrap();
+      writeln!(f, "{}: {}", self.red(self.bold("error")), self.bold(&self.diagnostic.message))?;
       writeln!(
-        out,
+        f,
         "{}{} {}:{}:{}",
         margin_str,
         self.blue("-->"),
         source.name,
         start_line_num,
         start_col_num
-      )
-      .unwrap();
-      writeln!(out, "{} {}", margin_str, self.blue("|")).unwrap();
+      )?;
+      writeln!(f, "{} {}", margin_str, self.blue("|"))?;
 
       for (i, line) in source.source[start..end].lines().enumerate() {
         let line_num = start_line_num + i as u32;
@@ -97,26 +100,25 @@ impl<'a> Render<'a> {
 
         let line_num_len = line_num.ilog10() as usize + 1;
         writeln!(
-          out,
+          f,
           "{}{} {} {}",
           spaces(margin_str.len - line_num_len),
           self.blue(self.bold(line_num)),
           self.blue("|"),
           line_str
-        )
-        .unwrap();
+        )?;
       }
 
-      writeln!(out, "{} {}", margin_str, self.blue("|")).unwrap();
+      writeln!(f, "{} {}", margin_str, self.blue("|"))?;
 
-      out
+      Ok(())
     } else {
-      let pos = source.line_index.line_col(diagnostic.span.range.start());
+      let pos = source.line_index.line_col(self.diagnostic.span.range.start());
       let line_num = pos.line + 1;
       let col_num = pos.col + 1;
 
       let start_col = pos.col as usize;
-      let mut end_col = source.line_index.line_col(diagnostic.span.range.end()).col as usize;
+      let mut end_col = source.line_index.line_col(self.diagnostic.span.range.end()).col as usize;
       if start_col == end_col {
         end_col += 1;
       }
@@ -132,35 +134,30 @@ impl<'a> Render<'a> {
       let line_str = &source.source[start..end].trim_end();
       let margin_str = spaces(line_num.ilog10() as usize + 1);
 
-      let mut out = String::new();
       let bar = self.blue("|");
 
       writeln!(
-        out,
+        f,
         "{error}: {message}",
         error = self.red(self.bold("error")),
-        message = self.bold(&diagnostic.message)
-      )
-      .unwrap();
+        message = self.bold(&self.diagnostic.message)
+      )?;
       writeln!(
-        out,
+        f,
         "{margin_str}{arrow} {source}:{line_num}:{col_num}",
         arrow = self.blue("-->"),
         source = source.name,
-      )
-      .unwrap();
-      writeln!(out, "{margin_str} {bar}").unwrap();
-      writeln!(out, "{line_num} {bar} {line_str}", line_num = self.blue(self.bold(line_num)))
-        .unwrap();
+      )?;
+      writeln!(f, "{margin_str} {bar}")?;
+      writeln!(f, "{line_num} {bar} {line_str}", line_num = self.blue(self.bold(line_num)))?;
       writeln!(
-        out,
+        f,
         "{margin_str} {bar} {spaces}{underline}",
         spaces = spaces(start_col),
         underline = self.red(self.bold(carrots(end_col - start_col)))
-      )
-      .unwrap();
+      )?;
 
-      out
+      Ok(())
     }
   }
 }
@@ -183,7 +180,7 @@ impl Display for Repeated {
 }
 
 struct Color<'a, D: Display> {
-  render:  &'a Render<'a>,
+  render:  &'a DiagnosticRender<'a>,
   display: D,
   color:   &'static str,
 }
@@ -206,7 +203,7 @@ const BOLD: &str = "\x1b[1m";
 const RED: &str = "\x1b[31m";
 const BLUE: &str = "\x1b[34m";
 
-impl Render<'_> {
+impl DiagnosticRender<'_> {
   fn color<D: Display>(&self, s: D, color: &'static str) -> Color<'_, D> {
     Color { render: self, display: s, color }
   }
