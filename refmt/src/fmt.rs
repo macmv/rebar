@@ -130,7 +130,16 @@ impl FormatterContext<'_> {
 
       (T![fn], _) => {
         // extern "syscall" fn...
-        if self.before(token).kind() == STRING { (Space, Space) } else { (None, Space) }
+        if self.before(token).kind() == EXTERN
+          && self
+            .before(token)
+            .as_node()
+            .is_some_and(|n| n.last_child().is_some_and(|c| c.kind() == STRING))
+        {
+          (Space, Space)
+        } else {
+          (None, Space)
+        }
       }
       (T![->], _) => (Space, Space),
       (T![mod] | T![use] | T![let] | T![if] | T![fn] | T![extern] | T![struct], _) => (None, Space),
