@@ -208,12 +208,10 @@ impl Regalloc<'_> {
       }
 
       let loc = InstructionLocation { block, index: function.block(block).instructions.len() };
+      let args = function.sig.args.len();
       if let TerminatorInstruction::Return(ref mut inputs) = function.block_mut(block).terminator {
         for (i, input) in inputs.iter_mut().enumerate() {
-          let requirement = match i {
-            0 => Requirement::Specific(RegisterIndex::Eax),
-            _ => todo!("more than 1 return"),
-          };
+          let requirement = calling_convention(args + i);
 
           if let InstructionInput::Var(v) = input {
             while let Some(&new_v) = self.rehomes.get(v) {
@@ -255,9 +253,10 @@ impl Regalloc<'_> {
             (Opcode::Syscall, 2) => RegisterIndex::Esi,
             (Opcode::Syscall, 3) => RegisterIndex::Edx,
 
-            (Opcode::Call(_), 0) => RegisterIndex::Edi,
-            (Opcode::Call(_), 1) => RegisterIndex::Esi,
-            (Opcode::Call(_), 2) => RegisterIndex::Edx,
+            (Opcode::Call(_), _) => match calling_convention(i) {
+              Requirement::Specific(reg) => reg,
+              _ => unreachable!(),
+            },
 
             // TODO: More calling conventions?
             (Opcode::CallExtern(_), 0) => RegisterIndex::Edi,
@@ -532,6 +531,17 @@ impl Regalloc<'_> {
   fn is_tmp_var(&self, var: Variable) -> bool { var.id() >= self.first_new_variable }
 }
 
+fn calling_convention(index: usize) -> Requirement {
+  match index {
+    0 => Requirement::Specific(RegisterIndex::Edi),
+    1 => Requirement::Specific(RegisterIndex::Esi),
+    2 => Requirement::Specific(RegisterIndex::Edx),
+    3 => Requirement::Specific(RegisterIndex::Ebx),
+    4 => Requirement::Specific(RegisterIndex::Ecx),
+    _ => todo!("more arguments"),
+  }
+}
+
 impl Requirement {
   fn for_input(instr: &Instruction, index: usize) -> Requirement {
     use Requirement::*;
@@ -544,8 +554,8 @@ impl Requirement {
         3 => Specific(RegisterIndex::Edx),
         _ => unreachable!(),
       },
-      // TODO: Calling convention?
-      Opcode::Call(_) | Opcode::CallExtern(_) => match index {
+      Opcode::Call(_) => calling_convention(index),
+      Opcode::CallExtern(_) => match index {
         0 => Specific(RegisterIndex::Edi),
         1 => Specific(RegisterIndex::Esi),
         2 => Specific(RegisterIndex::Edx),
@@ -588,9 +598,13 @@ impl Requirement {
           Math::Irem | Math::Urem => Some(RegisterIndex::Edx),
         }
       }
-      Opcode::Call(_) | Opcode::CallExtern(_) => match index {
+      Opcode::Call(_) => Some(match calling_convention(instr.input.len() + index) {
+        Requirement::Specific(reg) => reg,
+        _ => unreachable!(),
+      }),
+      Opcode::CallExtern(_) => match index {
         0 => Some(RegisterIndex::Eax),
-        _ => todo!("more than 1 return"),
+        _ => unreachable!("call with more than 1 return"),
       },
       Opcode::Syscall => match index {
         0 => Some(RegisterIndex::Eax),
