@@ -580,6 +580,11 @@ impl<'a> Typer<'a> {
         true
       }
 
+      // TODO: This should be unsafe.
+      (VType::Primitive(hir::PrimitiveType::I64 | hir::PrimitiveType::U64), VType::Ref(_, _)) => {
+        true
+      }
+
       _ => false,
     }
   }
