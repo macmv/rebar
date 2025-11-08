@@ -275,3 +275,32 @@ impl UseMap {
     }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use rb_hir::Environment;
+  use rb_test::expect;
+
+  fn check(src: &str, expected: rb_test::Expect) {
+    let env = Environment::mini();
+    let (_, hir, _) = crate::parse_body(&env, src);
+    expected.assert_eq(&hir.functions.iter().next().unwrap().1.to_string());
+  }
+
+  #[test]
+  fn expands_args() {
+    check(
+      r#"
+      use sys::assert
+
+      fn main(x: i32) {
+        assert(x)
+      }
+      "#,
+      expect![@r#"
+        fn main(x: i32) {
+          sys::assert(x)
+        }"#],
+    );
+  }
+}

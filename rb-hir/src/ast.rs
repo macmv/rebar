@@ -404,6 +404,201 @@ impl<'a> Iterator for ModuleIter<'a> {
   }
 }
 
+struct DisplayStmt<'a> {
+  func: &'a Function,
+  stmt: StmtId,
+}
+struct DisplayExpr<'a> {
+  func: &'a Function,
+  expr: ExprId,
+}
+
+impl Function {
+  fn display_stmt(&self, stmt: StmtId) -> DisplayStmt<'_> { DisplayStmt { func: self, stmt } }
+  fn display_expr(&self, expr: ExprId) -> DisplayExpr<'_> { DisplayExpr { func: self, expr } }
+}
+
+impl fmt::Display for Function {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "fn {}(", self.name)?;
+    for (i, (arg_name, arg_type)) in self.sig.args.iter().enumerate() {
+      if i != 0 {
+        write!(f, ", ")?;
+      }
+      write!(f, "{}: {}", arg_name, arg_type)?;
+    }
+    write!(f, ")")?;
+    if self.sig.ret != TypeExpr::unit() {
+      write!(f, " -> {}", self.sig.ret)?;
+    }
+    if let Some(body) = &self.body {
+      write!(f, " {{")?;
+      for item in body {
+        write!(f, "\n  {}", self.display_stmt(*item))?;
+      }
+      write!(f, "\n}}")?;
+    }
+    Ok(())
+  }
+}
+
+impl fmt::Display for TypeExpr {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      TypeExpr::Primitive(p) => write!(f, "{p}"),
+      TypeExpr::Ref(t, Mutability::Imm) => write!(f, "&{t}"),
+      TypeExpr::Ref(t, Mutability::Mut) => write!(f, "&mut {t}"),
+      TypeExpr::Struct(name) => write!(f, "{name}"),
+      TypeExpr::Tuple(types) => {
+        let types: Vec<String> = types.iter().map(|ty| format!("{}", ty)).collect();
+        write!(f, "({})", types.join(", "))
+      }
+    }
+  }
+}
+
+impl fmt::Display for DisplayStmt<'_> {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let stmt = &self.func.stmts[self.stmt];
+    match stmt {
+      Stmt::Expr(expr) => write!(f, "{}", self.func.display_expr(*expr)),
+      Stmt::Let(name, _, ty, expr) => {
+        write!(f, "let {}", name)?;
+        if let Some(ty) = ty {
+          write!(f, ": {}", ty)?;
+        }
+        write!(f, " = {}", self.func.display_expr(*expr))
+      }
+      Stmt::FunctionDef(_, _) => write!(f, "<function definition>"),
+      Stmt::Struct => write!(f, "<struct definition>"),
+    }
+  }
+}
+
+impl fmt::Display for DisplayExpr<'_> {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self.func.exprs[self.expr] {
+      Expr::Literal(lit) => write!(f, "{lit}"),
+      Expr::Local(local_id) => {
+        let local = &self.func.locals[local_id];
+        write!(f, "{}", local.name)
+      }
+      Expr::Name(ref name) => write!(f, "{name}"),
+      Expr::String(ref parts) => {
+        write!(f, "\"")?;
+        for part in parts {
+          match part {
+            StringInterp::Literal(s) => write!(f, "{s}")?,
+            StringInterp::Expr(e) => write!(f, "#{{{}}}", self.func.display_expr(*e))?,
+          }
+        }
+        write!(f, "\"")
+      }
+      Expr::Array(_) => todo!(),
+      Expr::Call(lhs, ref args) => {
+        write!(f, "{}(", self.func.display_expr(lhs))?;
+        for (i, arg) in args.iter().enumerate() {
+          if i != 0 {
+            write!(f, ", ")?;
+          }
+          write!(f, "{}", self.func.display_expr(*arg))?;
+        }
+        write!(f, ")")
+      }
+      Expr::UnaryOp(expr, op) => {
+        write!(f, "{op}{}", self.func.display_expr(expr))
+      }
+      Expr::BinaryOp(lhs, op, rhs) => {
+        write!(f, "{} {} {}", self.func.display_expr(lhs), op, self.func.display_expr(rhs))
+      }
+      Expr::Index(lhs, index) => {
+        write!(f, "{}[{}]", self.func.display_expr(lhs), self.func.display_expr(index))
+      }
+      Expr::Field(expr, ref field) => {
+        write!(f, "{}.{}", self.func.display_expr(expr), field)
+      }
+      Expr::StructInit(ref path, ref fields) => {
+        write!(f, "{} {{ ", path)?;
+        for (i, (field_name, expr)) in fields.iter().enumerate() {
+          if i != 0 {
+            write!(f, ", ")?;
+          }
+          write!(f, "{}: {}", field_name, self.func.display_expr(*expr))?;
+        }
+        Ok(())
+      }
+      Expr::Cast(expr, ref ty) => {
+        write!(f, "({}) as {}", self.func.display_expr(expr), ty)
+      }
+      Expr::Paren(expr) => {
+        write!(f, "({})", self.func.display_expr(expr))
+      }
+      Expr::Block(ref stmts) => {
+        write!(f, "{{")?;
+        for &stmt in stmts {
+          write!(f, "\n    {}", self.func.display_stmt(stmt))?;
+        }
+        write!(f, "\n}}")
+      }
+      Expr::If { cond, then, els } => {
+        write!(f, "if {} {}", self.func.display_expr(cond), self.func.display_expr(then))?;
+        if let Some(els) = els {
+          write!(f, " else {}", self.func.display_expr(els))?;
+        }
+        Ok(())
+      }
+      Expr::Assign { lhs, rhs } => {
+        write!(f, "{} = {}", self.func.display_expr(lhs), self.func.display_expr(rhs))
+      }
+    }
+  }
+}
+
+impl fmt::Display for Literal {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Literal::Bool(b) => write!(f, "{b}"),
+      Literal::Int(i) => write!(f, "{i}"),
+    }
+  }
+}
+
+impl fmt::Display for UnaryOp {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      UnaryOp::Neg => write!(f, "-"),
+      UnaryOp::Not => write!(f, "!"),
+      UnaryOp::Ref => write!(f, "&"),
+      UnaryOp::Deref => write!(f, "*"),
+    }
+  }
+}
+
+impl fmt::Display for BinaryOp {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      BinaryOp::Add => write!(f, "+"),
+      BinaryOp::Sub => write!(f, "-"),
+      BinaryOp::Mul => write!(f, "*"),
+      BinaryOp::Div => write!(f, "/"),
+      BinaryOp::Mod => write!(f, "%"),
+      BinaryOp::BitAnd => write!(f, "&"),
+      BinaryOp::BitOr => write!(f, "|"),
+      BinaryOp::Xor => write!(f, "^"),
+      BinaryOp::ShiftLeft => write!(f, "<<"),
+      BinaryOp::ShiftRight => write!(f, ">>"),
+      BinaryOp::And => write!(f, "&&"),
+      BinaryOp::Or => write!(f, "||"),
+      BinaryOp::Eq => write!(f, "=="),
+      BinaryOp::Neq => write!(f, "!="),
+      BinaryOp::Lt => write!(f, "<"),
+      BinaryOp::Lte => write!(f, "<="),
+      BinaryOp::Gt => write!(f, ">"),
+      BinaryOp::Gte => write!(f, ">="),
+    }
+  }
+}
+
 impl fmt::Display for Path {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     for (i, segment) in self.segments.iter().enumerate() {

@@ -12,5 +12,8 @@ rb-diagnostic.workspace = true
 rb-syntax.workspace = true
 rb-hir.workspace = true
 
+[dev-dependencies]
+rb-test.workspace = true
+
 [features]
 test = []

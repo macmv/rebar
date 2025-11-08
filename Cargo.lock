@@ -742,6 +742,7 @@ dependencies = [
  "rb-diagnostic",
  "rb-hir",
  "rb-syntax",
+ "rb-test",
 ]
 
 [[package]]

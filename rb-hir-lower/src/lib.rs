@@ -10,11 +10,11 @@ use rb_hir::{
 };
 use rb_syntax::{AstNode, SyntaxNodePtr, cst};
 
-#[cfg(feature = "test")]
+#[cfg(any(test, feature = "test"))]
 use rb_diagnostic::Sources;
-#[cfg(feature = "test")]
+#[cfg(any(test, feature = "test"))]
 use rb_hir::Environment;
-#[cfg(feature = "test")]
+#[cfg(any(test, feature = "test"))]
 use std::sync::Arc;
 
 mod collect;
@@ -25,7 +25,7 @@ pub use collect::{parse_hir, parse_source};
 pub use fs::FileSystem;
 pub use resolve::resolve_hir;
 
-#[cfg(feature = "test")]
+#[cfg(any(test, feature = "test"))]
 pub fn parse_body(env: &Environment, body: &str) -> (Arc<Sources>, hir::Module, ModuleSpanMap) {
   use rb_diagnostic::Source;
 
