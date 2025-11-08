@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use rb_diagnostic::{SourceId, Span, emit};
 use rb_hir::{
-  FunctionSpanMap, ModuleSpanMap,
+  FunctionSpanMap, ModuleSpanMap, SpanMap,
   ast::{self as hir, Path, StringInterp},
 };
 use rb_syntax::{AstNode, SyntaxNodePtr, cst};
@@ -33,8 +33,6 @@ pub fn parse_body(env: &Environment, body: &str) -> (Arc<Sources>, hir::Module, 
   let id = sources.add(Source::new("inline.rbr".to_string(), body.to_string()));
   let sources_arc = Arc::new(sources);
   let (module, module_span_map) = rb_diagnostic::run_or_exit(sources_arc.clone(), || {
-    use rb_hir::SpanMap;
-
     let res = cst::SourceFile::parse(&body);
     if !res.errors().is_empty() {
       for error in res.errors() {
@@ -46,13 +44,11 @@ pub fn parse_body(env: &Environment, body: &str) -> (Arc<Sources>, hir::Module, 
       return Default::default();
     }
 
-    let (mut module, module_span_map, _) = crate::lower_source(res.tree(), id);
+    let (mut module, mut span_map, _) = crate::lower_source(res.tree(), id);
     if !rb_diagnostic::is_ok() {
       return Default::default();
     }
 
-    let mut span_map = SpanMap::default();
-    span_map.modules.insert(Path::new(), module_span_map);
     crate::resolve_hir(&env, &mut module, &span_map);
     let module_span_map = span_map.modules.remove(&Path::new()).unwrap();
 
@@ -65,14 +61,47 @@ pub fn parse_body(env: &Environment, body: &str) -> (Arc<Sources>, hir::Module, 
 pub fn lower_source(
   cst: cst::SourceFile,
   source: SourceId,
+) -> (hir::Module, SpanMap, Vec<AstIdMap>) {
+  let mut out = hir::Module::default();
+  let mut module_span_map = ModuleSpanMap::default();
+  let mut ast_id_maps = vec![];
+
+  let mut lower = ModuleLower {
+    source,
+    out: &mut out,
+    span_map: &mut module_span_map,
+    ast_id_maps: &mut ast_id_maps,
+    inner_span_maps: vec![],
+  };
+  let main = lower.source(&cst);
+
+  let mut span_map = SpanMap::default();
+  for (path, inner_map) in lower.inner_span_maps {
+    span_map.modules.insert(path, inner_map);
+  }
+  span_map.modules.insert(Path::new(), module_span_map);
+
+  out.main_function = Some(main);
+  out.standalone_functions.push(main);
+  (out, span_map, ast_id_maps)
+}
+
+fn lower_inline(
+  block: &cst::Block,
+  source: SourceId,
 ) -> (hir::Module, ModuleSpanMap, Vec<AstIdMap>) {
   let mut out = hir::Module::default();
   let mut span_map = ModuleSpanMap::default();
   let mut ast_id_maps = vec![];
 
-  let mut lower =
-    ModuleLower { source, out: &mut out, span_map: &mut span_map, ast_id_maps: &mut ast_id_maps };
-  let main = lower.source(&cst);
+  let mut lower = ModuleLower {
+    source,
+    out: &mut out,
+    span_map: &mut span_map,
+    ast_id_maps: &mut ast_id_maps,
+    inner_span_maps: vec![],
+  };
+  let main = lower.inline_module(block);
 
   out.main_function = Some(main);
   out.standalone_functions.push(main);
@@ -85,6 +114,8 @@ struct ModuleLower<'a> {
   span_map:    &'a mut ModuleSpanMap,
   ast_id_maps: &'a mut Vec<AstIdMap>,
   out:         &'a mut hir::Module,
+
+  inner_span_maps: Vec<(Path, ModuleSpanMap)>,
 }
 
 #[derive(Default)]
@@ -95,6 +126,35 @@ pub struct AstIdMap {
 
 impl ModuleLower<'_> {
   fn source(&mut self, cst: &cst::SourceFile) -> hir::FunctionId {
+    let mut func = hir::Function::default();
+    let mut span_map = FunctionSpanMap::default();
+    let mut ast_id_map = AstIdMap::default();
+    let mut lower = FunctionLower {
+      source:     self,
+      f:          &mut func,
+      span_map:   &mut span_map,
+      ast_id_map: &mut ast_id_map,
+    };
+
+    let mut body = vec![];
+    for stmt in cst.stmts() {
+      if let Some(item) = lower.stmt(stmt) {
+        if let hir::Stmt::FunctionDef(id, _) = &lower.f.stmts[item] {
+          lower.source.out.standalone_functions.push(*id);
+        }
+
+        body.push(item);
+      }
+    }
+    lower.f.body = Some(body);
+
+    self.ast_id_maps.push(ast_id_map);
+    let id = self.out.functions.alloc(func);
+    self.span_map.functions.insert(id, span_map);
+    id
+  }
+
+  fn inline_module(&mut self, cst: &cst::Block) -> hir::FunctionId {
     let mut func = hir::Function::default();
     let mut span_map = FunctionSpanMap::default();
     let mut ast_id_map = AstIdMap::default();
@@ -279,7 +339,15 @@ impl FunctionLower<'_, '_> {
       cst::Stmt::Mod(ref module) => {
         let name = module.ident_token().unwrap().to_string();
 
-        let prev = self.source.out.modules.insert(name, hir::PartialModule::File);
+        let m = if let Some(block) = module.block() {
+          let (m, span_map, _) = lower_inline(&block, self.source.source);
+          self.source.inner_span_maps.push((Path::new().join(name.clone()), span_map));
+          hir::PartialModule::Inline(m)
+        } else {
+          hir::PartialModule::File
+        };
+
+        let prev = self.source.out.modules.insert(name, m);
 
         if prev.is_some() {
           emit!(

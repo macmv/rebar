@@ -291,15 +291,23 @@ mod tests {
   fn expands_args() {
     check(
       r#"
-      use sys::assert
+      mod foo {
+        struct Bar {}
+        fn baz()
+      }
 
-      fn main(x: i32) {
+      use foo::Bar
+      use foo::baz
+
+      fn main(x: Bar) {
         assert(x)
+        baz()
       }
       "#,
       expect![@r#"
-        fn main(x: i32) {
+        fn main(x: Bar) {
           sys::assert(x)
+          foo::baz()
         }"#],
     );
   }

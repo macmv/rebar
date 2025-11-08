@@ -11,6 +11,14 @@ use crate::ast::{FullyQualifiedName, Path, Type};
 pub struct SpanMap {
   pub modules: HashMap<Path, ModuleSpanMap>,
 }
+impl SpanMap {
+  pub fn append(&mut self, p: &Path, span_map: SpanMap) {
+    for (module_path, module_span_map) in span_map.modules {
+      let full_path = p.concat(&module_path);
+      self.modules.insert(full_path, module_span_map);
+    }
+  }
+}
 
 #[derive(Default)]
 pub struct ModuleSpanMap {

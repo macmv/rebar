@@ -1,7 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
 use rb_diagnostic::{Diagnostic, Source, Sources, Span};
-use rb_hir::{ModuleSpanMap, SpanMap, ast as hir};
+use rb_hir::{
+  SpanMap,
+  ast::{self as hir, Path},
+};
 use rb_syntax::cst;
 
 use crate::{AstIdMap, FileSystem};
@@ -28,12 +31,9 @@ pub fn parse_hir(
         module,
         span_map: SpanMap { modules: HashMap::new() },
         errors: vec![],
-        to_check: vec![hir::Path { segments: vec![] }],
+        to_check: vec![hir::Path::new()],
       };
-      collector
-        .span_map
-        .modules
-        .insert(hir::Path { segments: vec![] }, ModuleSpanMap { functions: span_map.functions });
+      collector.span_map.append(&Path::new(), span_map);
 
       let root = path.parent().unwrap();
       while let Some(p) = collector.to_check.pop() {
@@ -78,10 +78,7 @@ impl<F: FileSystem> Collector<'_, F> {
             Ok((m, span_map, _)) => {
               let mut p = p.clone();
               p.segments.push(name.clone());
-              self
-                .span_map
-                .modules
-                .insert(p.clone(), ModuleSpanMap { functions: span_map.functions });
+              self.span_map.append(&p, span_map);
               self.to_check.push(p);
 
               *module = hir::PartialModule::Inline(m)
@@ -101,7 +98,7 @@ pub fn parse_source(
   fs: &impl crate::FileSystem,
   path: &std::path::Path,
   mut sources: Sources,
-) -> (Sources, Result<(hir::Module, ModuleSpanMap, Vec<AstIdMap>), Vec<Diagnostic>>) {
+) -> (Sources, Result<(hir::Module, SpanMap, Vec<AstIdMap>), Vec<Diagnostic>>) {
   let content = fs.read_to_string(&path).unwrap();
   let id = sources.add(Source::new(path.display().to_string(), content));
 
