@@ -182,27 +182,29 @@ impl Regalloc<'_> {
 
         let instr = &function.block(block).instructions[i];
 
-        let &[InstructionOutput::Var(out)] = instr.output.as_slice() else { continue };
+        for (i, out) in instr.output.iter().enumerate() {
+          let &InstructionOutput::Var(out) = out;
 
-        let requirement = Requirement::for_output(self, instr, 0);
+          let requirement = Requirement::for_output(self, instr, i);
 
-        let used_later = self.is_used_later(
-          &function.block(block).instructions[i + 1..],
-          &function.block(block).terminator,
-          out,
-        );
+          let used_later = self.is_used_later(
+            &function.block(block).instructions[i + 1..],
+            &function.block(block).terminator,
+            out,
+          );
 
-        let register = requirement.unwrap_or_else(|| self.pick_register(loc, out));
+          let register = requirement.unwrap_or_else(|| self.pick_register(loc, out));
 
-        if used_later {
-          self.active.insert(register, out);
-          live_outs.insert(out);
+          if used_later {
+            self.active.insert(register, out);
+            live_outs.insert(out);
+          }
+          self.alloc.registers.set_with(
+            out,
+            Register { size: var_to_reg_size(out.size()).unwrap(), index: register },
+            || Register::RAX,
+          );
         }
-        self.alloc.registers.set_with(
-          out,
-          Register { size: var_to_reg_size(out.size()).unwrap(), index: register },
-          || Register::RAX,
-        );
       }
 
       let loc = InstructionLocation { block, index: function.block(block).instructions.len() };
