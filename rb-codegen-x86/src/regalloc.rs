@@ -269,6 +269,20 @@ impl Regalloc<'_> {
           self.preference.entry(var).or_insert((reg_index, loc));
         }
       }
+
+      if let TerminatorInstruction::Return(ref inputs) = function.block(block).terminator {
+        for (i, input) in inputs.iter().enumerate() {
+          let InstructionInput::Var(var) = input else { continue };
+
+          let reg_index = match calling_convention(function.sig.args.len() + i) {
+            Requirement::Specific(reg) => reg,
+            _ => unreachable!(),
+          };
+
+          let loc = InstructionLocation { block, index: function.block(block).instructions.len() };
+          self.preference.entry(*var).or_insert((reg_index, loc));
+        }
+      }
     }
   }
 
