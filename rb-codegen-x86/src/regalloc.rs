@@ -161,11 +161,9 @@ impl Regalloc<'_> {
     let mut live_outs = HashSet::new();
 
     for (i, arg) in function.args().enumerate() {
-      let index = match i {
-        0 => RegisterIndex::Edi,
-        1 => RegisterIndex::Esi,
-        2 => RegisterIndex::Edx,
-        _ => todo!("more arguments"),
+      let index = match calling_convention(i) {
+        Requirement::Specific(reg) => reg,
+        _ => unreachable!(),
       };
 
       self.alloc.registers.set(arg, Register { size: var_to_reg_size(arg.size()).unwrap(), index });
