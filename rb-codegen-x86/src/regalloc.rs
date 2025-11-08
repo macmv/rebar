@@ -733,9 +733,9 @@ mod tests {
         block 0:
           mov rdi(1) = 0x00
           mov rsi(2) = 0x01
-          call function 0 rax(0) = rdi(1), rsi(2)
+          call function 0 rdx(0) = rdi(1), rsi(2)
           trap
-        "#
+      "#
       ],
     );
   }
@@ -753,7 +753,8 @@ mod tests {
           mov rax(1) = 0x02
           mov rcx(3) = 0x03
           math(imul) rax(0) = rax(1), rcx(3)
-          return r0
+          mov rdi(4) = rax(0)
+          return r4
       "#
       ],
     );
