@@ -242,7 +242,7 @@ impl Regalloc<'_> {
     for block in function.blocks() {
       for (i, instr) in function.block(block).instructions.iter().enumerate() {
         let loc = InstructionLocation { block, index: i };
-        if !matches!(instr.opcode, Opcode::Syscall | Opcode::Call(_)) {
+        if !matches!(instr.opcode, Opcode::Syscall | Opcode::Call(_) | Opcode::CallExtern(_)) {
           continue;
         }
 
@@ -258,6 +258,11 @@ impl Regalloc<'_> {
             (Opcode::Call(_), 0) => RegisterIndex::Edi,
             (Opcode::Call(_), 1) => RegisterIndex::Esi,
             (Opcode::Call(_), 2) => RegisterIndex::Edx,
+
+            // TODO: More calling conventions?
+            (Opcode::CallExtern(_), 0) => RegisterIndex::Edi,
+            (Opcode::CallExtern(_), 1) => RegisterIndex::Esi,
+            (Opcode::CallExtern(_), 2) => RegisterIndex::Edx,
 
             _ => unreachable!(),
           };
