@@ -311,7 +311,7 @@ impl FuncBuilder<'_> {
         }
       }
 
-      mir::Expr::Field(lhs, ref field, ref ty) => {
+      mir::Expr::ValueField(lhs, ref field, ref ty) => {
         let lhs = self.compile_expr(lhs);
 
         match lhs.ty {

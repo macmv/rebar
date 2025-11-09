@@ -310,9 +310,15 @@ impl Lower<'_> {
       }
 
       hir::Expr::Field(base, ref field) => {
+        let base_ty = self.ty.type_of_expr(base);
         let base = self.lower_expr(base);
 
-        mir::Expr::Field(base, field.clone(), self.ty.type_of_expr(expr))
+        match base_ty {
+          Type::Ref(_, _) => {
+            mir::Expr::PointerField(base, field.clone(), self.ty.type_of_expr(expr))
+          }
+          _ => mir::Expr::ValueField(base, field.clone(), self.ty.type_of_expr(expr)),
+        }
       }
 
       ref v => unimplemented!("lowering expression {v:?}"),
@@ -410,6 +416,25 @@ mod tests {
       expect![@r#"
         function 0:
           call 0::<fn(&u8) -> ()>(store_stack(3));
+      "#],
+    );
+  }
+
+  #[test]
+  fn ref_fields() {
+    check(
+      r#"
+      struct Foo {
+        x: i64
+      }
+
+      let foo = &Foo { x: 3 }
+      let a = foo.x
+      "#,
+      expect![@r#"
+        function 0:
+          let v0: &Struct Foo = store_stack(StructInit 0 { x: 3 });
+          let v1: i64 = v0*.x::<i64>;
       "#],
     );
   }

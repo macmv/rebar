@@ -51,7 +51,8 @@ pub enum Expr {
   Unary(ExprId, UnaryOp, Type),
   Binary(ExprId, BinaryOp, ExprId, Type),
   Index(ExprId, ExprId, Type),
-  Field(ExprId, String, Type),
+  ValueField(ExprId, String, Type),
+  PointerField(ExprId, String, Type),
   StoreStack(ExprId),
 
   Local(VarId, Type),
@@ -218,8 +219,12 @@ impl fmt::Display for DisplayExpr<'_> {
         write!(f, "store_stack({})", self.func.display_expr(*value))
       }
 
-      Expr::Field(struct_expr, field_name, ty) => {
+      Expr::ValueField(struct_expr, field_name, ty) => {
         write!(f, "{}.{}::<{}>", self.func.display_expr(*struct_expr), field_name, ty)
+      }
+
+      Expr::PointerField(struct_expr, field_name, ty) => {
+        write!(f, "{}*.{}::<{}>", self.func.display_expr(*struct_expr), field_name, ty)
       }
 
       Expr::Local(var_id, _) => write!(f, "{}", var_id),
