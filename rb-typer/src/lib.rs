@@ -1350,4 +1350,32 @@ mod tests {
       "#],
     );
   }
+
+  #[test]
+  fn check_fields() {
+    check(
+      r#"
+      struct Point {
+        x: i32
+        y: i32
+      }
+
+      let a = Point { x: 3, y: 4 }
+      let b = Point { x: 5, z: 6 }
+      let c = a.x + b.z
+      "#,
+      expect![@r#"
+        error: field z not found in struct Point
+         --> inline.rbr:8:32
+          |
+        8 |       let b = Point { x: 5, z: 6 }
+          |                                ^
+        error: field z not found in Point
+         --> inline.rbr:9:21
+          |
+        9 |       let c = a.x + b.z
+          |                     ^^^
+      "#],
+    );
+  }
 }
