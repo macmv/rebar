@@ -1,0 +1,10 @@
+struct Foo {
+  a: i64
+  b: i64
+}
+
+fn foo() -> Foo { Foo { a: 42, b: 84 } }
+
+let f = foo()
+assert_eq(f.a, 42)
+assert_eq(f.b, 84)
