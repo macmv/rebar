@@ -313,11 +313,10 @@ impl Lower<'_> {
         let base_ty = self.ty.type_of_expr(base);
         let base = self.lower_expr(base);
 
+        let res = self.ty.type_of_expr(expr);
         match base_ty {
-          Type::Ref(_, _) => {
-            mir::Expr::PointerField(base, field.clone(), self.ty.type_of_expr(expr))
-          }
-          _ => mir::Expr::ValueField(base, field.clone(), self.ty.type_of_expr(expr)),
+          Type::Ref(inner, _) => mir::Expr::PointerField(base, field.clone(), *inner, res),
+          _ => mir::Expr::ValueField(base, field.clone(), res),
         }
       }
 

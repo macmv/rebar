@@ -337,6 +337,38 @@ impl FuncBuilder<'_> {
         }
       }
 
+      mir::Expr::PointerField(lhs, ref field, ref ty, ref res) => {
+        let lhs = self.compile_expr(lhs);
+
+        match lhs.ty {
+          ValueType::Ptr => {
+            let ir = lhs.to_ir(self);
+            let ptr = ir[0];
+
+            let id = match ty {
+              Type::Struct(path) => self.mir().struct_paths[path],
+              _ => panic!(),
+            };
+
+            let layout = self.mir().layout_struct(id);
+            let index =
+              self.mir().structs[&id].fields.iter().position(|(n, _)| n == field).unwrap();
+
+            let _offset = layout.offsets[index] / 8;
+
+            let vt = ValueType::for_type(self.mir(), res);
+            let mut values = vec![];
+            for _ in 0..vt.len(self.mir()) {
+              values.push(self.builder.instr().load(Bit64, ptr));
+            }
+
+            RValue::new(vt, values)
+          }
+
+          _ => unreachable!("cannot access field of {lhs:?}"),
+        }
+      }
+
       mir::Expr::StoreStack(expr) => {
         let inner = self.compile_expr(expr);
 

@@ -52,7 +52,7 @@ pub enum Expr {
   Binary(ExprId, BinaryOp, ExprId, Type),
   Index(ExprId, ExprId, Type),
   ValueField(ExprId, String, Type),
-  PointerField(ExprId, String, Type),
+  PointerField(ExprId, String, Type, Type),
   StoreStack(ExprId),
 
   Local(VarId, Type),
@@ -223,7 +223,7 @@ impl fmt::Display for DisplayExpr<'_> {
         write!(f, "{}.{}::<{}>", self.func.display_expr(*struct_expr), field_name, ty)
       }
 
-      Expr::PointerField(struct_expr, field_name, ty) => {
+      Expr::PointerField(struct_expr, field_name, _, ty) => {
         write!(f, "{}*.{}::<{}>", self.func.display_expr(*struct_expr), field_name, ty)
       }
 
