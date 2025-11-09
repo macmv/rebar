@@ -225,9 +225,7 @@ impl Regalloc<'_> {
           let requirement = calling_convention(args + i);
 
           if let InstructionInput::Var(v) = input {
-            while let Some(&new_v) = self.state.rehomes.get(v) {
-              *v = new_v;
-            }
+            self.state.apply_rehomes(v);
           }
 
           if let Some(new_var) = self.state.satisfy_requirement(loc, *input, requirement) {
@@ -311,9 +309,7 @@ impl Regalloc<'_> {
       let input = &mut instr.input[i];
 
       if let InstructionInput::Var(v) = input {
-        while let Some(&new_v) = self.state.rehomes.get(v) {
-          *v = new_v;
-        }
+        self.state.apply_rehomes(v);
       }
 
       if let Some(new_var) = self.state.satisfy_requirement(loc, *input, requirement) {
@@ -517,6 +513,12 @@ impl RegallocState<'_> {
     self.copies.entry(loc).or_default().push(Move::VarVar { from: var, to: new_var });
     self.rehomes.insert(var, new_var);
     self.rehomes_reverse.insert(new_var, var);
+  }
+
+  fn apply_rehomes(&mut self, v: &mut Variable) {
+    while let Some(&new_v) = self.rehomes.get(v) {
+      *v = new_v;
+    }
   }
 
   fn preference_after(&self, loc: InstructionLocation, var: Variable) -> Option<RegisterIndex> {
