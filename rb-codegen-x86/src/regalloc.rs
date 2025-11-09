@@ -25,8 +25,9 @@ struct RegallocState<'a> {
   vu:    &'a ValueUses,
   alloc: &'a mut VariableRegisters,
 
-  active:  HashMap<RegisterIndex, Variable>,
-  visited: HashSet<BlockId>,
+  active:              HashMap<RegisterIndex, Variable>,
+  visited:             HashSet<BlockId>,
+  current_instruction: HashSet<Variable>,
 
   preference: HashMap<Variable, (RegisterIndex, InstructionLocation)>,
 
@@ -93,6 +94,7 @@ impl VariableRegisters {
 
         active: HashMap::new(),
         visited: HashSet::new(),
+        current_instruction: HashSet::new(),
         preference: HashMap::new(),
         first_new_variable,
         next_variable: first_new_variable,
@@ -315,6 +317,16 @@ impl Regalloc<'_> {
       if let Some(new_var) = self.state.satisfy_requirement(loc, *input, requirement) {
         *input = InstructionInput::Var(new_var);
         self.state.active.insert(self.state.alloc.registers.get(new_var).unwrap().index, new_var);
+        self.state.current_instruction.insert(new_var);
+      } else {
+        match input {
+          InstructionInput::Var(v) => {
+            let reg = self.state.alloc.registers.get(*v).unwrap().index;
+            self.state.active.insert(reg, *v);
+            self.state.current_instruction.insert(*v);
+          }
+          _ => {}
+        }
       }
     }
 
@@ -327,6 +339,8 @@ impl Regalloc<'_> {
         }
       }
     }
+
+    self.state.current_instruction.clear();
 
     // TODO
     /*
@@ -479,13 +493,18 @@ impl RegallocState<'_> {
   fn pick_register(&mut self, loc: InstructionLocation, var: Variable) -> RegisterIndex {
     if let Some(pref) = self.preference_after(loc, var) {
       match self.active.get(&pref) {
-        Some(&other) if other != var => {
+        // If the variable is already in the preferred register, or there is nothing in the
+        // preferred register, use that.
+        Some(&other) if other == var => return pref,
+        None => return pref,
+
+        Some(&other) if self.current_instruction.contains(&other) => {}
+        Some(&other) => {
           self.rehome(loc, other);
           self.active.remove(&pref);
 
           return pref;
         }
-        _ => return pref,
       }
     }
 
@@ -772,6 +791,31 @@ mod tests {
           math(imul) rax(0) = rax(1), rcx(3)
           mov rdi(4) = rax(0)
           return r4
+      "#
+      ],
+    );
+  }
+
+  #[test]
+  fn multi_return() {
+    check(
+      "
+      block 0:
+        call 0 r0, r1 =
+        call 0 = r0, 0x01
+        call 0 = r1, 0x02
+        trap
+      ",
+      expect![@r#"
+        block 0:
+          call function 0 rdi(0), rsi(1) =
+          mov rax(2) = rsi(1)
+          mov rsi(3) = 0x01
+          call function 0 = rdi(0), rsi(3)
+          mov rdi(4) = rax(2)
+          mov rsi(5) = 0x02
+          call function 0 = rdi(4), rsi(5)
+          trap
       "#
       ],
     );
