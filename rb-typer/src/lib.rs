@@ -653,20 +653,26 @@ impl<'a> Typer<'a> {
   }
 
   fn resolve_type(&self, ty: &VType) -> Option<hir::Path> {
-    match self.lower_type(ty) {
-      Type::Primitive(hir::PrimitiveType::I8) => Some(hir::Path::from(["i8"])),
-      Type::Primitive(hir::PrimitiveType::I16) => Some(hir::Path::from(["i16"])),
-      Type::Primitive(hir::PrimitiveType::I32) => Some(hir::Path::from(["i32"])),
-      Type::Primitive(hir::PrimitiveType::I64) => Some(hir::Path::from(["i64"])),
-      Type::Primitive(hir::PrimitiveType::U8) => Some(hir::Path::from(["u8"])),
-      Type::Primitive(hir::PrimitiveType::U16) => Some(hir::Path::from(["u16"])),
-      Type::Primitive(hir::PrimitiveType::U32) => Some(hir::Path::from(["u32"])),
-      Type::Primitive(hir::PrimitiveType::U64) => Some(hir::Path::from(["u64"])),
+    fn resolve_inner(ty: Type) -> Option<hir::Path> {
+      match ty {
+        Type::Primitive(hir::PrimitiveType::I8) => Some(hir::Path::from(["i8"])),
+        Type::Primitive(hir::PrimitiveType::I16) => Some(hir::Path::from(["i16"])),
+        Type::Primitive(hir::PrimitiveType::I32) => Some(hir::Path::from(["i32"])),
+        Type::Primitive(hir::PrimitiveType::I64) => Some(hir::Path::from(["i64"])),
+        Type::Primitive(hir::PrimitiveType::U8) => Some(hir::Path::from(["u8"])),
+        Type::Primitive(hir::PrimitiveType::U16) => Some(hir::Path::from(["u16"])),
+        Type::Primitive(hir::PrimitiveType::U32) => Some(hir::Path::from(["u32"])),
+        Type::Primitive(hir::PrimitiveType::U64) => Some(hir::Path::from(["u64"])),
 
-      Type::Struct(path) => Some(path.clone()),
+        Type::Struct(path) => Some(path),
 
-      _ => None,
+        Type::Ref(inner, _) => resolve_inner(*inner),
+
+        _ => None,
+      }
     }
+
+    resolve_inner(self.lower_type(ty))
   }
 
   fn make_union(&mut self, tys: &[VType]) -> VType {
@@ -1375,6 +1381,50 @@ mod tests {
           |
         9 |       let c = a.x + b.z
           |                     ^^^
+      "#],
+    );
+
+    check(
+      r#"
+      struct Foo {
+        x: bool
+      }
+
+      let foo = Foo { x: true }
+      let a = foo.x
+      if foo.x {
+        0
+      }
+      let b = foo
+
+      "#,
+      expect![@r#"
+        foo: Struct Foo
+        a: bool
+        b: Struct Foo
+      "#],
+    );
+  }
+
+  #[test]
+  fn check_ref_fields() {
+    check(
+      r#"
+      struct Foo {
+        x: bool
+      }
+
+      let foo = &Foo { x: true }
+      let a = foo.x
+      if foo.x {
+        0
+      }
+      let b = foo
+      "#,
+      expect![@r#"
+        foo: &Struct Foo
+        a: bool
+        b: &Struct Foo
       "#],
     );
   }
