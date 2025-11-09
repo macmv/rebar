@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use rb_codegen::{
-  Block, BlockId, Function, Immediate, Instruction, InstructionInput, InstructionOutput, Math,
-  Opcode, TVec, TerminatorInstruction, Variable, VariableSize,
+  BlockId, Function, Immediate, Instruction, InstructionInput, InstructionOutput, Math, Opcode,
+  TVec, TerminatorInstruction, Variable, VariableSize,
 };
 use rb_codegen_opt::analysis::{Analysis, dominator_tree::DominatorTree, value_uses::ValueUses};
 use smallvec::smallvec;
@@ -15,7 +15,13 @@ pub struct VariableRegisters {
 }
 
 struct Regalloc<'a> {
-  dom:   &'a DominatorTree,
+  dom:      &'a DominatorTree,
+  function: &'a mut Function,
+
+  state: RegallocState<'a>,
+}
+
+struct RegallocState<'a> {
   vu:    &'a ValueUses,
   alloc: &'a mut VariableRegisters,
 
@@ -80,28 +86,31 @@ impl VariableRegisters {
     let mut regs = VariableRegisters::default();
     let mut regalloc = Regalloc {
       dom: analysis.get(),
-      vu: analysis.get(),
-      alloc: &mut regs,
+      function,
+      state: RegallocState {
+        vu: analysis.get(),
+        alloc: &mut regs,
 
-      active: HashMap::new(),
-      visited: HashSet::new(),
-      preference: HashMap::new(),
-      first_new_variable,
-      next_variable: first_new_variable,
-      copies: BTreeMap::new(),
+        active: HashMap::new(),
+        visited: HashSet::new(),
+        preference: HashMap::new(),
+        first_new_variable,
+        next_variable: first_new_variable,
+        copies: BTreeMap::new(),
 
-      rehomes: HashMap::new(),
-      rehomes_reverse: HashMap::new(),
+        rehomes: HashMap::new(),
+        rehomes_reverse: HashMap::new(),
+      },
     };
-    regalloc.pass(function);
+    regalloc.pass();
 
-    for (loc, moves) in regalloc.copies.iter().rev() {
-      let block = function.block_mut(loc.block);
+    for (loc, moves) in regalloc.state.copies.iter().rev() {
+      let block = regalloc.function.block_mut(loc.block);
       for m in moves.iter().rev() {
         match m {
           Move::VarReg { from, to } => {
-            let new_var = Variable::new(regalloc.next_variable, from.size());
-            regalloc.next_variable += 1;
+            let new_var = Variable::new(regalloc.state.next_variable, from.size());
+            regalloc.state.next_variable += 1;
 
             block.instructions.insert(
               loc.index,
@@ -111,7 +120,7 @@ impl VariableRegisters {
                 output: smallvec![new_var.into()],
               },
             );
-            regalloc.alloc.registers.set_with(
+            regalloc.state.alloc.registers.set_with(
               new_var,
               Register { size: var_to_reg_size(new_var.size()).unwrap(), index: *to },
               || Register::RAX,
@@ -155,51 +164,51 @@ impl VariableRegisters {
 }
 
 impl Regalloc<'_> {
-  pub fn pass(&mut self, function: &mut Function) {
-    self.pre_allocation(function);
+  pub fn pass(&mut self) {
+    self.pre_allocation();
 
     let mut live_outs = HashSet::new();
 
-    for (i, arg) in function.args().enumerate() {
+    for (i, arg) in self.function.args().enumerate() {
       let index = match calling_convention(i) {
         Requirement::Specific(reg) => reg,
         _ => unreachable!(),
       };
 
-      self.alloc.registers.set(arg, Register { size: var_to_reg_size(arg.size()).unwrap(), index });
+      self
+        .state
+        .alloc
+        .registers
+        .set(arg, Register { size: var_to_reg_size(arg.size()).unwrap(), index });
     }
 
     for block in self.dom.preorder() {
-      self.visited.insert(block);
+      self.state.visited.insert(block);
       let live_ins = HashSet::new(); // "set of instructions live into `block`"
 
-      self.expire_intervals(&live_ins, &live_outs);
-      self.start_intervals(block, &live_ins, &live_outs);
+      self.state.expire_intervals(&live_ins, &live_outs);
+      self.state.start_intervals(block, &live_ins, &live_outs);
 
-      for i in 0..function.block(block).instructions.len() {
+      for i in 0..self.function.block(block).instructions.len() {
         let loc = InstructionLocation { block, index: i };
-        self.visit_instr(&mut live_outs, loc, function.block_mut(block));
+        self.visit_instr(&mut live_outs, loc);
 
-        let instr = &function.block(block).instructions[i];
+        let instr = &self.function.block(block).instructions[i];
 
         for (i, out) in instr.output.iter().enumerate() {
           let &InstructionOutput::Var(out) = out;
 
           let requirement = Requirement::for_output(self, instr, i);
 
-          let used_later = self.is_used_later(
-            &function.block(block).instructions[i + 1..],
-            &function.block(block).terminator,
-            out,
-          );
+          let used_later = self.is_used_after(InstructionLocation { block, index: i }, out);
 
-          let register = requirement.unwrap_or_else(|| self.pick_register(loc, out));
+          let register = requirement.unwrap_or_else(|| self.state.pick_register(loc, out));
 
           if used_later {
-            self.active.insert(register, out);
+            self.state.active.insert(register, out);
             live_outs.insert(out);
           }
-          self.alloc.registers.set_with(
+          self.state.alloc.registers.set_with(
             out,
             Register { size: var_to_reg_size(out.size()).unwrap(), index: register },
             || Register::RAX,
@@ -207,28 +216,30 @@ impl Regalloc<'_> {
         }
       }
 
-      let loc = InstructionLocation { block, index: function.block(block).instructions.len() };
-      let args = function.sig.args.len();
-      if let TerminatorInstruction::Return(ref mut inputs) = function.block_mut(block).terminator {
+      let loc = InstructionLocation { block, index: self.function.block(block).instructions.len() };
+      let args = self.function.sig.args.len();
+      if let TerminatorInstruction::Return(ref mut inputs) =
+        self.function.block_mut(block).terminator
+      {
         for (i, input) in inputs.iter_mut().enumerate() {
           let requirement = calling_convention(args + i);
 
           if let InstructionInput::Var(v) = input {
-            while let Some(&new_v) = self.rehomes.get(v) {
+            while let Some(&new_v) = self.state.rehomes.get(v) {
               *v = new_v;
             }
           }
 
-          if let Some(new_var) = self.satisfy_requirement(loc, input, requirement) {
+          if let Some(new_var) = self.state.satisfy_requirement(loc, *input, requirement) {
             *input = InstructionInput::Var(new_var);
           }
         }
 
         for input in inputs {
           if let InstructionInput::Var(v) = input {
-            live_outs.remove(v);
-            if !self.is_used_later(&[], &TerminatorInstruction::Trap, *v) {
-              self.free(*v);
+            live_outs.remove(&v);
+            if !self.state.is_used_later(&[], &TerminatorInstruction::Trap, *v) {
+              self.state.free(*v);
             }
           }
         }
@@ -236,9 +247,9 @@ impl Regalloc<'_> {
     }
   }
 
-  fn pre_allocation(&mut self, function: &Function) {
-    for block in function.blocks() {
-      for (i, instr) in function.block(block).instructions.iter().enumerate() {
+  fn pre_allocation(&mut self) {
+    for block in self.function.blocks() {
+      for (i, instr) in self.function.block(block).instructions.iter().enumerate() {
         let loc = InstructionLocation { block, index: i };
         if !matches!(instr.opcode, Opcode::Syscall | Opcode::Call(_) | Opcode::CallExtern(_)) {
           continue;
@@ -266,41 +277,24 @@ impl Regalloc<'_> {
             _ => unreachable!(),
           };
 
-          self.preference.entry(var).or_insert((reg_index, loc));
+          self.state.preference.entry(var).or_insert((reg_index, loc));
         }
       }
 
-      if let TerminatorInstruction::Return(ref inputs) = function.block(block).terminator {
+      if let TerminatorInstruction::Return(ref inputs) = self.function.block(block).terminator {
         for (i, input) in inputs.iter().enumerate() {
           let InstructionInput::Var(var) = input else { continue };
 
-          let reg_index = match calling_convention(function.sig.args.len() + i) {
+          let reg_index = match calling_convention(self.function.sig.args.len() + i) {
             Requirement::Specific(reg) => reg,
             _ => unreachable!(),
           };
 
-          let loc = InstructionLocation { block, index: function.block(block).instructions.len() };
-          self.preference.entry(*var).or_insert((reg_index, loc));
+          let loc =
+            InstructionLocation { block, index: self.function.block(block).instructions.len() };
+          self.state.preference.entry(*var).or_insert((reg_index, loc));
         }
       }
-    }
-  }
-
-  fn expire_intervals(&mut self, live_ins: &HashSet<Variable>, live_outs: &HashSet<Variable>) {
-    for &var in live_outs.iter().filter(|&&v| !live_ins.contains(&v)) {
-      self.free(var);
-    }
-  }
-
-  fn start_intervals(
-    &mut self,
-    block: BlockId,
-    live_ins: &HashSet<Variable>,
-    live_outs: &HashSet<Variable>,
-  ) {
-    let loc = InstructionLocation { block, index: 0 };
-    for &var in live_ins.iter().filter(|&&v| !live_outs.contains(&v)) {
-      self.allocate(loc, var);
     }
   }
 
@@ -309,35 +303,31 @@ impl Regalloc<'_> {
   ///   variables won't always be allocated to their preference. So, this is
   ///   where we add moves to fix that.
   /// - Move registers we still need that get clobbered.
-  fn visit_instr(
-    &mut self,
-    live_outs: &mut HashSet<Variable>,
-    loc: InstructionLocation,
-    block: &mut Block,
-  ) {
-    let (instr, block_after_instr) = block.instructions[loc.index..].split_first_mut().unwrap();
-
-    for i in 0..instr.input.len() {
+  fn visit_instr(&mut self, live_outs: &mut HashSet<Variable>, loc: InstructionLocation) {
+    let input_len = self.function.block(loc.block).instructions[loc.index].input.len();
+    for i in 0..input_len {
+      let instr = &mut self.function.block_mut(loc.block).instructions[loc.index];
       let requirement = Requirement::for_input(instr, i);
       let input = &mut instr.input[i];
 
       if let InstructionInput::Var(v) = input {
-        while let Some(&new_v) = self.rehomes.get(v) {
+        while let Some(&new_v) = self.state.rehomes.get(v) {
           *v = new_v;
         }
       }
 
-      if let Some(new_var) = self.satisfy_requirement(loc, input, requirement) {
+      if let Some(new_var) = self.state.satisfy_requirement(loc, *input, requirement) {
         *input = InstructionInput::Var(new_var);
-        self.active.insert(self.alloc.registers.get(new_var).unwrap().index, new_var);
+        self.state.active.insert(self.state.alloc.registers.get(new_var).unwrap().index, new_var);
       }
     }
 
-    for input in &instr.input {
+    let instr = &self.function.block(loc.block).instructions[loc.index];
+    for input in instr.input.clone() {
       if let InstructionInput::Var(v) = input {
-        live_outs.remove(v);
-        if !self.is_used_later(block_after_instr, &block.terminator, *v) {
-          self.free(*v);
+        live_outs.remove(&v);
+        if !self.is_used_after(loc, v) {
+          self.state.free(v);
         }
       }
     }
@@ -364,10 +354,35 @@ impl Regalloc<'_> {
     */
   }
 
+  fn is_used_after(&self, loc: InstructionLocation, var: Variable) -> bool {
+    let block = self.function.block(loc.block);
+    self.state.is_used_later(&block.instructions[loc.index + 1..], &block.terminator, var)
+  }
+}
+
+impl RegallocState<'_> {
+  fn expire_intervals(&mut self, live_ins: &HashSet<Variable>, live_outs: &HashSet<Variable>) {
+    for &var in live_outs.iter().filter(|&&v| !live_ins.contains(&v)) {
+      self.free(var);
+    }
+  }
+
+  fn start_intervals(
+    &mut self,
+    block: BlockId,
+    live_ins: &HashSet<Variable>,
+    live_outs: &HashSet<Variable>,
+  ) {
+    let loc = InstructionLocation { block, index: 0 };
+    for &var in live_ins.iter().filter(|&&v| !live_outs.contains(&v)) {
+      self.allocate(loc, var);
+    }
+  }
+
   fn satisfy_requirement(
     &mut self,
     loc: InstructionLocation,
-    input: &InstructionInput,
+    input: InstructionInput,
     requirement: Requirement,
   ) -> Option<Variable> {
     let (requirement, prev) = match requirement {
@@ -384,12 +399,12 @@ impl Regalloc<'_> {
 
     let new_var = match input {
       InstructionInput::Var(v) => match prev {
-        Some(active) if active == *v => None,
+        Some(active) if active == v => None,
         Some(other) => {
           moves.push(Move::VarReg { from: other, to: RegisterIndex::Ebx });
 
           let new_var = self.fresh_var(v.size());
-          moves.push(Move::VarVar { from: *v, to: new_var });
+          moves.push(Move::VarVar { from: v, to: new_var });
           self.alloc.registers.set_with(
             new_var,
             Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
@@ -398,9 +413,9 @@ impl Regalloc<'_> {
           Some(new_var)
         }
         None => {
-          if self.alloc.registers.get(*v).is_some_and(|r| r.index != requirement) {
+          if self.alloc.registers.get(v).is_some_and(|r| r.index != requirement) {
             let new_var = self.fresh_var(v.size());
-            moves.push(Move::VarVar { from: *v, to: new_var });
+            moves.push(Move::VarVar { from: v, to: new_var });
             self.alloc.registers.set_with(
               new_var,
               Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
@@ -417,7 +432,7 @@ impl Regalloc<'_> {
           self.rehome(loc, other);
 
           let new_var = self.fresh_var(VariableSize::Bit64);
-          moves.push(Move::ImmVar { from: *imm, to: new_var });
+          moves.push(Move::ImmVar { from: imm, to: new_var });
           self.alloc.registers.set_with(
             new_var,
             Register { size: var_to_reg_size(VariableSize::Bit64).unwrap(), index: requirement },
@@ -427,7 +442,7 @@ impl Regalloc<'_> {
         }
         None => {
           let new_var = self.fresh_var(VariableSize::Bit64);
-          moves.push(Move::ImmVar { from: *imm, to: new_var });
+          moves.push(Move::ImmVar { from: imm, to: new_var });
           self.alloc.registers.set_with(
             new_var,
             Register { size: var_to_reg_size(VariableSize::Bit64).unwrap(), index: requirement },
@@ -592,7 +607,7 @@ impl Requirement {
         let InstructionInput::Var(v) = instr.input[0] else {
           panic!("expected var input for math instruction: {instr}");
         };
-        let input = regalloc.alloc.registers.get(v).unwrap();
+        let input = regalloc.state.alloc.registers.get(v).unwrap();
 
         match m {
           // In-place, any register.
