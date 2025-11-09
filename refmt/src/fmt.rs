@@ -145,7 +145,7 @@ impl FormatterContext<'_> {
       (T![mod] | T![use] | T![let] | T![if] | T![fn] | T![extern] | T![struct], _) => (None, Space),
       (T![else], _) => (Space, None),
 
-      (_, BINARY_OP) => {
+      (_, BINARY_OP) | (T![as], _) => {
         if self.multiline {
           (None, Space)
         } else {
