@@ -121,7 +121,7 @@ pub enum Opcode {
   CallExtern(ExternId),
   Lea(Symbol),
   Move,
-  Load,
+  Load(i32),
   Syscall,
 
   StackAddr(StackId, u32),
@@ -527,7 +527,7 @@ impl fmt::Display for Opcode {
       Opcode::CallExtern(id) => write!(f, "call extern {}", id.0),
       Opcode::Lea(symbol) => write!(f, "lea symbol {}", symbol.index),
       Opcode::Move => write!(f, "mov"),
-      Opcode::Load => write!(f, "load"),
+      Opcode::Load(offset) => write!(f, "load {}{offset}", if *offset >= 0 { "+" } else { "" }),
       Opcode::Syscall => write!(f, "syscall"),
       Opcode::StackAddr(slot, offset) => write!(f, "stack_addr {}+{offset}", slot.0),
       Opcode::StackStore(slot, offset) => write!(f, "stack_store {}+{offset}", slot.0),

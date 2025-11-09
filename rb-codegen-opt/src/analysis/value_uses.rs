@@ -172,7 +172,7 @@ impl ValueUses {
       Opcode::StackAddr(_, _)
       | Opcode::StackLoad(_, _)
       | Opcode::StackStore(_, _)
-      | Opcode::Load => {
+      | Opcode::Load(_) => {
         for out in &instr.output {
           self.set(out.unwrap_var(), VariableValue::Unknown);
         }

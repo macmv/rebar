@@ -354,12 +354,12 @@ impl FuncBuilder<'_> {
             let index =
               self.mir().structs[&id].fields.iter().position(|(n, _)| n == field).unwrap();
 
-            let _offset = layout.offsets[index] / 8;
+            let offset = layout.offsets[index];
 
             let vt = ValueType::for_type(self.mir(), res);
             let mut values = vec![];
-            for _ in 0..vt.len(self.mir()) {
-              values.push(self.builder.instr().load(Bit64, ptr));
+            for i in 0..vt.len(self.mir()) {
+              values.push(self.builder.instr().load(offset as i32 + i as i32 * 8, Bit64, ptr));
             }
 
             RValue::new(vt, values)
@@ -406,7 +406,7 @@ impl FuncBuilder<'_> {
           mir::UnaryOp::Deref => {
             // assert_eq!(lhs.ty, ValueType::Ptr, "dereference non-pointer");
 
-            RValue::int(self.builder.instr().load(Bit64, v))
+            RValue::int(self.builder.instr().load(0, Bit64, v))
           }
         };
 

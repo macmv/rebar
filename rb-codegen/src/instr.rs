@@ -176,7 +176,7 @@ instructions! {
   cmp: Compare(condition: Condition) => input1, input2;
   lea: Lea(symbol: Symbol) => ;
   mov: Move => input;
-  load: Load => input;
+  load: Load(offset: i32) => input;
   syscall1: Syscall => input;
   syscall2: Syscall => input1, input2;
   syscall3: Syscall => input1, input2, input3;

@@ -670,7 +670,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           );
         }
 
-        rb_codegen::Opcode::Load => {
+        rb_codegen::Opcode::Load(offset) => {
           let input = match inst.input[0] {
             InstructionInput::Var(v) => reg.get(v),
             _ => panic!("expected variable input for stack load"),
@@ -683,7 +683,8 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
             Instruction::new(Opcode::MOV_RM_32)
               .with_prefix(Prefix::RexW)
               .with_mod(0b00, input.index)
-              .with_reg(output.index),
+              .with_reg(output.index)
+              .with_displacement(Immediate::i8(offset as i8 as u8)),
           );
         }
 
