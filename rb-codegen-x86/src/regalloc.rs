@@ -18,9 +18,7 @@ pub struct VariableRegisters {
 }
 
 trait RegallocDebug {
-  fn log_preference(&mut self, var: Variable, reg: RegisterIndex, loc: InstructionLocation) {
-    let _ = (var, reg, loc);
-  }
+  fn log(&mut self, msg: fmt::Arguments) { let _ = msg; }
 }
 
 struct Regalloc<'a> {
@@ -230,7 +228,7 @@ impl Regalloc<'_> {
           let register = requirement.unwrap_or_else(|| self.state.pick_register(loc, out));
 
           if used_later {
-            self.state.active.insert(register, out);
+            self.state.activate(register, out);
             live_outs.insert(out);
           }
           self.state.alloc.registers.set_with(
@@ -329,6 +327,9 @@ impl Regalloc<'_> {
   ///   where we add moves to fix that.
   /// - Move registers we still need that get clobbered.
   fn visit_instr(&mut self, live_outs: &mut HashSet<Variable>, loc: InstructionLocation) {
+    let instr = &self.function.block(loc.block).instructions[loc.index];
+    self.state.debug.log(format_args!("= {instr}"));
+
     let input_len = self.function.block(loc.block).instructions[loc.index].input.len();
     for i in 0..input_len {
       let instr = &mut self.function.block_mut(loc.block).instructions[loc.index];
@@ -341,13 +342,13 @@ impl Regalloc<'_> {
 
       if let Some(new_var) = self.state.satisfy_requirement(loc, *input, requirement) {
         *input = InstructionInput::Var(new_var);
-        self.state.active.insert(self.state.alloc.registers.get(new_var).unwrap().index, new_var);
+        self.state.activate(self.state.alloc.registers.get(new_var).unwrap().index, new_var);
         self.state.current_instruction.insert(new_var);
       } else {
         match input {
           InstructionInput::Var(v) => {
             let reg = self.state.alloc.registers.get(*v).unwrap().index;
-            self.state.active.insert(reg, *v);
+            self.state.activate(reg, *v);
             self.state.current_instruction.insert(*v);
           }
           _ => {}
@@ -430,16 +431,14 @@ impl RegallocState<'_> {
       Requirement::Specific(reg) => (reg, self.active.get(&reg).copied()),
     };
 
-    let mut moves = vec![];
-
     let new_var = match input {
       InstructionInput::Var(v) => match prev {
         Some(active) if active == v => None,
         Some(other) => {
-          moves.push(Move::VarReg { from: other, to: RegisterIndex::Ebx });
+          self.copy(loc, Move::VarReg { from: other, to: RegisterIndex::Ebx });
 
           let new_var = self.fresh_var(v.size());
-          moves.push(Move::VarVar { from: v, to: new_var });
+          self.copy(loc, Move::VarVar { from: v, to: new_var });
           self.alloc.registers.set_with(
             new_var,
             Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
@@ -450,7 +449,7 @@ impl RegallocState<'_> {
         None => {
           if self.alloc.registers.get(v).is_some_and(|r| r.index != requirement) {
             let new_var = self.fresh_var(v.size());
-            moves.push(Move::VarVar { from: v, to: new_var });
+            self.copy(loc, Move::VarVar { from: v, to: new_var });
             self.alloc.registers.set_with(
               new_var,
               Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
@@ -464,10 +463,13 @@ impl RegallocState<'_> {
       },
       InstructionInput::Imm(imm) => match prev {
         Some(other) => {
+          self.debug.log(format_args!(
+            "while satisfying requirement {requirement:?} for {imm:?}, decided to rehome {other}",
+          ));
           self.rehome(loc, other);
 
           let new_var = self.fresh_var(VariableSize::Bit64);
-          moves.push(Move::ImmVar { from: imm, to: new_var });
+          self.copy(loc, Move::ImmVar { from: imm, to: new_var });
           self.alloc.registers.set_with(
             new_var,
             Register { size: var_to_reg_size(VariableSize::Bit64).unwrap(), index: requirement },
@@ -477,7 +479,7 @@ impl RegallocState<'_> {
         }
         None => {
           let new_var = self.fresh_var(VariableSize::Bit64);
-          moves.push(Move::ImmVar { from: imm, to: new_var });
+          self.copy(loc, Move::ImmVar { from: imm, to: new_var });
           self.alloc.registers.set_with(
             new_var,
             Register { size: var_to_reg_size(VariableSize::Bit64).unwrap(), index: requirement },
@@ -488,9 +490,23 @@ impl RegallocState<'_> {
       },
     };
 
-    self.copies.entry(loc).or_default().extend(moves);
-
     new_var
+  }
+
+  fn copy(&mut self, loc: InstructionLocation, m: Move) {
+    match m {
+      Move::VarReg { from, to } => {
+        self.debug.log(format_args!("+ mov {to:?} = {from}"));
+      }
+      Move::VarVar { from, to } => {
+        self.debug.log(format_args!("+ mov {to} = {from}"));
+      }
+      Move::ImmVar { from, to } => {
+        self.debug.log(format_args!("+ mov {to} = {from:?}"));
+      }
+    }
+
+    self.copies.entry(loc).or_default().push(m);
   }
 
   fn fresh_var(&mut self, size: VariableSize) -> Variable {
@@ -511,6 +527,7 @@ impl RegallocState<'_> {
 
   fn free(&mut self, var: Variable) {
     if let Some((&reg, _)) = self.active.iter().find(|&(_, &v)| v == var) {
+      self.debug.log(format_args!("freeing {var}({reg:?})"));
       self.active.remove(&reg);
     }
   }
@@ -525,6 +542,9 @@ impl RegallocState<'_> {
 
         Some(&other) if self.current_instruction.contains(&other) => {}
         Some(&other) => {
+          self
+            .debug
+            .log(format_args!("while picking a register for {var}, decided to rehome {other}"));
           self.rehome(loc, other);
           self.active.remove(&pref);
 
@@ -547,6 +567,10 @@ impl RegallocState<'_> {
   fn rehome(&mut self, loc: InstructionLocation, var: Variable) {
     let new_var = self.fresh_var(var.size());
     let new_reg = self.pick_register(loc, var);
+    self.debug.log(format_args!(
+      "rehoming {var}({old_reg:?}) -> {new_var}({new_reg:?})",
+      old_reg = self.alloc.registers.get(var).unwrap().index
+    ));
     self.alloc.registers.set_with(
       new_var,
       Register { size: var_to_reg_size(var.size()).unwrap(), index: new_reg },
@@ -554,7 +578,7 @@ impl RegallocState<'_> {
     );
     self.active.insert(new_reg, new_var);
 
-    self.copies.entry(loc).or_default().push(Move::VarVar { from: var, to: new_var });
+    self.copy(loc, Move::VarVar { from: var, to: new_var });
     self.rehomes.insert(var, new_var);
     self.rehomes_reverse.insert(new_var, var);
   }
@@ -609,10 +633,15 @@ impl RegallocState<'_> {
     match self.preference.entry(var) {
       std::collections::hash_map::Entry::Occupied(_) => {}
       std::collections::hash_map::Entry::Vacant(entry) => {
-        self.debug.log_preference(var, reg_index, loc);
+        self.debug.log(format_args!("preference: {var} -> {reg_index:?} at {loc}"));
         entry.insert((reg_index, loc));
       }
     }
+  }
+
+  fn activate(&mut self, register: RegisterIndex, out: Variable) {
+    self.debug.log(format_args!("marking {out}({register:?}) active"));
+    self.active.insert(register, out);
   }
 }
 
@@ -722,6 +751,8 @@ impl fmt::Display for InstructionLocation {
 
 #[cfg(test)]
 mod tests {
+  use core::fmt;
+
   use rb_codegen_opt::{VariableDisplay, parse};
   use rb_test::{Expect, expect};
 
@@ -748,13 +779,10 @@ mod tests {
   }
 
   impl RegallocDebug for Debug {
-    fn log_preference(
-      &mut self,
-      var: rb_codegen::Variable,
-      reg: crate::RegisterIndex,
-      loc: super::InstructionLocation,
-    ) {
-      self.out.push_str(&format!("preference: {var} -> {reg:?} at {loc}\n"));
+    fn log(&mut self, msg: fmt::Arguments) {
+      use std::fmt::Write;
+
+      writeln!(self.out, "{msg}").unwrap();
     }
   }
 
@@ -897,6 +925,15 @@ mod tests {
       ",
       expect![@r#"
         preference: r0 -> Edi at <block 0, instr 2>
+        = mov r0 = 0x01
+        marking r0(Edi) active
+        = call function 0 = 0x02
+        while satisfying requirement Edi for Unsigned(2), decided to rehome r0
+        rehoming r0(Edi) -> r1(Edi)
+        + mov r1 = r0
+        + mov r2 = Unsigned(2)
+        marking r2(Edi) active
+        freeing r2(Edi)
 
         block 0:
           mov rdi(0) = 0x01
