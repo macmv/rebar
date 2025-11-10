@@ -30,10 +30,17 @@ struct Regalloc<'a> {
   state: RegallocState<'a>,
 }
 
+struct NopDebug;
+
+impl RegallocDebug for NopDebug {}
+
 struct RegallocState<'a> {
   vu:    &'a ValueUses,
   alloc: &'a mut VariableRegisters,
+  #[cfg(debug_assertions)]
   debug: &'a mut dyn RegallocDebug,
+  #[cfg(not(debug_assertions))]
+  debug: &'a mut NopDebug,
 
   active:              HashMap<RegisterIndex, Variable>,
   visited:             HashSet<BlockId>,
@@ -71,14 +78,12 @@ enum Requirement {
 }
 
 impl VariableRegisters {
-  pub fn pass(function: &mut Function) -> Self {
-    struct NopDebug;
-
-    impl RegallocDebug for NopDebug {}
-
-    Self::pass_debug(function, &mut NopDebug)
-  }
-  fn pass_debug(function: &mut Function, debug: &mut dyn RegallocDebug) -> Self {
+  pub fn pass(function: &mut Function) -> Self { Self::pass_debug(function, &mut NopDebug) }
+  fn pass_debug(
+    function: &mut Function,
+    #[cfg(not(debug_assertions))] debug: &mut NopDebug,
+    #[cfg(debug_assertions)] debug: &mut dyn RegallocDebug,
+  ) -> Self {
     let mut analysis = Analysis::default();
     analysis.load(DominatorTree::ID, function);
     analysis.load(ValueUses::ID, function);
