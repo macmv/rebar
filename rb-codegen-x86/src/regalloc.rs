@@ -23,17 +23,17 @@ trait RegallocDebug {
   }
 }
 
-struct Regalloc<'a, D: RegallocDebug> {
+struct Regalloc<'a> {
   dom:      &'a DominatorTree,
   function: &'a mut Function,
 
-  state: RegallocState<'a, D>,
+  state: RegallocState<'a>,
 }
 
-struct RegallocState<'a, D: RegallocDebug> {
+struct RegallocState<'a> {
   vu:    &'a ValueUses,
   alloc: &'a mut VariableRegisters,
-  debug: &'a mut D,
+  debug: &'a mut dyn RegallocDebug,
 
   active:              HashMap<RegisterIndex, Variable>,
   visited:             HashSet<BlockId>,
@@ -78,7 +78,7 @@ impl VariableRegisters {
 
     Self::pass_debug(function, &mut NopDebug)
   }
-  fn pass_debug(function: &mut Function, debug: &mut impl RegallocDebug) -> Self {
+  fn pass_debug(function: &mut Function, debug: &mut dyn RegallocDebug) -> Self {
     let mut analysis = Analysis::default();
     analysis.load(DominatorTree::ID, function);
     analysis.load(ValueUses::ID, function);
@@ -183,7 +183,7 @@ impl VariableRegisters {
   }
 }
 
-impl<D: RegallocDebug> Regalloc<'_, D> {
+impl Regalloc<'_> {
   pub fn pass(&mut self) {
     self.pre_allocation();
 
@@ -390,7 +390,7 @@ impl<D: RegallocDebug> Regalloc<'_, D> {
   }
 }
 
-impl<D: RegallocDebug> RegallocState<'_, D> {
+impl RegallocState<'_> {
   fn expire_intervals(&mut self, live_ins: &HashSet<Variable>, live_outs: &HashSet<Variable>) {
     for &var in live_outs.iter().filter(|&&v| !live_ins.contains(&v)) {
       self.free(var);
@@ -652,11 +652,7 @@ impl Requirement {
     }
   }
 
-  fn for_output<D: RegallocDebug>(
-    regalloc: &Regalloc<D>,
-    instr: &Instruction,
-    index: usize,
-  ) -> Option<RegisterIndex> {
+  fn for_output(regalloc: &Regalloc, instr: &Instruction, index: usize) -> Option<RegisterIndex> {
     match instr.opcode {
       Opcode::Math(m) => {
         let InstructionInput::Var(v) = instr.input[0] else {
