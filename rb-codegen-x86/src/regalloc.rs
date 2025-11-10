@@ -292,8 +292,7 @@ impl<D: RegallocDebug> Regalloc<'_, D> {
             _ => unreachable!(),
           };
 
-          self.state.debug.log_preference(var, reg_index, loc);
-          self.state.preference.entry(var).or_insert((reg_index, loc));
+          self.state.prefer(var, reg_index, loc);
         }
       }
 
@@ -306,10 +305,11 @@ impl<D: RegallocDebug> Regalloc<'_, D> {
             _ => unreachable!(),
           };
 
-          let loc =
-            InstructionLocation { block, index: self.function.block(block).instructions.len() };
-          self.state.debug.log_preference(*var, reg_index, loc);
-          self.state.preference.entry(*var).or_insert((reg_index, loc));
+          self.state.prefer(
+            *var,
+            reg_index,
+            InstructionLocation { block, index: self.function.block(block).instructions.len() },
+          );
         }
       }
     }
@@ -596,6 +596,16 @@ impl<D: RegallocDebug> RegallocState<'_, D> {
   }
 
   fn is_tmp_var(&self, var: Variable) -> bool { var.id() >= self.first_new_variable }
+
+  fn prefer(&mut self, var: Variable, reg_index: RegisterIndex, loc: InstructionLocation) {
+    match self.preference.entry(var) {
+      std::collections::hash_map::Entry::Occupied(_) => {}
+      std::collections::hash_map::Entry::Vacant(entry) => {
+        self.debug.log_preference(var, reg_index, loc);
+        entry.insert((reg_index, loc));
+      }
+    }
+  }
 }
 
 fn calling_convention(index: usize) -> Requirement {
