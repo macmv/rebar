@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::{
+  collections::{BTreeMap, HashMap, HashSet},
+  fmt,
+};
 
 use rb_codegen::{
   BlockId, Function, Immediate, Instruction, InstructionInput, InstructionOutput, Math, Opcode,
@@ -710,6 +713,12 @@ fn is_used_later_in_block(after: &[Instruction], var: Variable) -> bool {
   false
 }
 
+impl fmt::Display for InstructionLocation {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "<{}, instr {}>", self.block, self.index)
+  }
+}
+
 #[cfg(test)]
 mod tests {
   use rb_codegen_opt::{VariableDisplay, parse};
@@ -744,7 +753,7 @@ mod tests {
       reg: crate::RegisterIndex,
       loc: super::InstructionLocation,
     ) {
-      self.out.push_str(&format!("preference: {var} -> {reg:?} at {loc:?}\n"));
+      self.out.push_str(&format!("preference: {var} -> {reg:?} at {loc}\n"));
     }
   }
 
@@ -886,7 +895,7 @@ mod tests {
         return r0
       ",
       expect![@r#"
-        preference: r0 -> Edi at InstructionLocation { block: BlockId(0), index: 2 }
+        preference: r0 -> Edi at <block 0, instr 2>
 
         block 0:
           mov rdi(0) = 0x01
