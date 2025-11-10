@@ -14,16 +14,23 @@ pub struct VariableRegisters {
   registers: TVec<Variable, Register>,
 }
 
-struct Regalloc<'a> {
+trait RegallocDebug {
+  fn log_preference(&mut self, var: Variable, reg: RegisterIndex, loc: InstructionLocation) {
+    let _ = (var, reg, loc);
+  }
+}
+
+struct Regalloc<'a, D: RegallocDebug> {
   dom:      &'a DominatorTree,
   function: &'a mut Function,
 
-  state: RegallocState<'a>,
+  state: RegallocState<'a, D>,
 }
 
-struct RegallocState<'a> {
+struct RegallocState<'a, D: RegallocDebug> {
   vu:    &'a ValueUses,
   alloc: &'a mut VariableRegisters,
+  debug: &'a mut D,
 
   active:              HashMap<RegisterIndex, Variable>,
   visited:             HashSet<BlockId>,
@@ -62,6 +69,13 @@ enum Requirement {
 
 impl VariableRegisters {
   pub fn pass(function: &mut Function) -> Self {
+    struct NopDebug;
+
+    impl RegallocDebug for NopDebug {}
+
+    Self::pass_debug(function, &mut NopDebug)
+  }
+  fn pass_debug(function: &mut Function, debug: &mut impl RegallocDebug) -> Self {
     let mut analysis = Analysis::default();
     analysis.load(DominatorTree::ID, function);
     analysis.load(ValueUses::ID, function);
@@ -91,6 +105,7 @@ impl VariableRegisters {
       state: RegallocState {
         vu: analysis.get(),
         alloc: &mut regs,
+        debug,
 
         active: HashMap::new(),
         visited: HashSet::new(),
@@ -165,7 +180,7 @@ impl VariableRegisters {
   }
 }
 
-impl Regalloc<'_> {
+impl<D: RegallocDebug> Regalloc<'_, D> {
   pub fn pass(&mut self) {
     self.pre_allocation();
 
@@ -277,6 +292,7 @@ impl Regalloc<'_> {
             _ => unreachable!(),
           };
 
+          self.state.debug.log_preference(var, reg_index, loc);
           self.state.preference.entry(var).or_insert((reg_index, loc));
         }
       }
@@ -292,6 +308,7 @@ impl Regalloc<'_> {
 
           let loc =
             InstructionLocation { block, index: self.function.block(block).instructions.len() };
+          self.state.debug.log_preference(*var, reg_index, loc);
           self.state.preference.entry(*var).or_insert((reg_index, loc));
         }
       }
@@ -370,7 +387,7 @@ impl Regalloc<'_> {
   }
 }
 
-impl RegallocState<'_> {
+impl<D: RegallocDebug> RegallocState<'_, D> {
   fn expire_intervals(&mut self, live_ins: &HashSet<Variable>, live_outs: &HashSet<Variable>) {
     for &var in live_outs.iter().filter(|&&v| !live_ins.contains(&v)) {
       self.free(var);
@@ -622,7 +639,11 @@ impl Requirement {
     }
   }
 
-  fn for_output(regalloc: &Regalloc, instr: &Instruction, index: usize) -> Option<RegisterIndex> {
+  fn for_output<D: RegallocDebug>(
+    regalloc: &Regalloc<D>,
+    instr: &Instruction,
+    index: usize,
+  ) -> Option<RegisterIndex> {
     match instr.opcode {
       Opcode::Math(m) => {
         let InstructionInput::Var(v) = instr.input[0] else {
@@ -684,7 +705,7 @@ mod tests {
   use rb_codegen_opt::{VariableDisplay, parse};
   use rb_test::{Expect, expect};
 
-  use crate::regalloc::VariableRegisters;
+  use crate::regalloc::{RegallocDebug, VariableRegisters};
 
   impl VariableDisplay for VariableRegisters {
     fn write_variable(
@@ -700,6 +721,30 @@ mod tests {
     let mut function = parse(function);
     let regs = VariableRegisters::pass(&mut function.function);
     function.check_annotated(expected, &regs);
+  }
+
+  struct Debug {
+    out: String,
+  }
+
+  impl RegallocDebug for Debug {
+    fn log_preference(
+      &mut self,
+      var: rb_codegen::Variable,
+      reg: crate::RegisterIndex,
+      loc: super::InstructionLocation,
+    ) {
+      self.out.push_str(&format!("preference: {var} -> {reg:?} at {loc:?}\n"));
+    }
+  }
+
+  fn check_v(function: &str, expected: Expect) {
+    let mut function = parse(function);
+    let mut debug = Debug { out: String::new() };
+    let regs = VariableRegisters::pass_debug(&mut function.function, &mut debug);
+
+    let func = function.annotate(&regs);
+    expected.assert_eq(&format!("{}\n{}", debug.out, func));
   }
 
   #[test]
@@ -816,6 +861,29 @@ mod tests {
           mov rsi(5) = 0x02
           call function 0 = rdi(4), rsi(5)
           trap
+      "#
+      ],
+    );
+  }
+
+  #[test]
+  fn save_registers() {
+    check_v(
+      "
+      block 0:
+        mov r0 = 0x01
+        call 0 = 0x02
+        return r0
+      ",
+      expect![@r#"
+        preference: r0 -> Edi at InstructionLocation { block: BlockId(0), index: 2 }
+
+        block 0:
+          mov rdi(0) = 0x01
+          mov rdi(1) = rdi(0)
+          mov rdi(2) = 0x02
+          call function 0 = rdi(2)
+          return r1
       "#
       ],
     );

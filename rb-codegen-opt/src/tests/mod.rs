@@ -56,6 +56,10 @@ impl TestFunction {
 
   pub fn check(&self, expected: Expect) { expected.assert_eq(&self.function.to_string()); }
 
+  pub fn annotate(&self, annotation: &dyn VariableDisplay) -> String {
+    AnnotatedFunction(&self.function, annotation).to_string()
+  }
+
   pub fn check_annotated(&self, expected: Expect, annotation: &dyn VariableDisplay) {
     let annotated = AnnotatedFunction(&self.function, annotation).to_string();
     expected.assert_eq(&annotated);
