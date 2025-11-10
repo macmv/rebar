@@ -225,7 +225,7 @@ impl Regalloc<'_> {
 
           let used_later = self.is_used_after(InstructionLocation { block, index: i }, out);
 
-          let register = requirement.unwrap_or_else(|| self.state.pick_register(loc, out));
+          let register = requirement.unwrap_or_else(|| self.state.pick_register(loc, out, false));
 
           if used_later {
             self.state.activate(register, out);
@@ -425,7 +425,7 @@ impl RegallocState<'_> {
       Requirement::None => return None,
       Requirement::Register(size) => {
         let new_var = self.fresh_var(size);
-        let reg = self.pick_register(loc, new_var);
+        let reg = self.pick_register(loc, new_var, false);
         (reg, self.active.get(&reg).copied())
       }
       Requirement::Specific(reg) => (reg, self.active.get(&reg).copied()),
@@ -516,7 +516,7 @@ impl RegallocState<'_> {
   }
 
   fn allocate(&mut self, loc: InstructionLocation, var: Variable) {
-    let reg = self.pick_register(loc, var);
+    let reg = self.pick_register(loc, var, false);
     self.active.insert(reg, var);
     self.alloc.registers.set_with(
       var,
@@ -532,12 +532,21 @@ impl RegallocState<'_> {
     }
   }
 
-  fn pick_register(&mut self, loc: InstructionLocation, var: Variable) -> RegisterIndex {
+  fn pick_register(
+    &mut self,
+    loc: InstructionLocation,
+    var: Variable,
+    must_move: bool,
+  ) -> RegisterIndex {
     if let Some(pref) = self.preference_after(loc, var) {
       match self.active.get(&pref) {
         // If the variable is already in the preferred register, or there is nothing in the
         // preferred register, use that.
-        Some(&other) if other == var => return pref,
+        Some(&other) if other == var => {
+          if !must_move {
+            return pref;
+          }
+        }
         None => return pref,
 
         Some(&other) if self.current_instruction.contains(&other) => {}
@@ -566,7 +575,7 @@ impl RegallocState<'_> {
 
   fn rehome(&mut self, loc: InstructionLocation, var: Variable) {
     let new_var = self.fresh_var(var.size());
-    let new_reg = self.pick_register(loc, var);
+    let new_reg = self.pick_register(loc, var, true);
     self.debug.log(format_args!(
       "rehoming {var}({old_reg:?}) -> {new_var}({new_reg:?})",
       old_reg = self.alloc.registers.get(var).unwrap().index
@@ -929,18 +938,20 @@ mod tests {
         marking r0(Edi) active
         = call function 0 = 0x02
         while satisfying requirement Edi for Unsigned(2), decided to rehome r0
-        rehoming r0(Edi) -> r1(Edi)
+        rehoming r0(Edi) -> r1(Eax)
         + mov r1 = r0
         + mov r2 = Unsigned(2)
         marking r2(Edi) active
         freeing r2(Edi)
+        + mov r3 = r1
 
         block 0:
           mov rdi(0) = 0x01
-          mov rdi(1) = rdi(0)
+          mov rax(1) = rdi(0)
           mov rdi(2) = 0x02
           call function 0 = rdi(2)
-          return r1
+          mov rdi(3) = rax(1)
+          return r3
       "#
       ],
     );
