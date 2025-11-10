@@ -1,6 +1,6 @@
 use rb_codegen::{
-  Block, BlockId, Function, FunctionId, Instruction, InstructionInput, InstructionOutput, Math,
-  Opcode, Phi, Variable, VariableSize,
+  Block, BlockId, ExternId, Function, FunctionId, Instruction, InstructionInput, InstructionOutput,
+  Math, Opcode, Phi, Variable, VariableSize,
 };
 use smallvec::SmallVec;
 
@@ -59,7 +59,12 @@ pub fn parse(asm: &str) -> Function {
       "call" => {
         let (_func, rest) = args.split_once(' ').unwrap();
         args = rest;
-        Opcode::Call(FunctionId::new(0))
+
+        if _func.starts_with("extern") {
+          Opcode::CallExtern(ExternId(0))
+        } else {
+          Opcode::Call(FunctionId::new(0))
+        }
       }
 
       "jump" => {
