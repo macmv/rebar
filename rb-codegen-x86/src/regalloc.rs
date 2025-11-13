@@ -40,7 +40,7 @@ struct RegallocState<'a> {
   #[cfg(not(debug_assertions))]
   debug: &'a mut NopDebug,
 
-  active:              HashMap<RegisterIndex, Variable>,
+  active:              RegisterMap<Variable>,
   visited:             HashSet<BlockId>,
   current_instruction: HashSet<Variable>,
 
@@ -52,6 +52,11 @@ struct RegallocState<'a> {
 
   rehomes:         HashMap<Variable, Variable>,
   rehomes_reverse: HashMap<Variable, Variable>,
+}
+
+#[derive(Clone, Copy)]
+struct RegisterMap<T> {
+  values: [Option<T>; RegisterIndex::COUNT],
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -113,7 +118,7 @@ impl VariableRegisters {
         alloc: &mut regs,
         debug,
 
-        active: HashMap::new(),
+        active: RegisterMap::new(),
         visited: HashSet::new(),
         current_instruction: HashSet::new(),
         preference: HashMap::new(),
@@ -342,7 +347,7 @@ impl Regalloc<'_> {
           RegisterIndex::R15,
         ];
 
-        for (&reg, &var) in &self.state.active.clone() {
+        for (reg, &var) in self.state.active.clone().iter() {
           if !saved.contains(&reg) {
             self.state.debug.log(format_args!("extern clobbers register {reg:?}, rehoming {var}"));
             self.state.rehome_options(loc, var, saved);
@@ -448,9 +453,9 @@ impl RegallocState<'_> {
       Requirement::Register(size) => {
         let new_var = self.fresh_var(size);
         let reg = self.pick_register(loc, new_var, false, RegisterIndex::all());
-        (reg, self.active.get(&reg).copied())
+        (reg, self.active.get(reg).copied())
       }
-      Requirement::Specific(reg) => (reg, self.active.get(&reg).copied()),
+      Requirement::Specific(reg) => (reg, self.active.get(reg).copied()),
     };
 
     let new_var = match input {
@@ -539,7 +544,7 @@ impl RegallocState<'_> {
 
   fn allocate(&mut self, loc: InstructionLocation, var: Variable) {
     let reg = self.pick_register(loc, var, false, RegisterIndex::all());
-    self.active.insert(reg, var);
+    self.active.set(reg, var);
     self.alloc.registers.set_with(
       var,
       Register { size: var_to_reg_size(var.size()).unwrap(), index: reg },
@@ -548,9 +553,9 @@ impl RegallocState<'_> {
   }
 
   fn free(&mut self, var: Variable) {
-    if let Some((&reg, _)) = self.active.iter().find(|&(_, &v)| v == var) {
+    if let Some((reg, _)) = self.active.clone().iter().find(|&(_, &v)| v == var) {
       self.debug.log(format_args!("freeing {var}({reg:?})"));
-      self.active.remove(&reg);
+      self.active.remove(reg);
     }
   }
 
@@ -562,7 +567,7 @@ impl RegallocState<'_> {
     options: &[RegisterIndex],
   ) -> RegisterIndex {
     if let Some(pref) = self.preference_after(loc, var) {
-      match self.active.get(&pref) {
+      match self.active.get(pref) {
         // If the variable is already in the preferred register, or there is nothing in the
         // preferred register, use that.
         Some(&other) if other == var => {
@@ -578,7 +583,7 @@ impl RegallocState<'_> {
             .debug
             .log(format_args!("while picking a register for {var}, decided to rehome {other}"));
           self.rehome(loc, other);
-          self.active.remove(&pref);
+          self.active.remove(pref);
 
           return pref;
         }
@@ -586,7 +591,7 @@ impl RegallocState<'_> {
     }
 
     for &reg_index in options {
-      if !self.active.contains_key(&reg_index) {
+      if !self.active.contains(reg_index) {
         return reg_index;
       }
     }
@@ -608,8 +613,8 @@ impl RegallocState<'_> {
       Register { size: var_to_reg_size(var.size()).unwrap(), index: new_reg },
       || Register::RAX,
     );
-    self.active.remove(&old_reg);
-    self.active.insert(new_reg, new_var);
+    self.active.remove(old_reg);
+    self.active.set(new_reg, new_var);
 
     self.copy(loc, Move::VarVar { from: var, to: new_var });
     self.rehomes.insert(var, new_var);
@@ -674,7 +679,7 @@ impl RegallocState<'_> {
 
   fn activate(&mut self, register: RegisterIndex, out: Variable) {
     self.debug.log(format_args!("marking {out}({register:?}) active"));
-    self.active.insert(register, out);
+    self.active.set(register, out);
   }
 }
 
@@ -774,6 +779,23 @@ fn is_used_later_in_block(after: &[Instruction], var: Variable) -> bool {
   }
 
   false
+}
+
+impl<T> RegisterMap<T> {
+  pub fn new() -> Self { Self { values: [(); RegisterIndex::COUNT].map(|_| None) } }
+
+  pub fn get(&self, reg: RegisterIndex) -> Option<&T> { self.values[reg as usize].as_ref() }
+  pub fn set(&mut self, reg: RegisterIndex, value: T) { self.values[reg as usize] = Some(value); }
+  pub fn remove(&mut self, reg: RegisterIndex) -> Option<T> { self.values[reg as usize].take() }
+  pub fn contains(&self, reg: RegisterIndex) -> bool { self.values[reg as usize].is_some() }
+
+  pub fn iter(&self) -> impl Iterator<Item = (RegisterIndex, &T)> {
+    self
+      .values
+      .iter()
+      .enumerate()
+      .filter_map(|(i, v)| v.as_ref().map(|val| (RegisterIndex::from_usize(i), val)))
+  }
 }
 
 impl fmt::Display for InstructionLocation {
@@ -999,27 +1021,27 @@ mod tests {
         = mov r1 = 0x02
         marking r1(Esi) active
         = call extern 0 = 0x02
-        extern clobbers register Edi, rehoming r0
-        rehoming r0(Edi) -> r2(Ebx)
-        + mov r2 = r0
         extern clobbers register Esi, rehoming r1
-        rehoming r1(Esi) -> r3(Ebp)
-        + mov r3 = r1
+        rehoming r1(Esi) -> r2(Ebx)
+        + mov r2 = r1
+        extern clobbers register Edi, rehoming r0
+        rehoming r0(Edi) -> r3(Ebp)
+        + mov r3 = r0
         + mov r4 = Unsigned(2)
         marking r4(Edi) active
         freeing r4(Edi)
-        + mov r5 = r2
-        + mov r6 = r3
+        + mov r5 = r3
+        + mov r6 = r2
 
         block 0:
           mov rdi(0) = 0x01
           mov rsi(1) = 0x02
-          mov rbx(2) = rdi(0)
-          mov rbp(3) = rsi(1)
+          mov rbx(2) = rsi(1)
+          mov rbp(3) = rdi(0)
           mov rdi(4) = 0x02
           call extern 0 = rdi(4)
-          mov rdi(5) = rbx(2)
-          mov rsi(6) = rbp(3)
+          mov rdi(5) = rbp(3)
+          mov rsi(6) = rbx(2)
           return r5, r6
       "#
       ],

@@ -283,9 +283,11 @@ impl Instruction {
 }
 
 impl RegisterIndex {
+  pub const COUNT: usize = 16;
+
   #[track_caller]
   pub fn from_usize(value: usize) -> Self {
-    if value >= 16 {
+    if value >= Self::COUNT {
       panic!("invalid register index: {}", value);
     }
 
