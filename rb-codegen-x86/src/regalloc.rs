@@ -5,8 +5,8 @@ use std::{
 };
 
 use rb_codegen::{
-  Function, Immediate, Instruction, InstructionInput, InstructionOutput, Math, Opcode, TVec,
-  TerminatorInstruction, Variable, VariableSize,
+  BlockId, Function, Immediate, Instruction, InstructionInput, InstructionOutput, Math, Opcode,
+  TVec, TerminatorInstruction, Variable, VariableSize,
 };
 use rb_codegen_opt::analysis::{Analysis, dominator_tree::DominatorTree, value_uses::ValueUses};
 use smallvec::smallvec;
@@ -149,6 +149,13 @@ struct FunctionEditor<'a> {
   next_var_id: u32,
 }
 
+struct FunctionChange<'a, 'b: 'a> {
+  editor: &'a mut FunctionEditor<'b>,
+
+  block: BlockId,
+  instr: usize,
+}
+
 impl<'a> FunctionEditor<'a> {
   pub fn new(function: &'a mut Function) -> Self {
     let next_var_id = function
@@ -176,6 +183,21 @@ impl<'a> FunctionEditor<'a> {
     let var = Variable::new(self.next_var_id, size);
     self.next_var_id += 1;
     var
+  }
+
+  pub fn edit(&mut self, f: impl Fn(&mut FunctionChange, &Instruction)) {
+    for block_id in self.function.blocks() {
+      let mut i = 0;
+      while i < self.function.block(block_id).instructions.len() {
+        let instr = self.function.block(block_id).instructions[i].clone();
+
+        let mut change = FunctionChange { editor: self, block: block_id, instr: i };
+        f(&mut change, &instr);
+
+        i = change.instr;
+        i += 1;
+      }
+    }
   }
 }
 
