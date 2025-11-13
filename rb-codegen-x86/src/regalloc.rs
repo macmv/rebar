@@ -197,6 +197,15 @@ impl VariableRegisters {
   }
 }
 
+const SAVED: &[RegisterIndex] = &[
+  RegisterIndex::Ebx,
+  RegisterIndex::Ebp,
+  RegisterIndex::R12,
+  RegisterIndex::R13,
+  RegisterIndex::R14,
+  RegisterIndex::R15,
+];
+
 impl Regalloc<'_> {
   pub fn pass(&mut self) {
     self.pre_allocation();
@@ -343,20 +352,18 @@ impl Regalloc<'_> {
     self.state.debug.log(format_args!("= {instr}"));
 
     match instr.opcode {
-      Opcode::CallExtern(_) => {
-        let saved = &[
-          RegisterIndex::Ebx,
-          RegisterIndex::Ebp,
-          RegisterIndex::R12,
-          RegisterIndex::R13,
-          RegisterIndex::R14,
-          RegisterIndex::R15,
-        ];
-
+      Opcode::Call(_) | Opcode::CallExtern(_) => {
         for (reg, &var) in self.state.active.clone().iter() {
-          if !saved.contains(&reg) {
+          if instr.input.iter().any(|input| match input {
+            InstructionInput::Var(v) => *v == var,
+            _ => false,
+          }) {
+            continue;
+          }
+
+          if !SAVED.contains(&reg) {
             self.state.debug.log(format_args!("extern clobbers register {reg:?}, rehoming {var}"));
-            self.state.rehome_options(loc, var, saved);
+            self.state.rehome_options(loc, var, SAVED);
           }
         }
       }
@@ -621,6 +628,9 @@ impl RegallocState<'_> {
     );
     self.active.remove(old_reg);
     self.active.set(new_reg, new_var);
+    if SAVED.contains(&new_reg) {
+      self.alloc.saved.set(new_reg, true);
+    }
 
     self.copy(loc, Move::VarVar { from: var, to: new_var });
     self.rehomes.insert(var, new_var);
