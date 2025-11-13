@@ -219,8 +219,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
 
   let mut stack_size = function.stack_slots.iter().map(|s| s.size).sum::<u32>();
   // Keep stack 16-byte aligned, but on entry we were already off by 8.
-  stack_size = (stack_size + 15) & !15;
-  stack_size += 8;
+  stack_size = ((stack_size + 7) & !15) + 8;
 
   builder.instr(
     Instruction::new(Opcode::MATH_EXT_IMM8)
@@ -953,12 +952,13 @@ mod tests {
     disass(
       &object_path,
       expect![@r#"
-        0x08000230      b003                   mov al, 3
-        0x08000232      66b80500               mov ax, 5
-        0x08000236      b807000000             mov eax, 7
-        0x0800023b      b809000000             mov eax, 9
-        0x08000240      48b80400000001000000   movabs rax, 0x100000004
-        0x0800024a      cc                     int3
+        0x08000230      4883ec08               sub rsp, 8
+        0x08000234      b003                   mov al, 3
+        0x08000236      66b80500               mov ax, 5
+        0x0800023a      b807000000             mov eax, 7
+        0x0800023f      b809000000             mov eax, 9
+        0x08000244      48b80400000001000000   movabs rax, 0x100000004
+        0x0800024e      cc                     int3
       "#],
     );
   }
