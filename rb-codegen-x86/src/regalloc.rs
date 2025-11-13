@@ -1,6 +1,7 @@
 use std::{
   collections::{BTreeMap, HashMap, HashSet},
   fmt,
+  ops::Range,
 };
 
 use rb_codegen::{
@@ -41,18 +42,13 @@ struct RegallocState<'a> {
   #[cfg(not(debug_assertions))]
   debug: &'a mut NopDebug,
 
-  active:              RegisterMap<Variable>,
-  visited:             HashSet<BlockId>,
-  current_instruction: HashSet<Variable>,
+  intervals: HashMap<Variable, Interval>,
+}
 
-  preference: HashMap<Variable, (RegisterIndex, InstructionLocation)>,
-
-  first_new_variable: u32,
-  next_variable:      u32,
-  copies:             BTreeMap<InstructionLocation, Vec<Move>>,
-
-  rehomes:         HashMap<Variable, Variable>,
-  rehomes_reverse: HashMap<Variable, Variable>,
+#[derive(Debug)]
+struct Interval {
+  segments: Vec<Range<InstructionIndex>>,
+  assigned: Option<RegisterIndex>,
 }
 
 #[derive(Clone, Copy)]
@@ -61,10 +57,7 @@ struct RegisterMap<T> {
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct InstructionLocation {
-  block: BlockId,
-  index: usize,
-}
+struct InstructionIndex(usize);
 
 enum Move {
   VarReg { from: Variable, to: RegisterIndex },
@@ -97,92 +90,18 @@ impl VariableRegisters {
     analysis.load(DominatorTree::ID, function);
     analysis.load(ValueUses::ID, function);
 
-    let last_variable = function
-      .blocks()
-      .flat_map(|b| function.block(b).instructions.iter())
-      .flat_map(|instr| {
-        instr
-          .input
-          .iter()
-          .filter_map(|input| match input {
-            InstructionInput::Var(v) => Some(v.id()),
-            _ => None,
-          })
-          .chain(instr.output.iter().filter_map(|output| match output {
-            InstructionOutput::Var(v) => Some(v.id()),
-          }))
-      })
-      .max();
-    let first_new_variable = last_variable.map(|v| v + 1).unwrap_or(0);
-
     let mut regs = VariableRegisters::default();
-    let mut regalloc = Regalloc {
+    Regalloc {
       dom: analysis.get(),
-      function,
       state: RegallocState {
         vu: analysis.get(),
         alloc: &mut regs,
         debug,
 
-        active: RegisterMap::new(),
-        visited: HashSet::new(),
-        current_instruction: HashSet::new(),
-        preference: HashMap::new(),
-        first_new_variable,
-        next_variable: first_new_variable,
-        copies: BTreeMap::new(),
-
-        rehomes: HashMap::new(),
-        rehomes_reverse: HashMap::new(),
+        intervals: live_intervals(function),
       },
+      function,
     };
-    regalloc.pass();
-
-    for (loc, moves) in regalloc.state.copies.iter().rev() {
-      let block = regalloc.function.block_mut(loc.block);
-      for m in moves.iter().rev() {
-        match m {
-          Move::VarReg { from, to } => {
-            let new_var = Variable::new(regalloc.state.next_variable, from.size());
-            regalloc.state.next_variable += 1;
-
-            block.instructions.insert(
-              loc.index,
-              Instruction {
-                opcode: Opcode::Move,
-                input:  smallvec![(*from).into()],
-                output: smallvec![new_var.into()],
-              },
-            );
-            regalloc.state.alloc.registers.set_with(
-              new_var,
-              Register { size: var_to_reg_size(new_var.size()).unwrap(), index: *to },
-              || Register::RAX,
-            );
-          }
-          Move::VarVar { from, to } => {
-            block.instructions.insert(
-              loc.index,
-              Instruction {
-                opcode: Opcode::Move,
-                input:  smallvec![(*from).into()],
-                output: smallvec![(*to).into()],
-              },
-            );
-          }
-          Move::ImmVar { from, to } => {
-            block.instructions.insert(
-              loc.index,
-              Instruction {
-                opcode: Opcode::Move,
-                input:  smallvec![(*from).into()],
-                output: smallvec![(*to).into()],
-              },
-            );
-          }
-        }
-      }
-    }
 
     regs
   }
@@ -205,499 +124,6 @@ const SAVED: &[RegisterIndex] = &[
   RegisterIndex::R14,
   RegisterIndex::R15,
 ];
-
-impl Regalloc<'_> {
-  pub fn pass(&mut self) {
-    self.pre_allocation();
-
-    let mut live_outs = HashSet::new();
-
-    for (i, arg) in self.function.args().enumerate() {
-      let index = match calling_convention(i) {
-        Requirement::Specific(reg) => reg,
-        _ => unreachable!(),
-      };
-
-      self
-        .state
-        .alloc
-        .registers
-        .set(arg, Register { size: var_to_reg_size(arg.size()).unwrap(), index });
-    }
-
-    for block in self.dom.preorder() {
-      self.state.visited.insert(block);
-      let live_ins = HashSet::new(); // "set of instructions live into `block`"
-
-      self.state.expire_intervals(&live_ins, &live_outs);
-      self.state.start_intervals(block, &live_ins, &live_outs);
-
-      for i in 0..self.function.block(block).instructions.len() {
-        let loc = InstructionLocation { block, index: i };
-        self.visit_instr(&mut live_outs, loc);
-
-        let instr = &self.function.block(block).instructions[i];
-
-        for (i, out) in instr.output.iter().enumerate() {
-          let &InstructionOutput::Var(out) = out;
-
-          let requirement = Requirement::for_output(self, instr, i);
-
-          let used_later = self.is_used_after(InstructionLocation { block, index: i }, out);
-
-          let register = requirement
-            .unwrap_or_else(|| self.state.pick_register(loc, out, false, RegisterIndex::all()));
-
-          if used_later {
-            self.state.activate(register, out);
-            live_outs.insert(out);
-          }
-          self.state.alloc.registers.set_with(
-            out,
-            Register { size: var_to_reg_size(out.size()).unwrap(), index: register },
-            || Register::RAX,
-          );
-        }
-      }
-
-      let loc = InstructionLocation { block, index: self.function.block(block).instructions.len() };
-      let args = self.function.sig.args.len();
-      if let TerminatorInstruction::Return(ref mut inputs) =
-        self.function.block_mut(block).terminator
-      {
-        for (i, input) in inputs.iter_mut().enumerate() {
-          let requirement = calling_convention(args + i);
-
-          if let InstructionInput::Var(v) = input {
-            self.state.apply_rehomes(v);
-          }
-
-          if let Some(new_var) = self.state.satisfy_requirement(loc, *input, requirement) {
-            *input = InstructionInput::Var(new_var);
-          }
-        }
-
-        for input in inputs {
-          if let InstructionInput::Var(v) = input {
-            live_outs.remove(&v);
-            if !self.state.is_used_later(&[], &TerminatorInstruction::Trap, *v) {
-              self.state.free(*v);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  fn pre_allocation(&mut self) {
-    for block in self.function.blocks() {
-      for (i, instr) in self.function.block(block).instructions.iter().enumerate() {
-        let loc = InstructionLocation { block, index: i };
-        if !matches!(instr.opcode, Opcode::Syscall | Opcode::Call(_) | Opcode::CallExtern(_)) {
-          continue;
-        }
-
-        for (i, &input) in instr.input.iter().enumerate() {
-          let InstructionInput::Var(var) = input else { continue };
-
-          let reg_index = match (instr.opcode, i) {
-            (Opcode::Syscall, 0) => RegisterIndex::Eax,
-            (Opcode::Syscall, 1) => RegisterIndex::Edi,
-            (Opcode::Syscall, 2) => RegisterIndex::Esi,
-            (Opcode::Syscall, 3) => RegisterIndex::Edx,
-
-            (Opcode::Call(_), _) => match calling_convention(i) {
-              Requirement::Specific(reg) => reg,
-              _ => unreachable!(),
-            },
-
-            // TODO: More calling conventions?
-            (Opcode::CallExtern(_), 0) => RegisterIndex::Edi,
-            (Opcode::CallExtern(_), 1) => RegisterIndex::Esi,
-            (Opcode::CallExtern(_), 2) => RegisterIndex::Edx,
-
-            _ => unreachable!(),
-          };
-
-          self.state.prefer(var, reg_index, loc);
-        }
-      }
-
-      if let TerminatorInstruction::Return(ref inputs) = self.function.block(block).terminator {
-        for (i, input) in inputs.iter().enumerate() {
-          let InstructionInput::Var(var) = input else { continue };
-
-          let reg_index = match calling_convention(self.function.sig.args.len() + i) {
-            Requirement::Specific(reg) => reg,
-            _ => unreachable!(),
-          };
-
-          self.state.prefer(
-            *var,
-            reg_index,
-            InstructionLocation { block, index: self.function.block(block).instructions.len() },
-          );
-        }
-      }
-    }
-  }
-
-  /// Visiting an instructtion does two things:
-  /// - Satisfies register requirements. Some registers may be prefered, but
-  ///   variables won't always be allocated to their preference. So, this is
-  ///   where we add moves to fix that.
-  /// - Move registers we still need that get clobbered.
-  fn visit_instr(&mut self, live_outs: &mut HashSet<Variable>, loc: InstructionLocation) {
-    let instr = &self.function.block(loc.block).instructions[loc.index];
-    self.state.debug.log(format_args!("= {instr}"));
-
-    match instr.opcode {
-      Opcode::Call(_) | Opcode::CallExtern(_) => {
-        for (reg, &var) in self.state.active.clone().iter() {
-          if instr.input.iter().any(|input| match input {
-            InstructionInput::Var(v) => *v == var,
-            _ => false,
-          }) {
-            continue;
-          }
-
-          if !SAVED.contains(&reg) {
-            self.state.debug.log(format_args!("extern clobbers register {reg:?}, rehoming {var}"));
-            self.state.rehome_options(loc, var, SAVED);
-          }
-        }
-      }
-      _ => {}
-    }
-
-    let input_len = self.function.block(loc.block).instructions[loc.index].input.len();
-    for i in 0..input_len {
-      let instr = &mut self.function.block_mut(loc.block).instructions[loc.index];
-      let requirement = Requirement::for_input(instr, i);
-      let input = &mut instr.input[i];
-
-      if let InstructionInput::Var(v) = input {
-        self.state.apply_rehomes(v);
-      }
-
-      if let Some(new_var) = self.state.satisfy_requirement(loc, *input, requirement) {
-        *input = InstructionInput::Var(new_var);
-        self.state.activate(self.state.alloc.registers.get(new_var).unwrap().index, new_var);
-        self.state.current_instruction.insert(new_var);
-      } else {
-        match input {
-          InstructionInput::Var(v) => {
-            let reg = self.state.alloc.registers.get(*v).unwrap().index;
-            self.state.activate(reg, *v);
-            self.state.current_instruction.insert(*v);
-          }
-          _ => {}
-        }
-      }
-    }
-
-    let instr = &self.function.block(loc.block).instructions[loc.index];
-    for input in instr.input.clone() {
-      if let InstructionInput::Var(v) = input {
-        live_outs.remove(&v);
-        if !self.is_used_after(loc, v) {
-          self.state.free(v);
-        }
-      }
-    }
-
-    self.state.current_instruction.clear();
-
-    // TODO
-    /*
-    let clobbers: &[RegisterIndex] = match instr.opcode {
-      Opcode::Syscall => &[
-        RegisterIndex::Eax,
-        RegisterIndex::Ecx,
-        RegisterIndex::Edx,
-        RegisterIndex::Ebx,
-        RegisterIndex::Esi,
-        RegisterIndex::Edi,
-      ],
-      _ => &[],
-    };
-
-    for clobber in clobbers {
-      if let Some(&var) = self.active.get(clobber) {
-        self.clobber(var);
-      }
-    }
-    */
-  }
-
-  fn is_used_after(&self, loc: InstructionLocation, var: Variable) -> bool {
-    let block = self.function.block(loc.block);
-    self.state.is_used_later(&block.instructions[loc.index + 1..], &block.terminator, var)
-  }
-}
-
-impl RegallocState<'_> {
-  fn expire_intervals(&mut self, live_ins: &HashSet<Variable>, live_outs: &HashSet<Variable>) {
-    for &var in live_outs.iter().filter(|&&v| !live_ins.contains(&v)) {
-      self.free(var);
-    }
-  }
-
-  fn start_intervals(
-    &mut self,
-    block: BlockId,
-    live_ins: &HashSet<Variable>,
-    live_outs: &HashSet<Variable>,
-  ) {
-    let loc = InstructionLocation { block, index: 0 };
-    for &var in live_ins.iter().filter(|&&v| !live_outs.contains(&v)) {
-      self.allocate(loc, var);
-    }
-  }
-
-  fn satisfy_requirement(
-    &mut self,
-    loc: InstructionLocation,
-    input: InstructionInput,
-    requirement: Requirement,
-  ) -> Option<Variable> {
-    let (requirement, prev) = match requirement {
-      Requirement::None => return None,
-      Requirement::Register(size) => {
-        let new_var = self.fresh_var(size);
-        let reg = self.pick_register(loc, new_var, false, RegisterIndex::all());
-        (reg, self.active.get(reg).copied())
-      }
-      Requirement::Specific(reg) => (reg, self.active.get(reg).copied()),
-    };
-
-    let new_var = match input {
-      InstructionInput::Var(v) => match prev {
-        Some(active) if active == v => None,
-        Some(other) => {
-          self.copy(loc, Move::VarReg { from: other, to: RegisterIndex::Ebx });
-
-          let new_var = self.fresh_var(v.size());
-          self.copy(loc, Move::VarVar { from: v, to: new_var });
-          self.alloc.registers.set_with(
-            new_var,
-            Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
-            || Register::RAX,
-          );
-          Some(new_var)
-        }
-        None => {
-          if self.alloc.registers.get(v).is_some_and(|r| r.index != requirement) {
-            let new_var = self.fresh_var(v.size());
-            self.copy(loc, Move::VarVar { from: v, to: new_var });
-            self.alloc.registers.set_with(
-              new_var,
-              Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
-              || Register::RAX,
-            );
-            Some(new_var)
-          } else {
-            None
-          }
-        }
-      },
-      InstructionInput::Imm(imm) => match prev {
-        Some(other) => {
-          self.debug.log(format_args!(
-            "while satisfying requirement {requirement:?} for {imm:?}, decided to rehome {other}",
-          ));
-          self.rehome(loc, other);
-
-          let new_var = self.fresh_var(VariableSize::Bit64);
-          self.copy(loc, Move::ImmVar { from: imm, to: new_var });
-          self.alloc.registers.set_with(
-            new_var,
-            Register { size: var_to_reg_size(VariableSize::Bit64).unwrap(), index: requirement },
-            || Register::RAX,
-          );
-          Some(new_var)
-        }
-        None => {
-          let new_var = self.fresh_var(VariableSize::Bit64);
-          self.copy(loc, Move::ImmVar { from: imm, to: new_var });
-          self.alloc.registers.set_with(
-            new_var,
-            Register { size: var_to_reg_size(VariableSize::Bit64).unwrap(), index: requirement },
-            || Register::RAX,
-          );
-          Some(new_var)
-        }
-      },
-    };
-
-    new_var
-  }
-
-  fn copy(&mut self, loc: InstructionLocation, m: Move) {
-    match m {
-      Move::VarReg { from, to } => {
-        self.debug.log(format_args!("+ mov {to:?} = {from}"));
-      }
-      Move::VarVar { from, to } => {
-        self.debug.log(format_args!("+ mov {to} = {from}"));
-      }
-      Move::ImmVar { from, to } => {
-        self.debug.log(format_args!("+ mov {to} = {from:?}"));
-      }
-    }
-
-    self.copies.entry(loc).or_default().push(m);
-  }
-
-  fn fresh_var(&mut self, size: VariableSize) -> Variable {
-    let v = Variable::new(self.next_variable, size);
-    self.next_variable += 1;
-    v
-  }
-
-  fn allocate(&mut self, loc: InstructionLocation, var: Variable) {
-    let reg = self.pick_register(loc, var, false, RegisterIndex::all());
-    self.activate(reg, var);
-    self.alloc.registers.set_with(
-      var,
-      Register { size: var_to_reg_size(var.size()).unwrap(), index: reg },
-      || Register::RAX,
-    );
-  }
-
-  fn free(&mut self, var: Variable) {
-    if let Some((reg, _)) = self.active.clone().iter().find(|&(_, &v)| v == var) {
-      self.debug.log(format_args!("freeing {var}({reg:?})"));
-      self.active.remove(reg);
-    }
-  }
-
-  fn pick_register(
-    &mut self,
-    loc: InstructionLocation,
-    var: Variable,
-    must_move: bool,
-    options: &[RegisterIndex],
-  ) -> RegisterIndex {
-    if let Some(pref) = self.preference_after(loc, var) {
-      match self.active.get(pref) {
-        // If the variable is already in the preferred register, or there is nothing in the
-        // preferred register, use that.
-        Some(&other) if other == var => {
-          if !must_move {
-            return pref;
-          }
-        }
-        None => return pref,
-
-        Some(&other) if self.current_instruction.contains(&other) => {}
-        Some(&other) => {
-          self
-            .debug
-            .log(format_args!("while picking a register for {var}, decided to rehome {other}"));
-          self.rehome(loc, other);
-          self.active.remove(pref);
-
-          return pref;
-        }
-      }
-    }
-
-    for &reg_index in options {
-      if !self.active.contains(reg_index) {
-        return reg_index;
-      }
-    }
-
-    panic!("no registers available for variable {var:?}");
-  }
-
-  fn rehome(&mut self, loc: InstructionLocation, var: Variable) {
-    self.rehome_options(loc, var, RegisterIndex::all());
-  }
-
-  fn rehome_options(&mut self, loc: InstructionLocation, var: Variable, saved: &[RegisterIndex]) {
-    let new_var = self.fresh_var(var.size());
-    let old_reg = self.alloc.registers.get(var).unwrap().index;
-    let new_reg = self.pick_register(loc, var, true, saved);
-    self.debug.log(format_args!("rehoming {var}({old_reg:?}) -> {new_var}({new_reg:?})",));
-    self.alloc.registers.set_with(
-      new_var,
-      Register { size: var_to_reg_size(var.size()).unwrap(), index: new_reg },
-      || Register::RAX,
-    );
-    self.active.remove(old_reg);
-    self.activate(new_reg, new_var);
-
-    self.copy(loc, Move::VarVar { from: var, to: new_var });
-    self.rehomes.insert(var, new_var);
-    self.rehomes_reverse.insert(new_var, var);
-  }
-
-  fn apply_rehomes(&mut self, v: &mut Variable) {
-    while let Some(&new_v) = self.rehomes.get(v) {
-      *v = new_v;
-    }
-  }
-
-  fn preference_after(&self, loc: InstructionLocation, var: Variable) -> Option<RegisterIndex> {
-    if let Some(&(pref, pref_loc)) = self.preference.get(&var) {
-      if pref_loc >= loc {
-        return Some(pref);
-      }
-    }
-
-    None
-  }
-
-  fn is_used_later(
-    &self,
-    after: &[Instruction],
-    term: &TerminatorInstruction,
-    var: Variable,
-  ) -> bool {
-    if self.is_tmp_var(var) {
-      return false;
-    }
-
-    let is_used_in_later_block = self
-      .vu
-      .variable(var)
-      .used_by
-      .iter()
-      .any(|u| !self.visited.contains(&self.vu.variables_to_block[u]));
-    let is_used_later_by_term = match term {
-      TerminatorInstruction::Return(inputs) => inputs.iter().any(|input| match input {
-        InstructionInput::Var(v) => *v == var,
-        _ => false,
-      }),
-      _ => false,
-    };
-    let is_used_in_block = is_used_later_in_block(after, var);
-
-    is_used_in_later_block || is_used_later_by_term || is_used_in_block
-  }
-
-  fn is_tmp_var(&self, var: Variable) -> bool { var.id() >= self.first_new_variable }
-
-  fn prefer(&mut self, var: Variable, reg_index: RegisterIndex, loc: InstructionLocation) {
-    match self.preference.entry(var) {
-      std::collections::hash_map::Entry::Occupied(_) => {}
-      std::collections::hash_map::Entry::Vacant(entry) => {
-        self.debug.log(format_args!("preference: {var} -> {reg_index:?} at {loc}"));
-        entry.insert((reg_index, loc));
-      }
-    }
-  }
-
-  fn activate(&mut self, register: RegisterIndex, out: Variable) {
-    self.debug.log(format_args!("marking {out}({register:?}) active"));
-    self.active.set(register, out);
-    if SAVED.contains(&register) {
-      self.alloc.saved.set(register, true);
-    }
-  }
-}
 
 fn calling_convention(index: usize) -> Requirement {
   match index {
@@ -783,20 +209,6 @@ impl Requirement {
   }
 }
 
-fn is_used_later_in_block(after: &[Instruction], var: Variable) -> bool {
-  for instr in after.iter() {
-    for input in &instr.input {
-      if let InstructionInput::Var(v) = input
-        && *v == var
-      {
-        return true;
-      }
-    }
-  }
-
-  false
-}
-
 impl<T> Default for RegisterMap<T> {
   fn default() -> Self { Self::new() }
 }
@@ -815,12 +227,6 @@ impl<T> RegisterMap<T> {
       .iter()
       .enumerate()
       .filter_map(|(i, v)| v.as_ref().map(|val| (RegisterIndex::from_usize(i), val)))
-  }
-}
-
-impl fmt::Display for InstructionLocation {
-  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "<{}, instr {}>", self.block, self.index)
   }
 }
 
