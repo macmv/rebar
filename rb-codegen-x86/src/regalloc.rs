@@ -15,6 +15,7 @@ use crate::{Register, RegisterIndex, var_to_reg_size};
 #[derive(Default)]
 pub struct VariableRegisters {
   registers: TVec<Variable, Register>,
+  saved:     RegisterMap<bool>,
 }
 
 trait RegallocDebug {
@@ -82,6 +83,11 @@ enum Requirement {
 
 impl VariableRegisters {
   pub fn pass(function: &mut Function) -> Self { Self::pass_debug(function, &mut NopDebug) }
+
+  pub fn saved(&self) -> impl Iterator<Item = RegisterIndex> {
+    self.saved.iter().filter_map(|(reg, &saved)| if saved { Some(reg) } else { None })
+  }
+
   fn pass_debug(
     function: &mut Function,
     #[cfg(not(debug_assertions))] debug: &mut NopDebug,
@@ -779,6 +785,10 @@ fn is_used_later_in_block(after: &[Instruction], var: Variable) -> bool {
   }
 
   false
+}
+
+impl<T> Default for RegisterMap<T> {
+  fn default() -> Self { Self::new() }
 }
 
 impl<T> RegisterMap<T> {

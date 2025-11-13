@@ -217,19 +217,28 @@ impl Builder {
 pub fn lower(mut function: rb_codegen::Function) -> Builder {
   let mut builder = Builder::default();
 
-  let mut stack_size = function.stack_slots.iter().map(|s| s.size).sum::<u32>();
-  // Keep stack 16-byte aligned, but on entry we were already off by 8.
-  stack_size = ((stack_size + 7) & !15) + 8;
-
-  builder.instr(
-    Instruction::new(Opcode::MATH_EXT_IMM8)
-      .with_digit(5) // sub
-      .with_prefix(Prefix::RexW)
-      .with_mod(0b11, RegisterIndex::Esp)
-      .with_immediate(Immediate::i8(stack_size.try_into().unwrap())),
-  );
-
   let reg = VariableRegisters::pass(&mut function);
+
+  for reg in reg.saved() {
+    builder.instr(Instruction::new(Opcode::new([0x50 + reg as u8])));
+  }
+
+  let initial_offset = 8 + reg.saved().count() as u32 * 8;
+
+  let mut stack_size = function.stack_slots.iter().map(|s| s.size).sum::<u32>();
+  // Keep stack 16-byte aligned
+  let entry_offset = initial_offset % 16;
+  stack_size = ((stack_size + (15 - entry_offset)) & !15) + entry_offset;
+
+  if stack_size != 0 {
+    builder.instr(
+      Instruction::new(Opcode::MATH_EXT_IMM8)
+        .with_digit(5) // sub
+        .with_prefix(Prefix::RexW)
+        .with_mod(0b11, RegisterIndex::Esp)
+        .with_immediate(Immediate::i8(stack_size.try_into().unwrap())),
+    );
+  }
 
   for id in function.blocks() {
     let block = function.block(id);
@@ -739,13 +748,19 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
         )
       }
       rb_codegen::TerminatorInstruction::Return(_) => {
-        builder.instr(
-          Instruction::new(Opcode::MATH_EXT_IMM8)
-            .with_digit(0) // add
-            .with_prefix(Prefix::RexW)
-            .with_mod(0b11, RegisterIndex::Esp)
-            .with_immediate(Immediate::i8(stack_size.try_into().unwrap())),
-        );
+        if stack_size != 0 {
+          builder.instr(
+            Instruction::new(Opcode::MATH_EXT_IMM8)
+              .with_digit(0) // add
+              .with_prefix(Prefix::RexW)
+              .with_mod(0b11, RegisterIndex::Esp)
+              .with_immediate(Immediate::i8(stack_size.try_into().unwrap())),
+          );
+        }
+
+        for reg in reg.saved() {
+          builder.instr(Instruction::new(Opcode::new([0x58 + reg as u8])));
+        }
 
         builder.instr(Instruction::new(Opcode::RET))
       }
