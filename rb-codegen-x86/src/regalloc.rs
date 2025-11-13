@@ -5,8 +5,8 @@ use std::{
 };
 
 use rb_codegen::{
-  BlockId, Function, Immediate, Instruction, InstructionInput, InstructionOutput, Math, Opcode,
-  TVec, TerminatorInstruction, Variable, VariableSize,
+  BlockId, Function, Instruction, InstructionInput, InstructionOutput, Math, Opcode, TVec,
+  TerminatorInstruction, Variable, VariableSize,
 };
 use rb_codegen_opt::analysis::{Analysis, dominator_tree::DominatorTree, value_uses::ValueUses};
 use smallvec::smallvec;
@@ -187,8 +187,21 @@ impl<'a> FunctionEditor<'a> {
 
   pub fn edit(
     &mut self,
-    f: impl Fn(&mut FunctionChange, &mut Instruction),
-    t: impl Fn(&mut FunctionChange, &mut TerminatorInstruction),
+    mut f: impl FnMut(&mut FunctionChange, &mut Instruction),
+    mut t: impl FnMut(&mut FunctionChange, &mut TerminatorInstruction),
+  ) {
+    self.edit_context(
+      &mut (),
+      |(), change, instr| f(change, instr),
+      |(), change, term| t(change, term),
+    );
+  }
+
+  pub fn edit_context<T>(
+    &mut self,
+    context: &mut T,
+    mut f: impl FnMut(&mut T, &mut FunctionChange, &mut Instruction),
+    mut t: impl FnMut(&mut T, &mut FunctionChange, &mut TerminatorInstruction),
   ) {
     for block_id in self.function.blocks() {
       let mut i = 0;
@@ -196,7 +209,7 @@ impl<'a> FunctionEditor<'a> {
         let mut instr = self.function.block(block_id).instructions[i].clone();
 
         let mut change = FunctionChange { editor: self, block: block_id, instr: i };
-        f(&mut change, &mut instr);
+        f(context, &mut change, &mut instr);
 
         i = change.instr;
         self.function.block_mut(block_id).instructions[i] = instr;
@@ -205,7 +218,7 @@ impl<'a> FunctionEditor<'a> {
 
       let mut terminator = self.function.block(block_id).terminator.clone();
       let mut change = FunctionChange { editor: self, block: block_id, instr: i };
-      t(&mut change, &mut terminator);
+      t(context, &mut change, &mut terminator);
       self.function.block_mut(block_id).terminator = terminator;
     }
   }
@@ -220,52 +233,34 @@ impl FunctionChange<'_, '_> {
 }
 
 fn split_critical_variables(function: &mut Function) {
-  let mut editor = FunctionEditor::new(function);
-
   let mut specific_defs = HashMap::<Variable, RegisterIndex>::new();
 
-  for block_id in editor.function.blocks() {
-    let mut i = 0;
-    while i < editor.function.block(block_id).instructions.len() {
-      let inputs = editor.function.block(block_id).instructions[i].input.len();
-
-      for j in 0..inputs {
-        let block = editor.function.block(block_id);
-        let instr = &block.instructions[i];
+  FunctionEditor::new(function).edit_context(
+    &mut specific_defs,
+    |specific_defs, change, instr| {
+      for j in 0..instr.input.len() {
         let req = Requirement::for_input(&instr, j);
-        let input = &instr.input[j];
+        let input = &mut instr.input[j];
 
         match (*input, req) {
           (InstructionInput::Var(v), Requirement::Specific(req))
             if specific_defs.get(&v).is_some_and(|def| *def != req) =>
           {
             let prev_input = input.clone();
-            let tmp = editor.fresh_var(VariableSize::Bit64);
-
-            let block = editor.function.block_mut(block_id);
-
-            let instr = &mut block.instructions[i];
-            let input = &mut instr.input[j];
+            let tmp = change.editor.fresh_var(VariableSize::Bit64);
             *input = InstructionInput::Var(tmp);
 
-            block.instructions.insert(
-              i,
-              Instruction {
-                opcode: Opcode::Move,
-                input:  smallvec![prev_input],
-                output: smallvec![tmp.into()],
-              },
-            );
-            i += 1;
+            change.insert(Instruction {
+              opcode: Opcode::Move,
+              input:  smallvec![prev_input],
+              output: smallvec![tmp.into()],
+            });
           }
           _ => continue,
         }
       }
 
-      let outputs = editor.function.block(block_id).instructions[i].output.len();
-      for j in 0..outputs {
-        let block = editor.function.block(block_id);
-        let instr = &block.instructions[i];
+      for j in 0..instr.output.len() {
         let req = Requirement::for_output(&instr, j);
         let output = &instr.output[j];
 
@@ -276,57 +271,34 @@ fn split_critical_variables(function: &mut Function) {
           _ => {}
         }
       }
-
-      i += 1;
-    }
-
-    let block = editor.function.block_mut(block_id);
-    match &mut block.terminator {
-      terminator @ TerminatorInstruction::Return(_) => {
-        let len = match &terminator {
-          TerminatorInstruction::Return(rets) => rets.len(),
-          _ => unreachable!(),
-        };
-
-        for j in 0..len {
-          let block = editor.function.block(block_id);
-          let req = Requirement::for_terminator(&block.terminator, j);
-          let input = match &block.terminator {
-            TerminatorInstruction::Return(rets) => &rets[j],
-            _ => unreachable!(),
-          };
+    },
+    |specific_defs, change, term| match term {
+      TerminatorInstruction::Return(rets) => {
+        for j in 0..rets.len() {
+          let req = Requirement::for_terminator(&TerminatorInstruction::Return(rets.clone()), j);
+          let input = &mut rets[j];
 
           match (*input, req) {
             (InstructionInput::Var(v), Requirement::Specific(req))
               if specific_defs.get(&v).is_some_and(|def| *def != req) =>
             {
               let prev_input = input.clone();
-              let tmp = editor.fresh_var(VariableSize::Bit64);
-
-              let block = editor.function.block_mut(block_id);
-              let input = match &mut block.terminator {
-                TerminatorInstruction::Return(rets) => &mut rets[j],
-                _ => unreachable!(),
-              };
+              let tmp = change.editor.fresh_var(VariableSize::Bit64);
 
               *input = InstructionInput::Var(tmp);
-              block.instructions.insert(
-                i,
-                Instruction {
-                  opcode: Opcode::Move,
-                  input:  smallvec![prev_input],
-                  output: smallvec![tmp.into()],
-                },
-              );
-              i += 1;
+              change.insert(Instruction {
+                opcode: Opcode::Move,
+                input:  smallvec![prev_input],
+                output: smallvec![tmp.into()],
+              });
             }
             _ => continue,
           }
         }
       }
-      _ => continue,
-    }
-  }
+      _ => {}
+    },
+  );
 }
 
 fn imm_to_reg(function: &mut Function) {
