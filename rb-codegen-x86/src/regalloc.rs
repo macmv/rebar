@@ -110,7 +110,7 @@ impl VariableRegisters {
         let active_end = active_interval.segments.last().unwrap().end;
         let current_start = interval.segments.first().unwrap().start;
 
-        if active_end <= current_start {
+        if active_end.0 <= current_start.0 + 1 {
           debug.log(format_args!("expiring {active_var} at {current_start:?}",));
           false
         } else {
