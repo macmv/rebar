@@ -90,18 +90,50 @@ impl VariableRegisters {
     analysis.load(DominatorTree::ID, function);
     analysis.load(ValueUses::ID, function);
 
-    let mut regs = VariableRegisters::default();
-    Regalloc {
-      dom: analysis.get(),
-      state: RegallocState {
-        vu: analysis.get(),
-        alloc: &mut regs,
-        debug,
+    imm_to_reg(function);
 
-        intervals: live_intervals(function),
-      },
-      function,
-    };
+    let intervals = live_intervals(function);
+    let mut intervals = intervals.into_iter().collect::<Vec<(Variable, Interval)>>();
+    intervals.sort_unstable_by_key(|(_, interval)| interval.segments.first().unwrap().start);
+
+    let mut regs = VariableRegisters::default();
+
+    let mut active = HashSet::new();
+    for i in 0..intervals.len() {
+      let &(var, ref interval) = &intervals[i];
+
+      active.retain(|active_var| {
+        let active_interval = &intervals.iter().find(|(v, _)| v == active_var).unwrap().1;
+
+        let active_end = active_interval.segments.last().unwrap().end;
+        let current_start = interval.segments.first().unwrap().start;
+
+        if active_end <= current_start {
+          debug.log(format_args!("expiring {active_var} at {current_start:?}",));
+          false
+        } else {
+          true
+        }
+      });
+
+      debug.log(format_args!("activating {var} at {:?}", interval.segments.first().unwrap().start));
+      active.insert(var);
+
+      for reg_index in RegisterIndex::all() {
+        if active.iter().all(|active_var| {
+          let active_interval = &intervals.iter().find(|(v, _)| v == active_var).unwrap().1;
+          active_interval.assigned != Some(*reg_index)
+        }) {
+          intervals[i].1.assigned = Some(*reg_index);
+          regs.registers.set_with(
+            var,
+            Register { index: *reg_index, size: var_to_reg_size(var.size()).unwrap() },
+            || Register::RAX,
+          );
+          break;
+        }
+      }
+    }
 
     regs
   }
@@ -112,6 +144,63 @@ impl VariableRegisters {
       Some(reg) => *reg,
 
       _ => panic!("variable {var:?} is not in a register"),
+    }
+  }
+}
+
+fn imm_to_reg(function: &mut Function) {
+  let last_var = function
+    .blocks()
+    .flat_map(|b| function.block(b).instructions.iter())
+    .flat_map(|instr| {
+      instr
+        .input
+        .iter()
+        .filter_map(|i| match i {
+          InstructionInput::Var(v) => Some(*v),
+          _ => None,
+        })
+        .chain(instr.output.iter().filter_map(|o| match o {
+          InstructionOutput::Var(v) => Some(*v),
+        }))
+    })
+    .max_by_key(|v| v.id())
+    .unwrap_or(Variable::new(0, VariableSize::Bit64));
+  let mut next_var_id = last_var.id() + 1;
+
+  for block in function.blocks() {
+    let mut i = 0;
+    while i < function.block(block).instructions.len() {
+      let block = function.block_mut(block);
+
+      for j in 0..block.instructions[i].input.len() {
+        let instr = &mut block.instructions[i];
+        let req = Requirement::for_input(&instr, j);
+        let input = &mut instr.input[j];
+
+        match (*input, req) {
+          (_, Requirement::None) => continue,
+          (InstructionInput::Var(_), _) => continue,
+          (InstructionInput::Imm(_), _) => {
+            let prev_input = input.clone();
+            let tmp = Variable::new(next_var_id, VariableSize::Bit64);
+            next_var_id += 1;
+            *input = InstructionInput::Var(tmp);
+
+            block.instructions.insert(
+              i,
+              Instruction {
+                opcode: Opcode::Move,
+                input:  smallvec![prev_input],
+                output: smallvec![tmp.into()],
+              },
+            );
+            i += 1;
+          }
+        }
+      }
+
+      i += 1;
     }
   }
 }
