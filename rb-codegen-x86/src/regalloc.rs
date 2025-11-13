@@ -394,10 +394,7 @@ impl Requirement {
     use Requirement::*;
 
     match term {
-      TerminatorInstruction::Return(_) => match index {
-        0 => Specific(RegisterIndex::Eax),
-        _ => unreachable!("returns only have 1 output"),
-      },
+      TerminatorInstruction::Return(_) => calling_convention(index),
       _ => None,
     }
   }
