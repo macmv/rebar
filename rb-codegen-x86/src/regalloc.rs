@@ -557,7 +557,7 @@ impl RegallocState<'_> {
 
   fn allocate(&mut self, loc: InstructionLocation, var: Variable) {
     let reg = self.pick_register(loc, var, false, RegisterIndex::all());
-    self.active.set(reg, var);
+    self.activate(reg, var);
     self.alloc.registers.set_with(
       var,
       Register { size: var_to_reg_size(var.size()).unwrap(), index: reg },
@@ -627,10 +627,7 @@ impl RegallocState<'_> {
       || Register::RAX,
     );
     self.active.remove(old_reg);
-    self.active.set(new_reg, new_var);
-    if SAVED.contains(&new_reg) {
-      self.alloc.saved.set(new_reg, true);
-    }
+    self.activate(new_reg, new_var);
 
     self.copy(loc, Move::VarVar { from: var, to: new_var });
     self.rehomes.insert(var, new_var);
@@ -696,6 +693,9 @@ impl RegallocState<'_> {
   fn activate(&mut self, register: RegisterIndex, out: Variable) {
     self.debug.log(format_args!("marking {out}({register:?}) active"));
     self.active.set(register, out);
+    if SAVED.contains(&register) {
+      self.alloc.saved.set(register, true);
+    }
   }
 }
 
@@ -977,12 +977,15 @@ mod tests {
       expect![@r#"
         block 0:
           call function 0 rdi(0), rsi(1) =
-          mov rax(2) = rsi(1)
-          mov rsi(3) = 0x01
-          call function 0 = rdi(0), rsi(3)
-          mov rdi(4) = rax(2)
-          mov rsi(5) = 0x02
+          mov rax(3) = rdi(0)
+          mov rdi(2) = rsi(1)
+          mov rbx(8) = rdi(2)
+          mov rdi(4) = rax(3)
+          mov rsi(5) = 0x01
           call function 0 = rdi(4), rsi(5)
+          mov rbx(6) = rax(3)
+          mov rsi(7) = 0x02
+          call function 0 = rdi(2), rsi(7)
           trap
       "#
       ],
@@ -1003,8 +1006,9 @@ mod tests {
         = mov r0 = 0x01
         marking r0(Edi) active
         = call function 0 = 0x02
-        while satisfying requirement Edi for Unsigned(2), decided to rehome r0
-        rehoming r0(Edi) -> r1(Eax)
+        extern clobbers register Edi, rehoming r0
+        rehoming r0(Edi) -> r1(Ebx)
+        marking r1(Ebx) active
         + mov r1 = r0
         + mov r2 = Unsigned(2)
         marking r2(Edi) active
@@ -1013,10 +1017,10 @@ mod tests {
 
         block 0:
           mov rdi(0) = 0x01
-          mov rax(1) = rdi(0)
+          mov rbx(1) = rdi(0)
           mov rdi(2) = 0x02
           call function 0 = rdi(2)
-          mov rdi(3) = rax(1)
+          mov rdi(3) = rbx(1)
           return r3
       "#
       ],
@@ -1043,9 +1047,11 @@ mod tests {
         = call extern 0 = 0x02
         extern clobbers register Esi, rehoming r1
         rehoming r1(Esi) -> r2(Ebx)
+        marking r2(Ebx) active
         + mov r2 = r1
         extern clobbers register Edi, rehoming r0
         rehoming r0(Edi) -> r3(Ebp)
+        marking r3(Ebp) active
         + mov r3 = r0
         + mov r4 = Unsigned(2)
         marking r4(Edi) active
