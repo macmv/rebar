@@ -185,19 +185,37 @@ impl<'a> FunctionEditor<'a> {
     var
   }
 
-  pub fn edit(&mut self, f: impl Fn(&mut FunctionChange, &Instruction)) {
+  pub fn edit(
+    &mut self,
+    f: impl Fn(&mut FunctionChange, &mut Instruction),
+    t: impl Fn(&mut FunctionChange, &mut TerminatorInstruction),
+  ) {
     for block_id in self.function.blocks() {
       let mut i = 0;
       while i < self.function.block(block_id).instructions.len() {
-        let instr = self.function.block(block_id).instructions[i].clone();
+        let mut instr = self.function.block(block_id).instructions[i].clone();
 
         let mut change = FunctionChange { editor: self, block: block_id, instr: i };
-        f(&mut change, &instr);
+        f(&mut change, &mut instr);
 
         i = change.instr;
+        self.function.block_mut(block_id).instructions[i] = instr;
         i += 1;
       }
+
+      let mut terminator = self.function.block(block_id).terminator.clone();
+      let mut change = FunctionChange { editor: self, block: block_id, instr: i };
+      t(&mut change, &mut terminator);
+      self.function.block_mut(block_id).terminator = terminator;
     }
+  }
+}
+
+impl FunctionChange<'_, '_> {
+  fn insert(&mut self, instr: Instruction) {
+    let block = self.editor.function.block_mut(self.block);
+    block.instructions.insert(self.instr, instr);
+    self.instr += 1;
   }
 }
 
@@ -312,72 +330,35 @@ fn split_critical_variables(function: &mut Function) {
 }
 
 fn imm_to_reg(function: &mut Function) {
-  let last_var = function
-    .blocks()
-    .flat_map(|b| function.block(b).instructions.iter())
-    .flat_map(|instr| {
-      instr
-        .input
-        .iter()
-        .filter_map(|i| match i {
-          InstructionInput::Var(v) => Some(*v),
-          _ => None,
-        })
-        .chain(instr.output.iter().filter_map(|o| match o {
-          InstructionOutput::Var(v) => Some(*v),
-        }))
-    })
-    .max_by_key(|v| v.id())
-    .unwrap_or(Variable::new(0, VariableSize::Bit64));
-  let mut next_var_id = last_var.id() + 1;
-
-  for block in function.blocks() {
-    let mut i = 0;
-    while i < function.block(block).instructions.len() {
-      let block = function.block_mut(block);
-
-      for j in 0..block.instructions[i].input.len() {
-        let instr = &mut block.instructions[i];
-        let req = Requirement::for_input(&instr, j);
-        let input = &mut instr.input[j];
+  FunctionEditor::new(function).edit(
+    |change, instr| {
+      for i in 0..instr.input.len() {
+        let req = Requirement::for_input(&instr, i);
+        let input = &mut instr.input[i];
 
         match (*input, req) {
           (_, Requirement::None) => continue,
           (InstructionInput::Var(_), _) => continue,
           (InstructionInput::Imm(_), _) => {
             let prev_input = input.clone();
-            let tmp = Variable::new(next_var_id, VariableSize::Bit64);
-            next_var_id += 1;
+            let tmp = change.editor.fresh_var(VariableSize::Bit64);
             *input = InstructionInput::Var(tmp);
 
-            block.instructions.insert(
-              i,
-              Instruction {
-                opcode: Opcode::Move,
-                input:  smallvec![prev_input],
-                output: smallvec![tmp.into()],
-              },
-            );
-            i += 1;
+            change.insert(Instruction {
+              opcode: Opcode::Move,
+              input:  smallvec![prev_input],
+              output: smallvec![tmp.into()],
+            });
           }
         }
       }
-
-      i += 1;
-    }
-
-    let block = function.block_mut(block);
-    match &mut block.terminator {
-      mut terminator @ TerminatorInstruction::Return(_) => {
-        let len = match &terminator {
-          TerminatorInstruction::Return(rets) => rets.len(),
-          _ => unreachable!(),
-        };
-
-        for j in 0..len {
-          let req = Requirement::for_terminator(&terminator, j);
-          let input = match &mut terminator {
-            TerminatorInstruction::Return(rets) => &mut rets[j],
+    },
+    |change, term| match term {
+      TerminatorInstruction::Return(rets) => {
+        for i in 0..rets.len() {
+          let req = Requirement::for_terminator(&term, i);
+          let input = match term {
+            TerminatorInstruction::Return(rets) => &mut rets[i],
             _ => unreachable!(),
           };
 
@@ -386,26 +367,21 @@ fn imm_to_reg(function: &mut Function) {
             (InstructionInput::Var(_), _) => continue,
             (InstructionInput::Imm(_), _) => {
               let prev_input = input.clone();
-              let tmp = Variable::new(next_var_id, VariableSize::Bit64);
-              next_var_id += 1;
+              let tmp = change.editor.fresh_var(VariableSize::Bit64);
               *input = InstructionInput::Var(tmp);
 
-              block.instructions.insert(
-                i,
-                Instruction {
-                  opcode: Opcode::Move,
-                  input:  smallvec![prev_input],
-                  output: smallvec![tmp.into()],
-                },
-              );
-              i += 1;
+              change.insert(Instruction {
+                opcode: Opcode::Move,
+                input:  smallvec![prev_input],
+                output: smallvec![tmp.into()],
+              });
             }
           }
         }
       }
-      _ => continue,
-    }
-  }
+      _ => {}
+    },
+  );
 }
 
 fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
