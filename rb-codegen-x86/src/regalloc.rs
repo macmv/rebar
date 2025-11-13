@@ -359,6 +359,8 @@ fn imm_to_reg(function: &mut Function) {
 fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
   let mut intervals = HashMap::<Variable, Interval>::new();
 
+  const UNKNOWN: InstructionIndex = InstructionIndex(usize::MAX);
+
   // TODO: Value-uses and dominator tree, but this'll work for now.
   let mut i = 0;
   for block in function.blocks() {
@@ -370,11 +372,9 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
         if let InstructionInput::Var(v) = input {
           let interval = intervals.entry(*v).or_default();
 
-          if interval.segments.is_empty() {
-            interval.segments.push(Range { start: index, end: InstructionIndex(0) });
+          if let Some(last) = interval.segments.last_mut() {
+            last.end = InstructionIndex(index.0 + 1);
           }
-
-          interval.segments.last_mut().unwrap().end = InstructionIndex(index.0 + 1);
 
           match Requirement::for_input(instr, j) {
             Requirement::Specific(reg) => {
@@ -390,10 +390,8 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
         let interval = intervals.entry(*v).or_default();
 
         if interval.segments.is_empty() {
-          interval.segments.push(Range { start: index, end: InstructionIndex(0) });
+          interval.segments.push(Range { start: index, end: UNKNOWN });
         }
-
-        interval.segments.last_mut().unwrap().end = InstructionIndex(index.0 + 1);
 
         match Requirement::for_output(instr, j) {
           Requirement::Specific(reg) => {
@@ -414,11 +412,9 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
           if let InstructionInput::Var(v) = arg {
             let interval = intervals.entry(*v).or_default();
 
-            if interval.segments.is_empty() {
-              interval.segments.push(Range { start: index, end: InstructionIndex(0) });
+            if let Some(last) = interval.segments.last_mut() {
+              last.end = InstructionIndex(index.0 + 1);
             }
-
-            interval.segments.last_mut().unwrap().end = InstructionIndex(i + 1);
 
             match Requirement::for_terminator(&block.terminator, j) {
               Requirement::Specific(reg) => {
@@ -433,6 +429,8 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
     }
     i += 1;
   }
+
+  intervals.retain(|_, interval| interval.segments.iter().any(|e| e.end != UNKNOWN));
 
   intervals
 }
@@ -667,7 +665,7 @@ mod tests {
         block 0:
           mov rdi(1) = 0x00
           mov rsi(2) = 0x01
-          call function 0 rdx(0) = rdi(1), rsi(2)
+          call function 0 rax(0) = rdi(1), rsi(2)
           trap
       "#
       ],
