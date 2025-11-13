@@ -116,6 +116,69 @@ impl VariableRegisters {
   }
 }
 
+fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
+  let mut intervals = HashMap::new();
+
+  // TODO: Value-uses and dominator tree, but this'll work for now.
+  let mut i = 0;
+  for block in function.blocks() {
+    let block = function.block(block);
+    for instr in block.instructions.iter() {
+      let index = InstructionIndex(i);
+
+      for input in &instr.input {
+        if let InstructionInput::Var(v) = input {
+          let interval =
+            intervals.entry(*v).or_insert(Interval { segments: Vec::new(), assigned: None });
+
+          if interval.segments.is_empty() {
+            interval.segments.push(Range { start: index, end: InstructionIndex(0) });
+          }
+
+          interval.segments.last_mut().unwrap().end = InstructionIndex(i + 1);
+        }
+      }
+
+      for output in &instr.output {
+        let InstructionOutput::Var(v) = output;
+        let interval =
+          intervals.entry(*v).or_insert(Interval { segments: Vec::new(), assigned: None });
+
+        if interval.segments.is_empty() {
+          interval.segments.push(Range { start: index, end: InstructionIndex(0) });
+        }
+
+        interval.segments.last_mut().unwrap().end = InstructionIndex(i + 1);
+      }
+
+      i += 1;
+    }
+
+    match &block.terminator {
+      TerminatorInstruction::Return(rets) => {
+        for arg in rets {
+          if let InstructionInput::Var(v) = arg {
+            let interval =
+              intervals.entry(*v).or_insert(Interval { segments: Vec::new(), assigned: None });
+
+            if interval.segments.is_empty() {
+              interval
+                .segments
+                .push(Range { start: InstructionIndex(i), end: InstructionIndex(0) });
+            }
+
+            interval.segments.last_mut().unwrap().end = InstructionIndex(i + 1);
+          }
+        }
+      }
+      _ => {}
+    }
+    i += 1;
+  }
+
+  intervals
+}
+
 const SAVED: &[RegisterIndex] = &[
   RegisterIndex::Ebx,
   RegisterIndex::Ebp,
