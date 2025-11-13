@@ -23,27 +23,9 @@ trait RegallocDebug {
   fn log(&mut self, msg: fmt::Arguments) { let _ = msg; }
 }
 
-struct Regalloc<'a> {
-  dom:      &'a DominatorTree,
-  function: &'a mut Function,
-
-  state: RegallocState<'a>,
-}
-
 struct NopDebug;
 
 impl RegallocDebug for NopDebug {}
-
-struct RegallocState<'a> {
-  vu:    &'a ValueUses,
-  alloc: &'a mut VariableRegisters,
-  #[cfg(debug_assertions)]
-  debug: &'a mut dyn RegallocDebug,
-  #[cfg(not(debug_assertions))]
-  debug: &'a mut NopDebug,
-
-  intervals: HashMap<Variable, Interval>,
-}
 
 #[derive(Debug, Default)]
 struct Interval {
@@ -58,12 +40,6 @@ struct RegisterMap<T> {
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct InstructionIndex(usize);
-
-enum Move {
-  VarReg { from: Variable, to: RegisterIndex },
-  VarVar { from: Variable, to: Variable },
-  ImmVar { from: Immediate, to: Variable },
-}
 
 #[derive(Debug)]
 enum Requirement {
