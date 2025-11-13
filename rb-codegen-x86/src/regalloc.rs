@@ -225,7 +225,8 @@ impl Regalloc<'_> {
 
           let used_later = self.is_used_after(InstructionLocation { block, index: i }, out);
 
-          let register = requirement.unwrap_or_else(|| self.state.pick_register(loc, out, false));
+          let register = requirement
+            .unwrap_or_else(|| self.state.pick_register(loc, out, false, RegisterIndex::all()));
 
           if used_later {
             self.state.activate(register, out);
@@ -330,6 +331,27 @@ impl Regalloc<'_> {
     let instr = &self.function.block(loc.block).instructions[loc.index];
     self.state.debug.log(format_args!("= {instr}"));
 
+    match instr.opcode {
+      Opcode::CallExtern(_) => {
+        let saved = &[
+          RegisterIndex::Ebx,
+          RegisterIndex::Ebp,
+          RegisterIndex::R12,
+          RegisterIndex::R13,
+          RegisterIndex::R14,
+          RegisterIndex::R15,
+        ];
+
+        for (&reg, &var) in &self.state.active.clone() {
+          if !saved.contains(&reg) {
+            self.state.debug.log(format_args!("extern clobbers register {reg:?}, rehoming {var}"));
+            self.state.rehome_options(loc, var, saved);
+          }
+        }
+      }
+      _ => {}
+    }
+
     let input_len = self.function.block(loc.block).instructions[loc.index].input.len();
     for i in 0..input_len {
       let instr = &mut self.function.block_mut(loc.block).instructions[loc.index];
@@ -425,7 +447,7 @@ impl RegallocState<'_> {
       Requirement::None => return None,
       Requirement::Register(size) => {
         let new_var = self.fresh_var(size);
-        let reg = self.pick_register(loc, new_var, false);
+        let reg = self.pick_register(loc, new_var, false, RegisterIndex::all());
         (reg, self.active.get(&reg).copied())
       }
       Requirement::Specific(reg) => (reg, self.active.get(&reg).copied()),
@@ -516,7 +538,7 @@ impl RegallocState<'_> {
   }
 
   fn allocate(&mut self, loc: InstructionLocation, var: Variable) {
-    let reg = self.pick_register(loc, var, false);
+    let reg = self.pick_register(loc, var, false, RegisterIndex::all());
     self.active.insert(reg, var);
     self.alloc.registers.set_with(
       var,
@@ -537,6 +559,7 @@ impl RegallocState<'_> {
     loc: InstructionLocation,
     var: Variable,
     must_move: bool,
+    options: &[RegisterIndex],
   ) -> RegisterIndex {
     if let Some(pref) = self.preference_after(loc, var) {
       match self.active.get(&pref) {
@@ -562,9 +585,7 @@ impl RegallocState<'_> {
       }
     }
 
-    for reg_index in 0..8 {
-      let reg_index = RegisterIndex::from_usize(reg_index);
-
+    for &reg_index in options {
       if !self.active.contains_key(&reg_index) {
         return reg_index;
       }
@@ -574,17 +595,20 @@ impl RegallocState<'_> {
   }
 
   fn rehome(&mut self, loc: InstructionLocation, var: Variable) {
+    self.rehome_options(loc, var, RegisterIndex::all());
+  }
+
+  fn rehome_options(&mut self, loc: InstructionLocation, var: Variable, saved: &[RegisterIndex]) {
     let new_var = self.fresh_var(var.size());
-    let new_reg = self.pick_register(loc, var, true);
-    self.debug.log(format_args!(
-      "rehoming {var}({old_reg:?}) -> {new_var}({new_reg:?})",
-      old_reg = self.alloc.registers.get(var).unwrap().index
-    ));
+    let old_reg = self.alloc.registers.get(var).unwrap().index;
+    let new_reg = self.pick_register(loc, var, true, saved);
+    self.debug.log(format_args!("rehoming {var}({old_reg:?}) -> {new_var}({new_reg:?})",));
     self.alloc.registers.set_with(
       new_var,
       Register { size: var_to_reg_size(var.size()).unwrap(), index: new_reg },
       || Register::RAX,
     );
+    self.active.remove(&old_reg);
     self.active.insert(new_reg, new_var);
 
     self.copy(loc, Move::VarVar { from: var, to: new_var });
@@ -952,6 +976,51 @@ mod tests {
           call function 0 = rdi(2)
           mov rdi(3) = rax(1)
           return r3
+      "#
+      ],
+    );
+  }
+
+  #[test]
+  fn save_clobbers() {
+    check_v(
+      "
+      block 0:
+        mov r0 = 0x01
+        mov r1 = 0x02
+        call extern = 0x02
+        return r0, r1
+      ",
+      expect![@r#"
+        preference: r0 -> Edi at <block 0, instr 3>
+        preference: r1 -> Esi at <block 0, instr 3>
+        = mov r0 = 0x01
+        marking r0(Edi) active
+        = mov r1 = 0x02
+        marking r1(Esi) active
+        = call extern 0 = 0x02
+        extern clobbers register Edi, rehoming r0
+        rehoming r0(Edi) -> r2(Ebx)
+        + mov r2 = r0
+        extern clobbers register Esi, rehoming r1
+        rehoming r1(Esi) -> r3(Ebp)
+        + mov r3 = r1
+        + mov r4 = Unsigned(2)
+        marking r4(Edi) active
+        freeing r4(Edi)
+        + mov r5 = r2
+        + mov r6 = r3
+
+        block 0:
+          mov rdi(0) = 0x01
+          mov rsi(1) = 0x02
+          mov rbx(2) = rdi(0)
+          mov rbp(3) = rsi(1)
+          mov rdi(4) = 0x02
+          call extern 0 = rdi(4)
+          mov rdi(5) = rbx(2)
+          mov rsi(6) = rbp(3)
+          return r5, r6
       "#
       ],
     );

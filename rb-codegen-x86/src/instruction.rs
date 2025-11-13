@@ -291,6 +291,27 @@ impl RegisterIndex {
 
     unsafe { std::mem::transmute::<u8, RegisterIndex>(value as u8) }
   }
+
+  pub fn all() -> &'static [RegisterIndex] {
+    &[
+      RegisterIndex::Eax,
+      RegisterIndex::Ecx,
+      RegisterIndex::Edx,
+      RegisterIndex::Ebx,
+      RegisterIndex::Esp,
+      RegisterIndex::Ebp,
+      RegisterIndex::Esi,
+      RegisterIndex::Edi,
+      RegisterIndex::R8,
+      RegisterIndex::R9,
+      RegisterIndex::R10,
+      RegisterIndex::R11,
+      RegisterIndex::R12,
+      RegisterIndex::R13,
+      RegisterIndex::R14,
+      RegisterIndex::R15,
+    ]
+  }
 }
 
 impl Opcode {
