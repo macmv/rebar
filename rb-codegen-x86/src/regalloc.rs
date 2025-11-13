@@ -49,6 +49,8 @@ struct RegallocState<'a> {
 struct Interval {
   segments: Vec<Range<InstructionIndex>>,
   assigned: Option<RegisterIndex>,
+
+  fixed: Vec<(InstructionIndex, RegisterIndex)>,
 }
 
 #[derive(Clone, Copy)]
@@ -215,7 +217,7 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
     for instr in block.instructions.iter() {
       let index = InstructionIndex(i);
 
-      for input in &instr.input {
+      for (j, input) in instr.input.iter().enumerate() {
         if let InstructionInput::Var(v) = input {
           let interval = intervals.entry(*v).or_default();
 
@@ -223,11 +225,18 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
             interval.segments.push(Range { start: index, end: InstructionIndex(0) });
           }
 
-          interval.segments.last_mut().unwrap().end = InstructionIndex(i + 1);
+          interval.segments.last_mut().unwrap().end = InstructionIndex(index.0 + 1);
+
+          match Requirement::for_input(instr, j) {
+            Requirement::Specific(reg) => {
+              interval.fixed.push((index, reg));
+            }
+            _ => {}
+          }
         }
       }
 
-      for output in &instr.output {
+      for (j, output) in instr.output.iter().enumerate() {
         let InstructionOutput::Var(v) = output;
         let interval = intervals.entry(*v).or_default();
 
@@ -235,7 +244,14 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
           interval.segments.push(Range { start: index, end: InstructionIndex(0) });
         }
 
-        interval.segments.last_mut().unwrap().end = InstructionIndex(i + 1);
+        interval.segments.last_mut().unwrap().end = InstructionIndex(index.0 + 1);
+
+        match Requirement::for_output(instr, j) {
+          Requirement::Specific(reg) => {
+            interval.fixed.push((index, reg));
+          }
+          _ => {}
+        }
       }
 
       i += 1;
@@ -243,7 +259,7 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
 
     match &block.terminator {
       TerminatorInstruction::Return(rets) => {
-        for arg in rets {
+        for (j, arg) in rets.iter().enumerate() {
           if let InstructionInput::Var(v) = arg {
             let interval = intervals.entry(*v).or_default();
 
@@ -254,6 +270,13 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
             }
 
             interval.segments.last_mut().unwrap().end = InstructionIndex(i + 1);
+
+            match Requirement::for_terminator(&block.terminator, j) {
+              Requirement::Specific(reg) => {
+                interval.fixed.push((InstructionIndex(i), reg));
+              }
+              _ => {}
+            }
           }
         }
       }
@@ -315,16 +338,13 @@ impl Requirement {
     }
   }
 
-  fn for_output(regalloc: &Regalloc, instr: &Instruction, index: usize) -> Option<RegisterIndex> {
+  fn for_output(instr: &Instruction, index: usize) -> Requirement {
+    use Requirement::*;
+
     match instr.opcode {
       Opcode::Math(m) => {
-        let InstructionInput::Var(v) = instr.input[0] else {
-          panic!("expected var input for math instruction: {instr}");
-        };
-        let input = regalloc.state.alloc.registers.get(v).unwrap();
-
         match m {
-          // In-place, any register.
+          // In-place, any register. FIXME: This should be the same as the input
           Math::Add
           | Math::Sub
           | Math::And
@@ -334,24 +354,33 @@ impl Requirement {
           | Math::Neg
           | Math::Shl
           | Math::Ishr
-          | Math::Ushr => Some(input.index),
+          | Math::Ushr => Specific(RegisterIndex::Eax),
           // In-place, only EAX.
-          Math::Imul | Math::Umul | Math::Idiv | Math::Udiv => Some(RegisterIndex::Eax),
+          Math::Imul | Math::Umul | Math::Idiv | Math::Udiv => Specific(RegisterIndex::Eax),
           // In-place, only EDX.
-          Math::Irem | Math::Urem => Some(RegisterIndex::Edx),
+          Math::Irem | Math::Urem => Specific(RegisterIndex::Edx),
         }
       }
-      Opcode::Call(_) => Some(match calling_convention(instr.input.len() + index) {
-        Requirement::Specific(reg) => reg,
-        _ => unreachable!(),
-      }),
+      Opcode::Call(_) => calling_convention(instr.input.len() + index),
       Opcode::CallExtern(_) => match index {
-        0 => Some(RegisterIndex::Eax),
+        0 => Specific(RegisterIndex::Eax),
         _ => unreachable!("call with more than 1 return"),
       },
       Opcode::Syscall => match index {
-        0 => Some(RegisterIndex::Eax),
+        0 => Specific(RegisterIndex::Eax),
         _ => unreachable!("syscalls only have 1 output"),
+      },
+      _ => None,
+    }
+  }
+
+  fn for_terminator(term: &TerminatorInstruction, index: usize) -> Requirement {
+    use Requirement::*;
+
+    match term {
+      TerminatorInstruction::Return(_) => match index {
+        0 => Specific(RegisterIndex::Eax),
+        _ => unreachable!("returns only have 1 output"),
       },
       _ => None,
     }
