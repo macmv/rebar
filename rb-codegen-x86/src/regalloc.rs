@@ -144,45 +144,69 @@ impl VariableRegisters {
   }
 }
 
+struct FunctionEditor<'a> {
+  function:    &'a mut Function,
+  next_var_id: u32,
+}
+
+impl<'a> FunctionEditor<'a> {
+  pub fn new(function: &'a mut Function) -> Self {
+    let last_var = function
+      .blocks()
+      .flat_map(|b| function.block(b).instructions.iter())
+      .flat_map(|instr| {
+        instr
+          .input
+          .iter()
+          .filter_map(|i| match i {
+            InstructionInput::Var(v) => Some(*v),
+            _ => None,
+          })
+          .chain(instr.output.iter().filter_map(|o| match o {
+            InstructionOutput::Var(v) => Some(*v),
+          }))
+      })
+      .max_by_key(|v| v.id())
+      .unwrap_or(Variable::new(0, VariableSize::Bit64));
+    let next_var_id = last_var.id() + 1;
+
+    FunctionEditor { function, next_var_id }
+  }
+
+  pub fn fresh_var(&mut self, size: VariableSize) -> Variable {
+    let var = Variable::new(self.next_var_id, size);
+    self.next_var_id += 1;
+    var
+  }
+}
+
 fn split_critical_variables(function: &mut Function) {
-  let last_var = function
-    .blocks()
-    .flat_map(|b| function.block(b).instructions.iter())
-    .flat_map(|instr| {
-      instr
-        .input
-        .iter()
-        .filter_map(|i| match i {
-          InstructionInput::Var(v) => Some(*v),
-          _ => None,
-        })
-        .chain(instr.output.iter().filter_map(|o| match o {
-          InstructionOutput::Var(v) => Some(*v),
-        }))
-    })
-    .max_by_key(|v| v.id())
-    .unwrap_or(Variable::new(0, VariableSize::Bit64));
-  let mut next_var_id = last_var.id() + 1;
+  let mut editor = FunctionEditor::new(function);
 
   let mut specific_defs = HashMap::<Variable, RegisterIndex>::new();
 
-  for block in function.blocks() {
+  for block_id in editor.function.blocks() {
     let mut i = 0;
-    while i < function.block(block).instructions.len() {
-      let block = function.block_mut(block);
+    while i < editor.function.block(block_id).instructions.len() {
+      let inputs = editor.function.block(block_id).instructions[i].input.len();
 
-      for j in 0..block.instructions[i].input.len() {
-        let instr = &mut block.instructions[i];
+      for j in 0..inputs {
+        let block = editor.function.block(block_id);
+        let instr = &block.instructions[i];
         let req = Requirement::for_input(&instr, j);
-        let input = &mut instr.input[j];
+        let input = &instr.input[j];
 
         match (*input, req) {
           (InstructionInput::Var(v), Requirement::Specific(req))
             if specific_defs.get(&v).is_some_and(|def| *def != req) =>
           {
             let prev_input = input.clone();
-            let tmp = Variable::new(next_var_id, VariableSize::Bit64);
-            next_var_id += 1;
+            let tmp = editor.fresh_var(VariableSize::Bit64);
+
+            let block = editor.function.block_mut(block_id);
+
+            let instr = &mut block.instructions[i];
+            let input = &mut instr.input[j];
             *input = InstructionInput::Var(tmp);
 
             block.instructions.insert(
@@ -199,10 +223,12 @@ fn split_critical_variables(function: &mut Function) {
         }
       }
 
-      for j in 0..block.instructions[i].output.len() {
-        let instr = &mut block.instructions[i];
+      let outputs = editor.function.block(block_id).instructions[i].output.len();
+      for j in 0..outputs {
+        let block = editor.function.block(block_id);
+        let instr = &block.instructions[i];
         let req = Requirement::for_output(&instr, j);
-        let output = &mut instr.output[j];
+        let output = &instr.output[j];
 
         match (*output, req) {
           (InstructionOutput::Var(v), Requirement::Specific(req)) => {
@@ -215,18 +241,19 @@ fn split_critical_variables(function: &mut Function) {
       i += 1;
     }
 
-    let block = function.block_mut(block);
+    let block = editor.function.block_mut(block_id);
     match &mut block.terminator {
-      mut terminator @ TerminatorInstruction::Return(_) => {
+      terminator @ TerminatorInstruction::Return(_) => {
         let len = match &terminator {
           TerminatorInstruction::Return(rets) => rets.len(),
           _ => unreachable!(),
         };
 
         for j in 0..len {
-          let req = Requirement::for_terminator(&terminator, j);
-          let input = match &mut terminator {
-            TerminatorInstruction::Return(rets) => &mut rets[j],
+          let block = editor.function.block(block_id);
+          let req = Requirement::for_terminator(&block.terminator, j);
+          let input = match &block.terminator {
+            TerminatorInstruction::Return(rets) => &rets[j],
             _ => unreachable!(),
           };
 
@@ -235,10 +262,15 @@ fn split_critical_variables(function: &mut Function) {
               if specific_defs.get(&v).is_some_and(|def| *def != req) =>
             {
               let prev_input = input.clone();
-              let tmp = Variable::new(next_var_id, VariableSize::Bit64);
-              next_var_id += 1;
-              *input = InstructionInput::Var(tmp);
+              let tmp = editor.fresh_var(VariableSize::Bit64);
 
+              let block = editor.function.block_mut(block_id);
+              let input = match &mut block.terminator {
+                TerminatorInstruction::Return(rets) => &mut rets[j],
+                _ => unreachable!(),
+              };
+
+              *input = InstructionInput::Var(tmp);
               block.instructions.insert(
                 i,
                 Instruction {
