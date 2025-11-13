@@ -1,12 +1,12 @@
 use std::{
-  collections::{BTreeMap, HashMap, HashSet},
+  collections::{HashMap, HashSet},
   fmt,
   ops::Range,
 };
 
 use rb_codegen::{
-  BlockId, Function, Immediate, Instruction, InstructionInput, InstructionOutput, Math, Opcode,
-  TVec, TerminatorInstruction, Variable, VariableSize,
+  Function, Immediate, Instruction, InstructionInput, InstructionOutput, Math, Opcode, TVec,
+  TerminatorInstruction, Variable, VariableSize,
 };
 use rb_codegen_opt::analysis::{Analysis, dominator_tree::DominatorTree, value_uses::ValueUses};
 use smallvec::smallvec;
@@ -49,8 +49,6 @@ struct RegallocState<'a> {
 struct Interval {
   segments: Vec<Range<InstructionIndex>>,
   assigned: Option<RegisterIndex>,
-
-  fixed: Vec<(InstructionIndex, RegisterIndex)>,
 }
 
 #[derive(Clone, Copy)]
@@ -119,20 +117,38 @@ impl VariableRegisters {
       });
 
       debug.log(format_args!("activating {var} at {:?}", interval.segments.first().unwrap().start));
-      active.insert(var);
 
-      for reg_index in RegisterIndex::all() {
+      if let Some(reg_index) = interval.assigned {
         if active.iter().all(|active_var| {
           let active_interval = &intervals.iter().find(|(v, _)| v == active_var).unwrap().1;
-          active_interval.assigned != Some(*reg_index)
+          active_interval.assigned != Some(reg_index)
         }) {
-          intervals[i].1.assigned = Some(*reg_index);
+          active.insert(var);
+
           regs.registers.set_with(
             var,
-            Register { index: *reg_index, size: var_to_reg_size(var.size()).unwrap() },
+            Register { index: reg_index, size: var_to_reg_size(var.size()).unwrap() },
             || Register::RAX,
           );
-          break;
+        } else {
+          panic!("register {reg_index:?} for variable {var:?} is already assigned");
+        }
+      } else {
+        active.insert(var);
+
+        for reg_index in RegisterIndex::all() {
+          if active.iter().all(|active_var| {
+            let active_interval = &intervals.iter().find(|(v, _)| v == active_var).unwrap().1;
+            active_interval.assigned != Some(*reg_index)
+          }) {
+            intervals[i].1.assigned = Some(*reg_index);
+            regs.registers.set_with(
+              var,
+              Register { index: *reg_index, size: var_to_reg_size(var.size()).unwrap() },
+              || Register::RAX,
+            );
+            break;
+          }
         }
       }
     }
@@ -229,7 +245,7 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
 
           match Requirement::for_input(instr, j) {
             Requirement::Specific(reg) => {
-              interval.fixed.push((index, reg));
+              interval.assigned = Some(reg);
             }
             _ => {}
           }
@@ -248,7 +264,7 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
 
         match Requirement::for_output(instr, j) {
           Requirement::Specific(reg) => {
-            interval.fixed.push((index, reg));
+            interval.assigned = Some(reg);
           }
           _ => {}
         }
@@ -257,6 +273,8 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
       i += 1;
     }
 
+    let index = InstructionIndex(i);
+
     match &block.terminator {
       TerminatorInstruction::Return(rets) => {
         for (j, arg) in rets.iter().enumerate() {
@@ -264,16 +282,14 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
             let interval = intervals.entry(*v).or_default();
 
             if interval.segments.is_empty() {
-              interval
-                .segments
-                .push(Range { start: InstructionIndex(i), end: InstructionIndex(0) });
+              interval.segments.push(Range { start: index, end: InstructionIndex(0) });
             }
 
             interval.segments.last_mut().unwrap().end = InstructionIndex(i + 1);
 
             match Requirement::for_terminator(&block.terminator, j) {
               Requirement::Specific(reg) => {
-                interval.fixed.push((InstructionIndex(i), reg));
+                interval.assigned = Some(reg);
               }
               _ => {}
             }
@@ -539,10 +555,9 @@ mod tests {
       expect![@r#"
         block 0:
           mov rax(1) = 0x02
-          mov rcx(3) = 0x03
-          math(imul) rax(0) = rax(1), rcx(3)
-          mov rdi(4) = rax(0)
-          return r4
+          mov rcx(2) = 0x03
+          math(imul) rax(0) = rax(1), rcx(2)
+          return r0
       "#
       ],
     );
