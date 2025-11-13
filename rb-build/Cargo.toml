@@ -10,6 +10,6 @@ edition = "2024"
 [dependencies]
 itertools = "0.14.0"
 proc-macro2 = "1.0.103"
-quote = "1.0.41"
+quote = "1.0.42"
 ungrammar = "1.16.1"
 xshell = "0.2.7"
