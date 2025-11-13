@@ -65,6 +65,7 @@ enum Move {
   ImmVar { from: Immediate, to: Variable },
 }
 
+#[derive(Debug)]
 enum Requirement {
   /// The operand must be in the given register.
   Specific(RegisterIndex),
@@ -91,6 +92,7 @@ impl VariableRegisters {
     analysis.load(ValueUses::ID, function);
 
     imm_to_reg(function);
+    split_critical_variables(function);
 
     let intervals = live_intervals(function);
     let mut intervals = intervals.into_iter().collect::<Vec<(Variable, Interval)>>();
@@ -166,6 +168,120 @@ impl VariableRegisters {
   }
 }
 
+fn split_critical_variables(function: &mut Function) {
+  let last_var = function
+    .blocks()
+    .flat_map(|b| function.block(b).instructions.iter())
+    .flat_map(|instr| {
+      instr
+        .input
+        .iter()
+        .filter_map(|i| match i {
+          InstructionInput::Var(v) => Some(*v),
+          _ => None,
+        })
+        .chain(instr.output.iter().filter_map(|o| match o {
+          InstructionOutput::Var(v) => Some(*v),
+        }))
+    })
+    .max_by_key(|v| v.id())
+    .unwrap_or(Variable::new(0, VariableSize::Bit64));
+  let mut next_var_id = last_var.id() + 1;
+
+  let mut specific_defs = HashMap::<Variable, RegisterIndex>::new();
+
+  for block in function.blocks() {
+    let mut i = 0;
+    while i < function.block(block).instructions.len() {
+      let block = function.block_mut(block);
+
+      for j in 0..block.instructions[i].input.len() {
+        let instr = &mut block.instructions[i];
+        let req = Requirement::for_input(&instr, j);
+        let input = &mut instr.input[j];
+
+        match (*input, req) {
+          (InstructionInput::Var(v), Requirement::Specific(req))
+            if specific_defs.get(&v).is_some_and(|def| *def != req) =>
+          {
+            let prev_input = input.clone();
+            let tmp = Variable::new(next_var_id, VariableSize::Bit64);
+            next_var_id += 1;
+            *input = InstructionInput::Var(tmp);
+
+            block.instructions.insert(
+              i,
+              Instruction {
+                opcode: Opcode::Move,
+                input:  smallvec![prev_input],
+                output: smallvec![tmp.into()],
+              },
+            );
+            i += 1;
+          }
+          _ => continue,
+        }
+      }
+
+      for j in 0..block.instructions[i].output.len() {
+        let instr = &mut block.instructions[i];
+        let req = Requirement::for_output(&instr, j);
+        let output = &mut instr.output[j];
+
+        match (*output, req) {
+          (InstructionOutput::Var(v), Requirement::Specific(req)) => {
+            specific_defs.insert(v, req);
+          }
+          _ => {}
+        }
+      }
+
+      i += 1;
+    }
+
+    let block = function.block_mut(block);
+    match &mut block.terminator {
+      mut terminator @ TerminatorInstruction::Return(_) => {
+        let len = match &terminator {
+          TerminatorInstruction::Return(rets) => rets.len(),
+          _ => unreachable!(),
+        };
+
+        for j in 0..len {
+          let req = Requirement::for_terminator(&terminator, j);
+          let input = match &mut terminator {
+            TerminatorInstruction::Return(rets) => &mut rets[j],
+            _ => unreachable!(),
+          };
+
+          match (*input, req) {
+            (InstructionInput::Var(v), Requirement::Specific(req))
+              if specific_defs.get(&v).is_some_and(|def| *def != req) =>
+            {
+              let prev_input = input.clone();
+              let tmp = Variable::new(next_var_id, VariableSize::Bit64);
+              next_var_id += 1;
+              *input = InstructionInput::Var(tmp);
+
+              block.instructions.insert(
+                i,
+                Instruction {
+                  opcode: Opcode::Move,
+                  input:  smallvec![prev_input],
+                  output: smallvec![tmp.into()],
+                },
+              );
+              i += 1;
+            }
+            _ => continue,
+          }
+        }
+      }
+      _ => continue,
+    }
+  }
+}
+
 fn imm_to_reg(function: &mut Function) {
   let last_var = function
     .blocks()
@@ -219,6 +335,46 @@ fn imm_to_reg(function: &mut Function) {
       }
 
       i += 1;
+    }
+
+    let block = function.block_mut(block);
+    match &mut block.terminator {
+      mut terminator @ TerminatorInstruction::Return(_) => {
+        let len = match &terminator {
+          TerminatorInstruction::Return(rets) => rets.len(),
+          _ => unreachable!(),
+        };
+
+        for j in 0..len {
+          let req = Requirement::for_terminator(&terminator, j);
+          let input = match &mut terminator {
+            TerminatorInstruction::Return(rets) => &mut rets[j],
+            _ => unreachable!(),
+          };
+
+          match (*input, req) {
+            (_, Requirement::None) => continue,
+            (InstructionInput::Var(_), _) => continue,
+            (InstructionInput::Imm(_), _) => {
+              let prev_input = input.clone();
+              let tmp = Variable::new(next_var_id, VariableSize::Bit64);
+              next_var_id += 1;
+              *input = InstructionInput::Var(tmp);
+
+              block.instructions.insert(
+                i,
+                Instruction {
+                  opcode: Opcode::Move,
+                  input:  smallvec![prev_input],
+                  output: smallvec![tmp.into()],
+                },
+              );
+              i += 1;
+            }
+          }
+        }
+      }
+      _ => continue,
     }
   }
 }
@@ -554,7 +710,8 @@ mod tests {
           mov rax(1) = 0x02
           mov rcx(2) = 0x03
           math(imul) rax(0) = rax(1), rcx(2)
-          return r0
+          mov rdi(3) = rax(0)
+          return r3
       "#
       ],
     );
