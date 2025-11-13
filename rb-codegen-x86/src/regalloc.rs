@@ -151,7 +151,7 @@ struct FunctionEditor<'a> {
 
 impl<'a> FunctionEditor<'a> {
   pub fn new(function: &'a mut Function) -> Self {
-    let last_var = function
+    let next_var_id = function
       .blocks()
       .flat_map(|b| function.block(b).instructions.iter())
       .flat_map(|instr| {
@@ -167,8 +167,7 @@ impl<'a> FunctionEditor<'a> {
           }))
       })
       .max_by_key(|v| v.id())
-      .unwrap_or(Variable::new(0, VariableSize::Bit64));
-    let next_var_id = last_var.id() + 1;
+      .map_or(0, |id| id.id() + 1);
 
     FunctionEditor { function, next_var_id }
   }
