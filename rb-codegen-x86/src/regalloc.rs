@@ -45,7 +45,7 @@ struct RegallocState<'a> {
   intervals: HashMap<Variable, Interval>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Interval {
   segments: Vec<Range<InstructionIndex>>,
   assigned: Option<RegisterIndex>,
@@ -206,7 +206,7 @@ fn imm_to_reg(function: &mut Function) {
 }
 
 fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
-  let mut intervals = HashMap::new();
+  let mut intervals = HashMap::<Variable, Interval>::new();
 
   // TODO: Value-uses and dominator tree, but this'll work for now.
   let mut i = 0;
@@ -217,8 +217,7 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
 
       for input in &instr.input {
         if let InstructionInput::Var(v) = input {
-          let interval =
-            intervals.entry(*v).or_insert(Interval { segments: Vec::new(), assigned: None });
+          let interval = intervals.entry(*v).or_default();
 
           if interval.segments.is_empty() {
             interval.segments.push(Range { start: index, end: InstructionIndex(0) });
@@ -230,8 +229,7 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
 
       for output in &instr.output {
         let InstructionOutput::Var(v) = output;
-        let interval =
-          intervals.entry(*v).or_insert(Interval { segments: Vec::new(), assigned: None });
+        let interval = intervals.entry(*v).or_default();
 
         if interval.segments.is_empty() {
           interval.segments.push(Range { start: index, end: InstructionIndex(0) });
@@ -247,8 +245,7 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
       TerminatorInstruction::Return(rets) => {
         for arg in rets {
           if let InstructionInput::Var(v) = arg {
-            let interval =
-              intervals.entry(*v).or_insert(Interval { segments: Vec::new(), assigned: None });
+            let interval = intervals.entry(*v).or_default();
 
             if interval.segments.is_empty() {
               interval
