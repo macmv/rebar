@@ -217,6 +217,18 @@ impl Variable {
   }
 }
 
+impl VariableSize {
+  pub fn bytes(&self) -> u32 {
+    match self {
+      VariableSize::Bit1 => 1,
+      VariableSize::Bit8 => 1,
+      VariableSize::Bit16 => 2,
+      VariableSize::Bit32 => 4,
+      VariableSize::Bit64 => 8,
+    }
+  }
+}
+
 impl Function {
   pub fn entry(&self) -> BlockId { BlockId::new(0) }
 
