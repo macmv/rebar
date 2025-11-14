@@ -1,5 +1,5 @@
 use std::{
-  collections::{HashMap, HashSet},
+  collections::{BTreeSet, HashMap, HashSet},
   fmt,
   ops::Range,
 };
@@ -51,6 +51,12 @@ enum Requirement {
   None,
 }
 
+#[derive(Default)]
+struct LiveIntervals {
+  intervals: HashMap<Variable, Interval>,
+  calls:     BTreeSet<InstructionIndex>,
+}
+
 impl VariableRegisters {
   pub fn pass(function: &mut Function) -> Self { Self::pass_debug(function, &mut NopDebug) }
 
@@ -70,18 +76,17 @@ impl VariableRegisters {
     imm_to_reg(function);
     split_critical_variables(function);
 
-    let intervals = live_intervals(function);
-    let mut intervals = intervals.into_iter().collect::<Vec<(Variable, Interval)>>();
-    intervals.sort_unstable_by_key(|(_, interval)| interval.segments.first().unwrap().start);
+    let mut intervals = live_intervals(function);
 
     let mut regs = VariableRegisters::default();
+    let sorted = intervals.sorted();
 
     let mut active = HashSet::new();
-    for i in 0..intervals.len() {
-      let &(var, ref interval) = &intervals[i];
+    for var in sorted {
+      let interval = intervals.for_var(var);
 
       active.retain(|active_var| {
-        let active_interval = &intervals.iter().find(|(v, _)| v == active_var).unwrap().1;
+        let active_interval = &intervals.for_var(*active_var);
 
         let active_end = active_interval.segments.last().unwrap().end;
         let current_start = interval.segments.first().unwrap().start;
@@ -98,7 +103,7 @@ impl VariableRegisters {
 
       if let Some(reg_index) = interval.assigned {
         if active.iter().all(|active_var| {
-          let active_interval = &intervals.iter().find(|(v, _)| v == active_var).unwrap().1;
+          let active_interval = intervals.for_var(*active_var);
           active_interval.assigned != Some(reg_index)
         }) {
           active.insert(var);
@@ -116,10 +121,10 @@ impl VariableRegisters {
 
         for reg_index in RegisterIndex::all() {
           if active.iter().all(|active_var| {
-            let active_interval = &intervals.iter().find(|(v, _)| v == active_var).unwrap().1;
+            let active_interval = intervals.for_var(*active_var);
             active_interval.assigned != Some(*reg_index)
           }) {
-            intervals[i].1.assigned = Some(*reg_index);
+            intervals.assign(var, *reg_index);
             regs.registers.set_with(
               var,
               Register { index: *reg_index, size: var_to_reg_size(var.size()).unwrap() },
@@ -356,8 +361,8 @@ fn imm_to_reg(function: &mut Function) {
   );
 }
 
-fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
-  let mut intervals = HashMap::<Variable, Interval>::new();
+fn live_intervals(function: &Function) -> LiveIntervals {
+  let mut intervals = LiveIntervals::default();
 
   const UNKNOWN: InstructionIndex = InstructionIndex(usize::MAX);
 
@@ -368,9 +373,16 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
     for instr in block.instructions.iter() {
       let index = InstructionIndex(i);
 
+      match instr.opcode {
+        Opcode::Call(_) | Opcode::CallExtern(_) | Opcode::Syscall => {
+          intervals.calls.insert(index);
+        }
+        _ => {}
+      }
+
       for (j, input) in instr.input.iter().enumerate() {
         if let InstructionInput::Var(v) = input {
-          let interval = intervals.entry(*v).or_default();
+          let interval = intervals.intervals.entry(*v).or_default();
 
           if let Some(last) = interval.segments.last_mut() {
             last.end = InstructionIndex(index.0 + 1);
@@ -387,7 +399,7 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
 
       for (j, output) in instr.output.iter().enumerate() {
         let InstructionOutput::Var(v) = output;
-        let interval = intervals.entry(*v).or_default();
+        let interval = intervals.intervals.entry(*v).or_default();
 
         if interval.segments.is_empty() {
           interval.segments.push(Range { start: index, end: UNKNOWN });
@@ -410,7 +422,7 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
       TerminatorInstruction::Return(rets) => {
         for (j, arg) in rets.iter().enumerate() {
           if let InstructionInput::Var(v) = arg {
-            let interval = intervals.entry(*v).or_default();
+            let interval = intervals.intervals.entry(*v).or_default();
 
             if let Some(last) = interval.segments.last_mut() {
               last.end = InstructionIndex(index.0 + 1);
@@ -430,9 +442,23 @@ fn live_intervals(function: &Function) -> HashMap<Variable, Interval> {
     i += 1;
   }
 
-  intervals.retain(|_, interval| interval.segments.iter().any(|e| e.end != UNKNOWN));
+  intervals.intervals.retain(|_, interval| interval.segments.iter().any(|e| e.end != UNKNOWN));
 
   intervals
+}
+
+impl LiveIntervals {
+  pub fn sorted(&self) -> Vec<Variable> {
+    let mut sorted = self.intervals.iter().map(|(v, _)| *v).collect::<Vec<Variable>>();
+    sorted.sort_unstable_by_key(|v| self.for_var(*v).segments.first().unwrap().start);
+    sorted
+  }
+
+  pub fn assign(&mut self, var: Variable, reg: RegisterIndex) {
+    self.intervals.get_mut(&var).unwrap().assigned = Some(reg);
+  }
+
+  pub fn for_var(&self, var: Variable) -> &Interval { self.intervals.get(&var).unwrap() }
 }
 
 const SAVED: &[RegisterIndex] = &[
