@@ -119,7 +119,14 @@ impl VariableRegisters {
       } else {
         active.insert(var);
 
-        for reg_index in RegisterIndex::all() {
+        let choices =
+          if intervals.calls.range(interval.segments.first().unwrap().clone()).next().is_some() {
+            SAVED
+          } else {
+            RegisterIndex::all()
+          };
+
+        for reg_index in choices {
           if active.iter().all(|active_var| {
             let active_interval = intervals.for_var(*active_var);
             active_interval.assigned != Some(*reg_index)
