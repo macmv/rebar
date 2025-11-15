@@ -276,41 +276,47 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
 
             // First, prefer the accumulator-specific instructions, as those are shortest.
             if reg.get(v) == Register::AL {
-              debug_assert_eq!(reg.get(v).size, reg.get(a).size, "math must be in-place");
+              debug_assert_eq!(reg.get(v).size(), reg.get(a).size(), "math must be in-place");
               builder.instr(
                 Instruction::new(opcode_8_for_math(math))
-                  .with_immediate(Immediate::new(reg.get(a).size, b)),
+                  .with_immediate(Immediate::new(reg.get(a).size(), b)),
               );
             } else {
               match imm_to_i8(b) {
                 // Next, try to fit in an imm8
                 Some(imm8) => builder.instr(
-                  encode_sized(reg.get(v).size, Opcode::MATH_IMM8, Opcode::MATH_EXT_IMM8)
-                    .with_mod(0b11, reg.get(v).index)
+                  encode_sized(reg.get(v).size(), Opcode::MATH_IMM8, Opcode::MATH_EXT_IMM8)
+                    .with_mod(0b11, reg.get(v).unwrap_register().index)
                     .with_immediate(Immediate::i8(imm8 as u8))
                     .with_digit(digit_for_math(math)),
                 ),
                 // Doesn't fit in an imm8, use the accumulator-specific form if possible
-                None if reg.get(v).index == RegisterIndex::Eax => builder.instr(
-                  encode_binary_reg_imm(
-                    reg.get(v),
-                    b,
-                    opcode_8_for_math(math),
-                    match math {
-                      Math::Add => Opcode::ADD_A_IMM32,
-                      Math::Sub => Opcode::SUB_A_IMM32,
-                      Math::And => Opcode::AND_A_IMM32,
-                      Math::Or => Opcode::OR_A_IMM32,
-                      Math::Xor => Opcode::XOR_A_IMM32,
-                      _ => unreachable!(),
-                    },
-                  )
-                  .with_digit(digit_for_math(math)),
-                ),
+                None if reg.get(v).is_register_and(|r| r.index == RegisterIndex::Eax) => builder
+                  .instr(
+                    encode_binary_reg_imm(
+                      reg.get(v).unwrap_register(),
+                      b,
+                      opcode_8_for_math(math),
+                      match math {
+                        Math::Add => Opcode::ADD_A_IMM32,
+                        Math::Sub => Opcode::SUB_A_IMM32,
+                        Math::And => Opcode::AND_A_IMM32,
+                        Math::Or => Opcode::OR_A_IMM32,
+                        Math::Xor => Opcode::XOR_A_IMM32,
+                        _ => unreachable!(),
+                      },
+                    )
+                    .with_digit(digit_for_math(math)),
+                  ),
                 // Doesn't fit in an imm8, use the normal immediate form
                 None => builder.instr(
-                  encode_binary_reg_imm(reg.get(v), b, Opcode::MATH_IMM8, Opcode::MATH_IMM32)
-                    .with_digit(digit_for_math(math)),
+                  encode_binary_reg_imm(
+                    reg.get(v).unwrap_register(),
+                    b,
+                    Opcode::MATH_IMM8,
+                    Opcode::MATH_IMM32,
+                  )
+                  .with_digit(digit_for_math(math)),
                 ),
               }
             }
@@ -318,9 +324,9 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
             encode_binary_reg_reg(
               &mut builder,
-              reg.get(v),
-              reg.get(a),
-              reg.get(b),
+              reg.get(v).unwrap_register(),
+              reg.get(a).unwrap_register(),
+              reg.get(b).unwrap_register(),
               match math {
                 Math::Add => Opcode::ADD_RM8,
                 Math::Sub => Opcode::SUB_RM8,
@@ -347,7 +353,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
             debug_assert_eq!(reg.get(v), reg.get(a), "compare must be in-place");
 
             builder.instr(encode_binary_reg_imm(
-              reg.get(v),
+              reg.get(v).unwrap_register(),
               b,
               Opcode::CMP_A_IMM8,
               Opcode::CMP_A_IMM32,
@@ -356,9 +362,9 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
             encode_binary_reg_reg(
               &mut builder,
-              reg.get(v),
-              reg.get(a),
-              reg.get(b),
+              reg.get(v).unwrap_register(),
+              reg.get(a).unwrap_register(),
+              reg.get(b).unwrap_register(),
               Opcode::CMP_RM8,
               Opcode::CMP_RM32,
             );
@@ -367,7 +373,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
         },
         rb_codegen::Opcode::Branch(condition, target) => match (inst.input[0], inst.input[1]) {
           (InstructionInput::Var(a), InstructionInput::Imm(b)) => {
-            let a = reg.get(a);
+            let a = reg.get(a).unwrap_register();
 
             if b.is_zero() {
               builder.instr(
@@ -415,9 +421,9 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           }
           (InstructionInput::Var(a), InstructionInput::Var(b)) => {
             builder.instr(
-              encode_sized(reg.get(a).size, Opcode::CMP_RM8, Opcode::CMP_RM32)
-                .with_mod(0b11, reg.get(a).index)
-                .with_reg(reg.get(b).index),
+              encode_sized(reg.get(a).size(), Opcode::CMP_RM8, Opcode::CMP_RM32)
+                .with_mod(0b11, reg.get(a).unwrap_register().index)
+                .with_reg(reg.get(b).unwrap_register().index),
             );
 
             let opcode = match condition {
@@ -458,7 +464,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
 
           if math == Math::Idiv || math == Math::Irem {
             let InstructionOutput::Var(out) = inst.output[0];
-            let size = reg.get(out).size;
+            let size = reg.get(out).size();
 
             if size != RegisterSize::Bit8 {
               // Sign-extend eax into edx:eax
@@ -468,18 +474,26 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
 
           match (inst.output[0], inst.input[0], inst.input[1]) {
             (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
-              debug_assert_eq!(reg.get(v).size, reg.get(a).size, "mul must have the same size");
-              debug_assert_eq!(reg.get(v).size, reg.get(b).size, "mul must have the same size");
+              debug_assert_eq!(reg.get(v).size(), reg.get(a).size(), "mul must have the same size");
+              debug_assert_eq!(reg.get(v).size(), reg.get(b).size(), "mul must have the same size");
               match math {
                 Math::Urem | Math::Irem => {
-                  debug_assert_eq!(reg.get(v).index, RegisterIndex::Edx, "rem must output to edx");
+                  debug_assert_eq!(
+                    reg.get(v).unwrap_register().index,
+                    RegisterIndex::Edx,
+                    "rem must output to edx"
+                  );
                 }
                 _ => {
-                  debug_assert_eq!(reg.get(v).index, RegisterIndex::Eax, "math must output to eax");
+                  debug_assert_eq!(
+                    reg.get(v).unwrap_register().index,
+                    RegisterIndex::Eax,
+                    "math must output to eax"
+                  );
                 }
               }
-              let a = reg.get(a);
-              let b = reg.get(b);
+              let a = reg.get(a).unwrap_register();
+              let b = reg.get(b).unwrap_register();
 
               if a.index == RegisterIndex::Eax {
                 builder.instr(
@@ -512,15 +526,15 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
             (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Var(b)) => {
               debug_assert_eq!(reg.get(v), reg.get(a), "shifts must be in place");
               debug_assert_eq!(
-                reg.get(b).index,
+                reg.get(b).unwrap_register().index,
                 RegisterIndex::Ecx,
                 "shifts can only use ecx as their operand"
               );
 
               builder.instr(
-                encode_sized(reg.get(v).size, Opcode::SHIFT_C_8, Opcode::SHIFT_C_32)
+                encode_sized(reg.get(v).size(), Opcode::SHIFT_C_8, Opcode::SHIFT_C_32)
                   .with_digit(opcode_digit)
-                  .with_mod(0b11, reg.get(v).index),
+                  .with_mod(0b11, reg.get(v).unwrap_register().index),
               );
             }
             (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
@@ -532,15 +546,15 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
               debug_assert_eq!(reg.get(v), reg.get(a), "shifts must be in place");
               if b == 1 {
                 builder.instr(
-                  encode_sized(reg.get(v).size, Opcode::SHIFT_1_8, Opcode::SHIFT_1_32)
+                  encode_sized(reg.get(v).size(), Opcode::SHIFT_1_8, Opcode::SHIFT_1_32)
                     .with_digit(opcode_digit)
-                    .with_mod(0b11, reg.get(v).index),
+                    .with_mod(0b11, reg.get(v).unwrap_register().index),
                 );
               } else {
                 builder.instr(
-                  encode_sized(reg.get(v).size, Opcode::SHIFT_IMM_8, Opcode::SHIFT_IMM_32)
+                  encode_sized(reg.get(v).size(), Opcode::SHIFT_IMM_8, Opcode::SHIFT_IMM_32)
                     .with_digit(opcode_digit)
-                    .with_mod(0b11, reg.get(v).index)
+                    .with_mod(0b11, reg.get(v).unwrap_register().index)
                     .with_immediate(Immediate::i8(b as u8)),
                 );
               }
@@ -553,9 +567,11 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           InstructionOutput::Var(v) => {
             builder.reloc(symbol, 3, -4);
             let reg = reg.get(v);
-            debug_assert_eq!(reg.size, RegisterSize::Bit64, "lea only supports 64-bit registers");
+            debug_assert_eq!(reg.size(), RegisterSize::Bit64, "lea only supports 64-bit registers");
             builder.instr(
-              Instruction::new(Opcode::LEA).with_prefix(Prefix::RexW).with_disp(reg.index, -4),
+              Instruction::new(Opcode::LEA)
+                .with_prefix(Prefix::RexW)
+                .with_disp(reg.unwrap_register().index, -4),
             );
           }
         },
@@ -563,7 +579,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           match (inst.output[0], inst.input[0]) {
             // mov reg, imm
             (InstructionOutput::Var(o), InstructionInput::Imm(i)) => {
-              let reg = reg.get(o);
+              let reg = reg.get(o).unwrap_register();
               let imm = Immediate::new(reg.size, i);
               match reg.size {
                 RegisterSize::Bit8 => builder.instr(
@@ -599,13 +615,13 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
             // mov reg, reg
             (InstructionOutput::Var(o), InstructionInput::Var(i)) => {
               debug_assert_eq!(
-                reg.get(o).size,
-                reg.get(i).size,
+                reg.get(o).size(),
+                reg.get(i).size(),
                 "move must have the same size for input and output"
               );
 
-              let o = reg.get(o);
-              let i = reg.get(i);
+              let o = reg.get(o).unwrap_register();
+              let i = reg.get(i).unwrap_register();
               match o.size {
                 RegisterSize::Bit8 => builder.instr(
                   Instruction::new(Opcode::MOV_MR_8).with_mod(0b11, o.index).with_reg(i.index),
@@ -646,7 +662,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
         rb_codegen::Opcode::StackAddr(id, offset) => {
           let slot = &function.stack_slots[id.0 as usize];
           let output = match inst.output[0] {
-            InstructionOutput::Var(v) => reg.get(v),
+            InstructionOutput::Var(v) => reg.get(v).unwrap_register(),
           };
 
           debug_assert_eq!(output.size, RegisterSize::Bit64, "stack addresses must be 64-bit");
@@ -665,7 +681,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
         rb_codegen::Opcode::StackLoad(id, offset) => {
           let slot = &function.stack_slots[id.0 as usize];
           let output = match inst.output[0] {
-            InstructionOutput::Var(v) => reg.get(v),
+            InstructionOutput::Var(v) => reg.get(v).unwrap_register(),
           };
 
           let offset = slot.offset + offset;
@@ -681,11 +697,11 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
 
         rb_codegen::Opcode::Load(offset) => {
           let input = match inst.input[0] {
-            InstructionInput::Var(v) => reg.get(v),
+            InstructionInput::Var(v) => reg.get(v).unwrap_register(),
             _ => panic!("expected variable input for stack load"),
           };
           let output = match inst.output[0] {
-            InstructionOutput::Var(v) => reg.get(v),
+            InstructionOutput::Var(v) => reg.get(v).unwrap_register(),
           };
 
           builder.instr(
@@ -706,7 +722,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
               let instruction = Instruction::new(Opcode::MOV_MR_32)
                 .with_prefix(Prefix::RexW)
                 .with_sib(0, RegisterIndex::Esp, RegisterIndex::Esp)
-                .with_reg(reg.get(v).index);
+                .with_reg(reg.get(v).unwrap_register().index);
 
               let instruction = if offset == 0 {
                 instruction

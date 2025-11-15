@@ -5,18 +5,24 @@ use std::{
 };
 
 use rb_codegen::{
-  BlockId, Function, Instruction, InstructionInput, InstructionOutput, Math, Opcode, TVec,
+  BlockId, Function, Instruction, InstructionInput, InstructionOutput, Math, Opcode, StackId, TVec,
   TerminatorInstruction, Variable, VariableSize,
 };
 use rb_codegen_opt::analysis::{Analysis, dominator_tree::DominatorTree, value_uses::ValueUses};
 use smallvec::smallvec;
 
-use crate::{Register, RegisterIndex, var_to_reg_size};
+use crate::{Register, RegisterIndex, RegisterSize, var_to_reg_size};
 
 #[derive(Default)]
 pub struct VariableRegisters {
-  registers: TVec<Variable, Register>,
+  registers: TVec<Variable, RegisterSpill>,
   saved:     RegisterMap<bool>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RegisterSpill {
+  Register(Register),
+  Spill(StackId, RegisterSize),
 }
 
 trait RegallocDebug {
@@ -110,8 +116,11 @@ impl VariableRegisters {
 
           regs.registers.set_with(
             var,
-            Register { index: reg_index, size: var_to_reg_size(var.size()).unwrap() },
-            || Register::RAX,
+            RegisterSpill::Register(Register {
+              index: reg_index,
+              size:  var_to_reg_size(var.size()).unwrap(),
+            }),
+            || RegisterSpill::Register(Register::RAX),
           );
         } else {
           panic!("register {reg_index:?} for variable {var:?} is already assigned");
@@ -134,8 +143,11 @@ impl VariableRegisters {
             intervals.assign(var, *reg_index);
             regs.registers.set_with(
               var,
-              Register { index: *reg_index, size: var_to_reg_size(var.size()).unwrap() },
-              || Register::RAX,
+              RegisterSpill::Register(Register {
+                index: *reg_index,
+                size:  var_to_reg_size(var.size()).unwrap(),
+              }),
+              || RegisterSpill::Register(Register::RAX),
             );
             break;
           }
@@ -147,7 +159,7 @@ impl VariableRegisters {
   }
 
   #[track_caller]
-  pub fn get(&self, var: Variable) -> Register {
+  pub fn get(&self, var: Variable) -> RegisterSpill {
     match self.registers.get(var) {
       Some(reg) => *reg,
 
@@ -582,6 +594,48 @@ impl<T> RegisterMap<T> {
       .iter()
       .enumerate()
       .filter_map(|(i, v)| v.as_ref().map(|val| (RegisterIndex::from_usize(i), val)))
+  }
+}
+
+impl RegisterSpill {
+  pub fn size(&self) -> RegisterSize {
+    match self {
+      RegisterSpill::Register(reg) => reg.size,
+      RegisterSpill::Spill(_, size) => *size,
+    }
+  }
+
+  pub fn is_register_and(&self, f: impl Fn(Register) -> bool) -> bool {
+    match self {
+      RegisterSpill::Register(reg) => f(*reg),
+      RegisterSpill::Spill(_, _) => false,
+    }
+  }
+
+  #[track_caller]
+  pub fn unwrap_register(&self) -> Register {
+    match self {
+      RegisterSpill::Register(reg) => *reg,
+      RegisterSpill::Spill(_, _) => panic!("not a register"),
+    }
+  }
+}
+
+impl PartialEq<Register> for RegisterSpill {
+  fn eq(&self, other: &Register) -> bool {
+    match self {
+      RegisterSpill::Register(reg) => reg == other,
+      RegisterSpill::Spill(_, _) => false,
+    }
+  }
+}
+
+impl fmt::Display for RegisterSpill {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      RegisterSpill::Register(reg) => write!(f, "{reg}"),
+      RegisterSpill::Spill(stack, _) => write!(f, "s{}", stack.0),
+    }
   }
 }
 
