@@ -5,8 +5,8 @@ use std::{
 };
 
 use rb_codegen::{
-  BlockId, Function, Instruction, InstructionInput, InstructionOutput, Math, Opcode, StackId, TVec,
-  TerminatorInstruction, Variable, VariableSize,
+  BlockId, Function, Instruction, InstructionInput, InstructionOutput, Math, Opcode, StackId,
+  StackSlot, TVec, TerminatorInstruction, Variable, VariableSize,
 };
 use rb_codegen_opt::analysis::{Analysis, dominator_tree::DominatorTree, value_uses::ValueUses};
 use smallvec::smallvec;
@@ -123,7 +123,18 @@ impl VariableRegisters {
             || RegisterSpill::Register(Register::RAX),
           );
         } else {
-          panic!("register {reg_index:?} for variable {var:?} is already assigned");
+          let slot = StackId(function.stack_slots.len() as u32);
+          function.stack_slots.push(StackSlot {
+            offset: 0,
+            size:   var.size().bytes(),
+            align:  var.size().bytes(),
+          });
+
+          regs.registers.set_with(
+            var,
+            RegisterSpill::Spill(slot, var_to_reg_size(var.size()).unwrap()),
+            || RegisterSpill::Register(Register::RAX),
+          );
         }
       } else {
         active.insert(var);
