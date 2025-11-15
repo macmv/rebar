@@ -33,12 +33,6 @@ struct NopDebug;
 
 impl RegallocDebug for NopDebug {}
 
-#[derive(Debug, Default)]
-struct Interval {
-  segments: Vec<Range<InstructionIndex>>,
-  assigned: Option<RegisterIndex>,
-}
-
 #[derive(Clone, Copy)]
 struct RegisterMap<T> {
   values: [Option<T>; RegisterIndex::COUNT],
@@ -61,6 +55,12 @@ enum Requirement {
 struct LiveIntervals {
   intervals: HashMap<Variable, Interval>,
   calls:     BTreeSet<InstructionIndex>,
+}
+
+#[derive(Debug, Default)]
+struct Interval {
+  segments: Vec<Range<InstructionIndex>>,
+  assigned: Option<RegisterIndex>,
 }
 
 impl VariableRegisters {
