@@ -286,7 +286,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
                 // Next, try to fit in an imm8
                 Some(imm8) => builder.instr(
                   encode_sized(reg.get(v).size(), Opcode::MATH_IMM8, Opcode::MATH_EXT_IMM8)
-                    .with_mod(0b11, reg.get(v).unwrap_register().index)
+                    .with_rm(reg.get(v))
                     .with_immediate(Immediate::i8(imm8 as u8))
                     .with_digit(digit_for_math(math)),
                 ),
@@ -422,7 +422,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           (InstructionInput::Var(a), InstructionInput::Var(b)) => {
             builder.instr(
               encode_sized(reg.get(a).size(), Opcode::CMP_RM8, Opcode::CMP_RM32)
-                .with_mod(0b11, reg.get(a).unwrap_register().index)
+                .with_rm(reg.get(a))
                 .with_reg(reg.get(b).unwrap_register().index),
             );
 
@@ -534,7 +534,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
               builder.instr(
                 encode_sized(reg.get(v).size(), Opcode::SHIFT_C_8, Opcode::SHIFT_C_32)
                   .with_digit(opcode_digit)
-                  .with_mod(0b11, reg.get(v).unwrap_register().index),
+                  .with_rm(reg.get(v)),
               );
             }
             (InstructionOutput::Var(v), InstructionInput::Var(a), InstructionInput::Imm(b)) => {
@@ -548,13 +548,13 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
                 builder.instr(
                   encode_sized(reg.get(v).size(), Opcode::SHIFT_1_8, Opcode::SHIFT_1_32)
                     .with_digit(opcode_digit)
-                    .with_mod(0b11, reg.get(v).unwrap_register().index),
+                    .with_rm(reg.get(v)),
                 );
               } else {
                 builder.instr(
                   encode_sized(reg.get(v).size(), Opcode::SHIFT_IMM_8, Opcode::SHIFT_IMM_32)
                     .with_digit(opcode_digit)
-                    .with_mod(0b11, reg.get(v).unwrap_register().index)
+                    .with_rm(reg.get(v))
                     .with_immediate(Immediate::i8(b as u8)),
                 );
               }
