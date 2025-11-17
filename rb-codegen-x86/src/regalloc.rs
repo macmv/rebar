@@ -427,8 +427,6 @@ fn imm_to_reg(function: &mut Function) {
 fn live_intervals(function: &Function) -> LiveIntervals {
   let mut intervals = LiveIntervals::default();
 
-  const UNKNOWN: InstructionIndex = InstructionIndex(usize::MAX);
-
   // TODO: Value-uses and dominator tree, but this'll work for now.
   let mut i = 0;
   for block in function.blocks() {
@@ -466,7 +464,7 @@ fn live_intervals(function: &Function) -> LiveIntervals {
         let interval = intervals.intervals.entry(*v).or_default();
 
         if interval.segments.is_empty() {
-          interval.segments.push(Range { start: index, end: UNKNOWN });
+          interval.segments.push(Range { start: index, end: index });
         }
 
         interval.requirement = Requirement::for_output(instr, j);
@@ -506,8 +504,6 @@ fn live_intervals(function: &Function) -> LiveIntervals {
     }
     i += 1;
   }
-
-  intervals.intervals.retain(|_, interval| interval.segments.iter().any(|e| e.end != UNKNOWN));
 
   intervals
 }
@@ -931,6 +927,29 @@ mod tests {
           mov rdi(2) = 0x02
           call extern 0 = rdi(2)
           return r0, r1
+      "#
+      ],
+    );
+  }
+
+  #[test]
+  fn allocate_unused() {
+    check_v(
+      "
+      block 0:
+        mov r0 = 0x01
+        mov r1 = 0x02
+        trap
+      ",
+      expect![@r#"
+        activating r0 at InstructionIndex(0)
+        expiring r0 at InstructionIndex(1)
+        activating r1 at InstructionIndex(1)
+
+        block 0:
+          mov rax(0) = 0x01
+          mov rax(1) = 0x02
+          trap
       "#
       ],
     );
