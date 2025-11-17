@@ -49,6 +49,12 @@ where
       self.0[idx] = value;
     }
   }
+  pub fn set_default(&mut self, index: K, value: T)
+  where
+    T: Default,
+  {
+    self.set_with(index, value, T::default);
+  }
 
   pub fn enumerate(&self) -> impl Iterator<Item = (K, &T)> {
     self.0.iter().enumerate().map(|(i, v)| (K::from_index(i), v))
