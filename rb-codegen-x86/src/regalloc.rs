@@ -861,6 +861,26 @@ mod tests {
   }
 
   #[test]
+  fn split_critical() {
+    check(
+      "
+      block 0:
+        call 0 r0 = 0x01
+        call 1 = r0
+      ",
+      expect![@r#"
+        block 0:
+          mov rdi(1) = 0x01
+          call function 0 rsi(0) = rdi(1)
+          mov rdi(2) = rsi(0)
+          call function 0 = rdi(2)
+          trap
+      "#
+      ],
+    );
+  }
+
+  #[test]
   fn save_registers() {
     check_v(
       "
