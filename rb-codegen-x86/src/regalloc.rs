@@ -41,13 +41,14 @@ struct RegisterMap<T> {
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct InstructionIndex(usize);
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 enum Requirement {
   /// The operand must be in the given register.
   Specific(RegisterIndex),
   /// The operand must in in a register, but it does not matter which.
   Register(VariableSize),
   /// The operand may be in a register or immediate.
+  #[default]
   None,
 }
 
@@ -59,8 +60,9 @@ struct LiveIntervals {
 
 #[derive(Debug, Default)]
 struct Interval {
-  segments: Vec<Range<InstructionIndex>>,
-  assigned: Option<RegisterIndex>,
+  segments:    Vec<Range<InstructionIndex>>,
+  assigned:    Option<RegisterIndex>,
+  requirement: Requirement,
 }
 
 impl VariableRegisters {
@@ -122,7 +124,9 @@ impl VariableRegisters {
             }),
             || RegisterSpill::Register(Register::RAX),
           );
-        } else {
+        } else if interval.requirement.is_none() {
+          active.insert(var);
+
           let slot = StackId(function.stack_slots.len() as u32);
           function.stack_slots.push(StackSlot {
             offset: 0,
@@ -135,6 +139,40 @@ impl VariableRegisters {
             RegisterSpill::Spill(slot, var_to_reg_size(var.size()).unwrap()),
             || RegisterSpill::Register(Register::RAX),
           );
+        } else if let Some(active_var) = active
+          .iter()
+          .find(|active_var| {
+            let active_interval = intervals.for_var(**active_var);
+            active_interval.assigned == Some(reg_index)
+          })
+          .copied()
+        {
+          // spill `active_var` to stack
+          active.insert(var);
+
+          let slot = StackId(function.stack_slots.len() as u32);
+          function.stack_slots.push(StackSlot {
+            offset: 0,
+            size:   active_var.size().bytes(),
+            align:  active_var.size().bytes(),
+          });
+
+          regs.registers.set_with(
+            active_var,
+            RegisterSpill::Spill(slot, var_to_reg_size(var.size()).unwrap()),
+            || RegisterSpill::Register(Register::RAX),
+          );
+
+          regs.registers.set_with(
+            var,
+            RegisterSpill::Register(Register {
+              index: reg_index,
+              size:  var_to_reg_size(var.size()).unwrap(),
+            }),
+            || RegisterSpill::Register(Register::RAX),
+          );
+        } else {
+          panic!("cannot assign required register {:?} to variable {:?}", reg_index, var);
         }
       } else {
         active.insert(var);
@@ -418,7 +456,8 @@ fn live_intervals(function: &Function) -> LiveIntervals {
             last.end = InstructionIndex(index.0 + 1);
           }
 
-          match Requirement::for_input(instr, j) {
+          interval.requirement = Requirement::for_input(instr, j);
+          match interval.requirement {
             Requirement::Specific(reg) => {
               interval.assigned = Some(reg);
             }
@@ -435,7 +474,8 @@ fn live_intervals(function: &Function) -> LiveIntervals {
           interval.segments.push(Range { start: index, end: UNKNOWN });
         }
 
-        match Requirement::for_output(instr, j) {
+        interval.requirement = Requirement::for_output(instr, j);
+        match interval.requirement {
           Requirement::Specific(reg) => {
             interval.assigned = Some(reg);
           }
@@ -512,6 +552,8 @@ fn calling_convention(index: usize) -> Requirement {
 }
 
 impl Requirement {
+  pub fn is_none(&self) -> bool { matches!(self, Requirement::None) }
+
   fn for_input(instr: &Instruction, index: usize) -> Requirement {
     use Requirement::*;
 
@@ -864,37 +906,16 @@ mod tests {
         return r0, r1
       ",
       expect![@r#"
-        preference: r0 -> Edi at <block 0, instr 3>
-        preference: r1 -> Esi at <block 0, instr 3>
-        = mov r0 = 0x01
-        marking r0(Edi) active
-        = mov r1 = 0x02
-        marking r1(Esi) active
-        = call extern 0 = 0x02
-        extern clobbers register Esi, rehoming r1
-        rehoming r1(Esi) -> r2(Ebx)
-        marking r2(Ebx) active
-        + mov r2 = r1
-        extern clobbers register Edi, rehoming r0
-        rehoming r0(Edi) -> r3(Ebp)
-        marking r3(Ebp) active
-        + mov r3 = r0
-        + mov r4 = Unsigned(2)
-        marking r4(Edi) active
-        freeing r4(Edi)
-        + mov r5 = r3
-        + mov r6 = r2
+        activating r0 at InstructionIndex(0)
+        activating r1 at InstructionIndex(1)
+        activating r2 at InstructionIndex(2)
 
         block 0:
-          mov rdi(0) = 0x01
+          mov s0(0) = 0x01
           mov rsi(1) = 0x02
-          mov rbx(2) = rsi(1)
-          mov rbp(3) = rdi(0)
-          mov rdi(4) = 0x02
-          call extern 0 = rdi(4)
-          mov rdi(5) = rbp(3)
-          mov rsi(6) = rbx(2)
-          return r5, r6
+          mov rdi(2) = 0x02
+          call extern 0 = rdi(2)
+          return r0, r1
       "#
       ],
     );
