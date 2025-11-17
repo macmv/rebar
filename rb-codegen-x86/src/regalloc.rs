@@ -15,7 +15,7 @@ use crate::{Register, RegisterIndex, RegisterSize, var_to_reg_size};
 
 #[derive(Default)]
 pub struct VariableRegisters {
-  registers: TVec<Variable, RegisterSpill>,
+  registers: TVec<Variable, Option<RegisterSpill>>,
   saved:     RegisterMap<bool>,
 }
 
@@ -116,13 +116,12 @@ impl VariableRegisters {
         }) {
           active.insert(var);
 
-          regs.registers.set_with(
+          regs.registers.set_default(
             var,
-            RegisterSpill::Register(Register {
+            Some(RegisterSpill::Register(Register {
               index: reg_index,
               size:  var_to_reg_size(var.size()).unwrap(),
-            }),
-            || RegisterSpill::Register(Register::RAX),
+            })),
           );
         } else if interval.requirement.is_none() {
           active.insert(var);
@@ -134,10 +133,9 @@ impl VariableRegisters {
             align:  var.size().bytes(),
           });
 
-          regs.registers.set_with(
+          regs.registers.set_default(
             var,
-            RegisterSpill::Spill(slot, var_to_reg_size(var.size()).unwrap()),
-            || RegisterSpill::Register(Register::RAX),
+            Some(RegisterSpill::Spill(slot, var_to_reg_size(var.size()).unwrap())),
           );
         } else if let Some(active_var) = active
           .iter()
@@ -157,19 +155,17 @@ impl VariableRegisters {
             align:  active_var.size().bytes(),
           });
 
-          regs.registers.set_with(
+          regs.registers.set_default(
             active_var,
-            RegisterSpill::Spill(slot, var_to_reg_size(var.size()).unwrap()),
-            || RegisterSpill::Register(Register::RAX),
+            Some(RegisterSpill::Spill(slot, var_to_reg_size(var.size()).unwrap())),
           );
 
-          regs.registers.set_with(
+          regs.registers.set_default(
             var,
-            RegisterSpill::Register(Register {
+            Some(RegisterSpill::Register(Register {
               index: reg_index,
               size:  var_to_reg_size(var.size()).unwrap(),
-            }),
-            || RegisterSpill::Register(Register::RAX),
+            })),
           );
         } else {
           panic!("cannot assign required register {:?} to variable {:?}", reg_index, var);
@@ -190,13 +186,12 @@ impl VariableRegisters {
             active_interval.assigned != Some(*reg_index)
           }) {
             intervals.assign(var, *reg_index);
-            regs.registers.set_with(
+            regs.registers.set_default(
               var,
-              RegisterSpill::Register(Register {
+              Some(RegisterSpill::Register(Register {
                 index: *reg_index,
                 size:  var_to_reg_size(var.size()).unwrap(),
-              }),
-              || RegisterSpill::Register(Register::RAX),
+              })),
             );
             break;
           }
@@ -210,7 +205,7 @@ impl VariableRegisters {
   #[track_caller]
   pub fn get(&self, var: Variable) -> RegisterSpill {
     match self.registers.get(var) {
-      Some(reg) => *reg,
+      Some(Some(reg)) => *reg,
 
       _ => panic!("variable {var:?} is not in a register"),
     }
