@@ -209,6 +209,8 @@ impl VariableRegisters {
       }
     }
 
+    fix_requirements(function, &mut regs);
+
     regs
   }
 
@@ -429,6 +431,55 @@ fn imm_to_reg(function: &mut Function) {
           }
         }
       }
+      _ => {}
+    },
+  );
+}
+
+fn fix_requirements(function: &mut Function, regs: &mut VariableRegisters) {
+  FunctionEditor::new(function).edit(
+    |change, instr| {
+      for j in 0..instr.input.len() {
+        let req = Requirement::for_input(&instr, j);
+        match req {
+          Requirement::None => continue,
+          _ => {}
+        }
+
+        let input = &mut instr.input[j];
+
+        match input {
+          InstructionInput::Var(v) => {
+            if regs.get(*v).is_spill() {
+              let copy = change.editor.fresh_var(v.size());
+
+              regs.registers.set_default(
+                copy,
+                Some(RegisterSpill::Register(Register {
+                  index: match req {
+                    Requirement::Specific(reg) => reg,
+                    Requirement::Register(_) => {
+                      panic!("spilled slot cannot have a register requirement")
+                    }
+                    Requirement::None => unreachable!(),
+                  },
+                  size:  var_to_reg_size(v.size()).unwrap(),
+                })),
+              );
+              change.insert(Instruction {
+                opcode: Opcode::Move,
+                input:  smallvec![InstructionInput::Var(*v)],
+                output: smallvec![InstructionOutput::Var(copy)],
+              });
+              *v = copy;
+            }
+          }
+          InstructionInput::Imm(_) => continue,
+        }
+      }
+    },
+    |change, term| match term {
+      TerminatorInstruction::Return(rets) => for j in 0..rets.len() {},
       _ => {}
     },
   );
@@ -659,6 +710,9 @@ impl RegisterSpill {
     }
   }
 
+  pub fn is_register(&self) -> bool { matches!(self, RegisterSpill::Register(_)) }
+  pub fn is_spill(&self) -> bool { matches!(self, RegisterSpill::Spill(_, _)) }
+
   pub fn is_register_and(&self, f: impl Fn(Register) -> bool) -> bool {
     match self {
       RegisterSpill::Register(reg) => f(*reg),
@@ -741,7 +795,7 @@ mod tests {
 
   #[test]
   fn simple_syscall() {
-    check(
+    check_v(
       "
       block 0:
         mov r0 = 0x01
@@ -753,16 +807,34 @@ mod tests {
         syscall r6 = r5, r1
       ",
       expect![@r#"
+        activating r0 at InstructionIndex(0)
+        activating r1 at InstructionIndex(1)
+        activating r2 at InstructionIndex(2)
+        spilling r0 to assign r2 = Eax
+        expiring r2 at InstructionIndex(3)
+        activating r3 at InstructionIndex(3)
+        spilling r1 to assign r3 = Edi
+        expiring r0 at InstructionIndex(4)
+        expiring r3 at InstructionIndex(4)
+        activating r4 at InstructionIndex(4)
+        expiring r4 at InstructionIndex(5)
+        activating r5 at InstructionIndex(5)
+        expiring r1 at InstructionIndex(6)
+        expiring r5 at InstructionIndex(6)
+        activating r6 at InstructionIndex(6)
+
         block 0:
-          mov rax(0) = 0x01
-          mov rdi(1) = 0x00
-          syscall rax(2) = rax(0), rdi(1)
-          mov rcx(7) = rdi(1)
+          mov s0(0) = 0x01
+          mov s1(1) = 0x00
+          mov rax(7) = s0(0)
+          mov rdi(8) = s1(1)
+          syscall rax(2) = rax(7), rdi(8)
           mov rdi(3) = 0x02
-          syscall rax(4) = rax(0), rdi(3)
+          mov rax(9) = s0(0)
+          syscall rax(4) = rax(9), rdi(3)
           mov rax(5) = 0x03
-          mov rdi(8) = rcx(7)
-          syscall rax(6) = rax(5), rdi(8)
+          mov rdi(10) = s1(1)
+          syscall rax(6) = rax(5), rdi(10)
           trap
       "#
       ],
