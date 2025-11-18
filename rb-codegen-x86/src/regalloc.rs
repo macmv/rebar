@@ -531,6 +531,22 @@ fn fix_requirements(function: &mut Function, regs: &mut VariableRegisters) {
 fn live_intervals(function: &Function) -> LiveIntervals {
   let mut intervals = LiveIntervals::default();
 
+  for (i, size) in function.sig.args.iter().enumerate() {
+    let req = calling_convention(i);
+
+    intervals.intervals.insert(
+      Variable::new(i as u32, *size),
+      Interval {
+        segments:    vec![Range { start: InstructionIndex(0), end: InstructionIndex(0) }],
+        assigned:    Some(match req {
+          Requirement::Specific(reg) => reg,
+          _ => unreachable!(),
+        }),
+        requirement: req,
+      },
+    );
+  }
+
   // TODO: Value-uses and dominator tree, but this'll work for now.
   let mut i = 0;
   for block in function.blocks() {
