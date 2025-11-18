@@ -719,6 +719,11 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           let offset = slot.offset + offset;
           match inst.input[0] {
             InstructionInput::Var(v) => {
+              // TODO
+              if !reg.get(v).is_register() {
+                continue;
+              }
+
               let instruction = Instruction::new(Opcode::MOV_MR_32)
                 .with_prefix(Prefix::RexW)
                 .with_sib(0, RegisterIndex::Esp, RegisterIndex::Esp)
