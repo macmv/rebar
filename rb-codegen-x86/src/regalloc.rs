@@ -46,7 +46,7 @@ enum Requirement {
   /// The operand must be in the given register.
   Specific(RegisterIndex),
   /// The operand must in in a register, but it does not matter which.
-  Register(VariableSize),
+  Register,
   /// The operand may be in a register or immediate.
   #[default]
   None,
@@ -459,7 +459,7 @@ fn fix_requirements(function: &mut Function, regs: &mut VariableRegisters) {
                 Some(RegisterSpill::Register(Register {
                   index: match req {
                     Requirement::Specific(reg) => reg,
-                    Requirement::Register(_) => {
+                    Requirement::Register => {
                       panic!("spilled slot cannot have a register requirement")
                     }
                     Requirement::None => unreachable!(),
@@ -503,7 +503,7 @@ fn fix_requirements(function: &mut Function, regs: &mut VariableRegisters) {
                   Some(RegisterSpill::Register(Register {
                     index: match req {
                       Requirement::Specific(reg) => reg,
-                      Requirement::Register(_) => {
+                      Requirement::Register => {
                         panic!("spilled slot cannot have a register requirement")
                       }
                       Requirement::None => unreachable!(),
@@ -671,7 +671,7 @@ impl Requirement {
         if index == 0 {
           Specific(RegisterIndex::Eax)
         } else {
-          Register(instr.input[0].unwrap_var().size())
+          Register
         }
       }
       _ => None,
