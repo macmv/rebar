@@ -459,9 +459,8 @@ fn fix_requirements(function: &mut Function, regs: &mut VariableRegisters) {
                 Some(RegisterSpill::Register(Register {
                   index: match req {
                     Requirement::Specific(reg) => reg,
-                    Requirement::Register => {
-                      panic!("spilled slot cannot have a register requirement")
-                    }
+                    // TODO
+                    Requirement::Register => RegisterIndex::Eax,
                     Requirement::None => unreachable!(),
                   },
                   size:  var_to_reg_size(v.size()).unwrap(),
