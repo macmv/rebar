@@ -235,8 +235,8 @@ impl Instruction {
     match reg {
       RegisterSpill::Register(reg) => self.with_mod(0b11, reg.index),
       RegisterSpill::Spill(slot, _) => self
-        .with_mod(0b00, RegisterIndex::Ebp)
-        .with_immediate(Immediate::i32((-4 * (slot.0 as i32 + 1)) as u32)),
+        .with_sib(0, RegisterIndex::Esp, RegisterIndex::Esp)
+        .with_displacement(Immediate::i8((8 * (slot.0 as i32)) as u8)),
     }
   }
 
