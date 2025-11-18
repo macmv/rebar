@@ -621,26 +621,55 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
               );
 
               let o = reg.get(o);
-              let i = reg.get(i).unwrap_register();
-              match o.size() {
-                RegisterSize::Bit8 => {
-                  builder.instr(Instruction::new(Opcode::MOV_MR_8).with_rm(o).with_reg(i.index))
+              let i = reg.get(i);
+              if o.is_spill() && i.is_spill() {
+                panic!("cannot move between two spilled variables");
+              }
+
+              if o.is_spill() {
+                let i = i.unwrap_register();
+                match o.size() {
+                  RegisterSize::Bit8 => {
+                    builder.instr(Instruction::new(Opcode::MOV_MR_8).with_rm(o).with_reg(i.index))
+                  }
+                  RegisterSize::Bit16 => builder.instr(
+                    Instruction::new(Opcode::MOV_MR_8)
+                      .with_prefix(Prefix::OperandSizeOverride)
+                      .with_rm(o)
+                      .with_reg(i.index),
+                  ),
+                  RegisterSize::Bit32 => {
+                    builder.instr(Instruction::new(Opcode::MOV_MR_32).with_rm(o).with_reg(i.index))
+                  }
+                  RegisterSize::Bit64 => builder.instr(
+                    Instruction::new(Opcode::MOV_MR_32)
+                      .with_prefix(Prefix::RexW)
+                      .with_rm(o)
+                      .with_reg(i.index),
+                  ),
                 }
-                RegisterSize::Bit16 => builder.instr(
-                  Instruction::new(Opcode::MOV_MR_8)
-                    .with_prefix(Prefix::OperandSizeOverride)
-                    .with_rm(o)
-                    .with_reg(i.index),
-                ),
-                RegisterSize::Bit32 => {
-                  builder.instr(Instruction::new(Opcode::MOV_MR_32).with_rm(o).with_reg(i.index))
+              } else {
+                let o = o.unwrap_register();
+                match o.size {
+                  RegisterSize::Bit8 => {
+                    builder.instr(Instruction::new(Opcode::MOV_RM_8).with_rm(i).with_reg(o.index))
+                  }
+                  RegisterSize::Bit16 => builder.instr(
+                    Instruction::new(Opcode::MOV_RM_8)
+                      .with_prefix(Prefix::OperandSizeOverride)
+                      .with_rm(i)
+                      .with_reg(o.index),
+                  ),
+                  RegisterSize::Bit32 => {
+                    builder.instr(Instruction::new(Opcode::MOV_RM_32).with_rm(i).with_reg(o.index))
+                  }
+                  RegisterSize::Bit64 => builder.instr(
+                    Instruction::new(Opcode::MOV_RM_32)
+                      .with_prefix(Prefix::RexW)
+                      .with_rm(i)
+                      .with_reg(o.index),
+                  ),
                 }
-                RegisterSize::Bit64 => builder.instr(
-                  Instruction::new(Opcode::MOV_MR_32)
-                    .with_prefix(Prefix::RexW)
-                    .with_rm(o)
-                    .with_reg(i.index),
-                ),
               }
             }
           }
