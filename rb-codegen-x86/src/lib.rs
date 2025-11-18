@@ -9,7 +9,7 @@ use rb_codegen::{
   VariableSize, immediate,
 };
 
-use crate::regalloc::VariableRegisters;
+use crate::regalloc::{RegisterSpill, VariableRegisters};
 
 mod elf;
 mod instruction;
@@ -579,21 +579,21 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
           match (inst.output[0], inst.input[0]) {
             // mov reg, imm
             (InstructionOutput::Var(o), InstructionInput::Imm(i)) => {
-              let reg = reg.get(o).unwrap_register();
-              let imm = Immediate::new(reg.size, i);
-              match reg.size {
-                RegisterSize::Bit8 => builder.instr(
+              let size = reg.get(o).size();
+              let imm = Immediate::new(size, i);
+              match (reg.get(o), size) {
+                (RegisterSpill::Register(reg), RegisterSize::Bit8) => builder.instr(
                   Instruction::new(Opcode::MOV_RD_IMM_8.with_rd(reg.index)).with_immediate(imm),
                 ),
-                RegisterSize::Bit16 => builder.instr(
+                (RegisterSpill::Register(reg), RegisterSize::Bit16) => builder.instr(
                   Instruction::new(Opcode::MOV_RD_IMM_16.with_rd(reg.index))
                     .with_prefix(Prefix::OperandSizeOverride)
                     .with_immediate(imm),
                 ),
-                RegisterSize::Bit32 => builder.instr(
+                (RegisterSpill::Register(reg), RegisterSize::Bit32) => builder.instr(
                   Instruction::new(Opcode::MOV_RD_IMM_16.with_rd(reg.index)).with_immediate(imm),
                 ),
-                RegisterSize::Bit64 => {
+                (RegisterSpill::Register(reg), RegisterSize::Bit64) => {
                   if let Ok(i) = u32::try_from(i.bits()) {
                     // 32-bit registers get zero-extended to 64-bit
                     builder.instr(
@@ -604,6 +604,36 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
                     // TODO: Use the sign-extending `mov` if possible.
                     builder.instr(
                       Instruction::new(Opcode::MOV_RD_IMM_16.with_rd(reg.index))
+                        .with_prefix(Prefix::RexW)
+                        .with_immediate(imm),
+                    );
+                  }
+                }
+
+                (spill @ RegisterSpill::Spill(..), RegisterSize::Bit8) => builder
+                  .instr(Instruction::new(Opcode::MOV_RM_IMM_8).with_rm(spill).with_immediate(imm)),
+                (spill @ RegisterSpill::Spill(..), RegisterSize::Bit16) => builder.instr(
+                  Instruction::new(Opcode::MOV_RM_IMM_16)
+                    .with_rm(spill)
+                    .with_prefix(Prefix::OperandSizeOverride)
+                    .with_immediate(imm),
+                ),
+                (spill @ RegisterSpill::Spill(..), RegisterSize::Bit32) => builder.instr(
+                  Instruction::new(Opcode::MOV_RM_IMM_16).with_rm(spill).with_immediate(imm),
+                ),
+                (spill @ RegisterSpill::Spill(..), RegisterSize::Bit64) => {
+                  if let Ok(i) = u32::try_from(i.bits()) {
+                    // 32-bit registers get zero-extended to 64-bit
+                    builder.instr(
+                      Instruction::new(Opcode::MOV_RM_IMM_16)
+                        .with_rm(spill)
+                        .with_immediate(Immediate::i32(i)),
+                    );
+                  } else {
+                    // TODO: Use the sign-extending `mov` if possible.
+                    builder.instr(
+                      Instruction::new(Opcode::MOV_RM_IMM_16)
+                        .with_rm(spill)
                         .with_prefix(Prefix::RexW)
                         .with_immediate(imm),
                     );
