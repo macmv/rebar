@@ -620,25 +620,25 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
                 "move must have the same size for input and output"
               );
 
-              let o = reg.get(o).unwrap_register();
+              let o = reg.get(o);
               let i = reg.get(i).unwrap_register();
-              match o.size {
-                RegisterSize::Bit8 => builder.instr(
-                  Instruction::new(Opcode::MOV_MR_8).with_mod(0b11, o.index).with_reg(i.index),
-                ),
+              match o.size() {
+                RegisterSize::Bit8 => {
+                  builder.instr(Instruction::new(Opcode::MOV_MR_8).with_rm(o).with_reg(i.index))
+                }
                 RegisterSize::Bit16 => builder.instr(
                   Instruction::new(Opcode::MOV_MR_8)
                     .with_prefix(Prefix::OperandSizeOverride)
-                    .with_mod(0b11, o.index)
+                    .with_rm(o)
                     .with_reg(i.index),
                 ),
-                RegisterSize::Bit32 => builder.instr(
-                  Instruction::new(Opcode::MOV_MR_32).with_mod(0b11, o.index).with_reg(i.index),
-                ),
+                RegisterSize::Bit32 => {
+                  builder.instr(Instruction::new(Opcode::MOV_MR_32).with_rm(o).with_reg(i.index))
+                }
                 RegisterSize::Bit64 => builder.instr(
                   Instruction::new(Opcode::MOV_MR_32)
                     .with_prefix(Prefix::RexW)
-                    .with_mod(0b11, o.index)
+                    .with_rm(o)
                     .with_reg(i.index),
                 ),
               }
