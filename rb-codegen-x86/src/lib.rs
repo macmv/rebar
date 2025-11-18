@@ -603,7 +603,7 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
                   } else {
                     // TODO: Use the sign-extending `mov` if possible.
                     builder.instr(
-                      Instruction::new(Opcode::MOV_RD_IMM_16)
+                      Instruction::new(Opcode::MOV_RD_IMM_16.with_rd(reg.index))
                         .with_prefix(Prefix::RexW)
                         .with_immediate(imm),
                     );
