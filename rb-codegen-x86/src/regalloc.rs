@@ -961,6 +961,7 @@ mod tests {
       expect![@r#"
         activating r0 at InstructionIndex(0)
         activating r1 at InstructionIndex(1)
+        spilling r0 to assign r1 = Edi
 
         block 0:
           mov s0(0) = 0x01
@@ -986,6 +987,7 @@ mod tests {
         activating r0 at InstructionIndex(0)
         activating r1 at InstructionIndex(1)
         activating r2 at InstructionIndex(2)
+        spilling r0 to assign r2 = Edi
 
         block 0:
           mov s0(0) = 0x01
