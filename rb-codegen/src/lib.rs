@@ -8,7 +8,7 @@ mod tvec;
 pub use instr::{BlockBuilder, FunctionBuilder, InstrBuilder};
 pub use tvec::{TIndex, TVec};
 
-#[derive(Default, PartialEq, Eq)]
+#[derive(Default, Debug, PartialEq, Eq)]
 pub struct Signature {
   pub args: Vec<VariableSize>,
   pub rets: Vec<VariableSize>,
