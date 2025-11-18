@@ -437,8 +437,9 @@ fn imm_to_reg(function: &mut Function) {
 }
 
 fn fix_requirements(function: &mut Function, regs: &mut VariableRegisters) {
-  FunctionEditor::new(function).edit(
-    |change, instr| {
+  FunctionEditor::new(function).edit_context(
+    regs,
+    |regs, change, instr| {
       for j in 0..instr.input.len() {
         let req = Requirement::for_input(&instr, j);
         match req {
@@ -478,8 +479,50 @@ fn fix_requirements(function: &mut Function, regs: &mut VariableRegisters) {
         }
       }
     },
-    |change, term| match term {
-      TerminatorInstruction::Return(rets) => for j in 0..rets.len() {},
+    |regs, change, term| match term {
+      TerminatorInstruction::Return(rets) => {
+        for i in 0..rets.len() {
+          let req = Requirement::for_terminator(&term, i);
+          match req {
+            Requirement::None => continue,
+            _ => {}
+          }
+
+          let input = match term {
+            TerminatorInstruction::Return(rets) => &mut rets[i],
+            _ => unreachable!(),
+          };
+
+          match input {
+            InstructionInput::Var(v) => {
+              if regs.get(*v).is_spill() {
+                let copy = change.editor.fresh_var(v.size());
+
+                regs.registers.set_default(
+                  copy,
+                  Some(RegisterSpill::Register(Register {
+                    index: match req {
+                      Requirement::Specific(reg) => reg,
+                      Requirement::Register(_) => {
+                        panic!("spilled slot cannot have a register requirement")
+                      }
+                      Requirement::None => unreachable!(),
+                    },
+                    size:  var_to_reg_size(v.size()).unwrap(),
+                  })),
+                );
+                change.insert(Instruction {
+                  opcode: Opcode::Move,
+                  input:  smallvec![InstructionInput::Var(*v)],
+                  output: smallvec![InstructionOutput::Var(copy)],
+                });
+                *v = copy;
+              }
+            }
+            InstructionInput::Imm(_) => continue,
+          }
+        }
+      }
       _ => {}
     },
   );
@@ -967,7 +1010,8 @@ mod tests {
           mov s0(0) = 0x01
           mov rdi(1) = 0x02
           call function 0 = rdi(1)
-          return r0
+          mov rdi(2) = s0(0)
+          return r2
       "#
       ],
     );
@@ -994,7 +1038,8 @@ mod tests {
           mov rsi(1) = 0x02
           mov rdi(2) = 0x02
           call extern 0 = rdi(2)
-          return r0, r1
+          mov rdi(3) = s0(0)
+          return r3, r1
       "#
       ],
     );
