@@ -796,7 +796,7 @@ mod tests {
         block 0:
           mov rdi(1) = 0x00
           mov rsi(2) = 0x01
-          call function 0 rax(0) = rdi(1), rsi(2)
+          call function 0 rdx(0) = rdi(1), rsi(2)
           trap
       "#
       ],
@@ -835,16 +835,12 @@ mod tests {
       ",
       expect![@r#"
         block 0:
-          call function 0 rdi(0), rsi(1) =
-          mov rax(3) = rdi(0)
-          mov rdi(2) = rsi(1)
-          mov rbx(8) = rdi(2)
-          mov rdi(4) = rax(3)
-          mov rsi(5) = 0x01
-          call function 0 = rdi(4), rsi(5)
-          mov rbx(6) = rax(3)
-          mov rsi(7) = 0x02
-          call function 0 = rdi(2), rsi(7)
+          call function 0 rdi(0), s1(1) =
+          mov rsi(2) = 0x01
+          call function 0 = rdi(0), rsi(2)
+          mov rsi(3) = 0x02
+          mov rdi(4) = s1(1)
+          call function 0 = rdi(4), rsi(3)
           trap
       "#
       ],
@@ -881,26 +877,14 @@ mod tests {
         return r0
       ",
       expect![@r#"
-        preference: r0 -> Edi at <block 0, instr 2>
-        = mov r0 = 0x01
-        marking r0(Edi) active
-        = call function 0 = 0x02
-        extern clobbers register Edi, rehoming r0
-        rehoming r0(Edi) -> r1(Ebx)
-        marking r1(Ebx) active
-        + mov r1 = r0
-        + mov r2 = Unsigned(2)
-        marking r2(Edi) active
-        freeing r2(Edi)
-        + mov r3 = r1
+        activating r0 at InstructionIndex(0)
+        activating r1 at InstructionIndex(1)
 
         block 0:
-          mov rdi(0) = 0x01
-          mov rbx(1) = rdi(0)
-          mov rdi(2) = 0x02
-          call function 0 = rdi(2)
-          mov rdi(3) = rbx(1)
-          return r3
+          mov s0(0) = 0x01
+          mov rdi(1) = 0x02
+          call function 0 = rdi(1)
+          return r0
       "#
       ],
     );
