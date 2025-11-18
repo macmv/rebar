@@ -1442,4 +1442,51 @@ mod tests {
       "#],
     );
   }
+
+  #[test]
+  fn spills_work() {
+    let function = parse(
+      "
+      block 0:
+        mov r0 = 0x01
+        mov r1 = 0x00
+        syscall r2 = r0, r1
+        mov r3 = 0x02
+        syscall r4 = r0, r3
+        mov r5 = 0x03
+        syscall r6 = r5, r1
+      ",
+    )
+    .function;
+
+    let builder = lower(function);
+
+    let dir = temp_dir!();
+    let object_path = dir.path().join("foo.o");
+    Object {
+      text: builder.text,
+      relocs: builder.relocs,
+      internal_symbols: vec![SymbolDef { offset: 0, name: "_start".to_string() }],
+      ..Default::default()
+    }
+    .save(&object_path);
+    disass(
+      &object_path,
+      expect![@r#"
+        0x08000230      4883ec18               sub rsp, 0x18
+        0x08000234      c744240001000000       mov dword [rsp], 1
+        0x0800023c      c744240800000000       mov dword [rsp + 8], 0
+        0x08000244      488b442400             mov rax, qword [rsp]
+        0x08000249      488b7c2408             mov rdi, qword [rsp + 8]
+        0x0800024e      0f05                   syscall
+        0x08000250      bf02000000             mov edi, 2
+        0x08000255      488b442400             mov rax, qword [rsp]
+        0x0800025a      0f05                   syscall
+        0x0800025c      b803000000             mov eax, 3
+        0x08000261      488b7c2408             mov rdi, qword [rsp + 8]
+        0x08000266      0f05                   syscall
+        0x08000268      cc                     int3
+      "#],
+    );
+  }
 }
