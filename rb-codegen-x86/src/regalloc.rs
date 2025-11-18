@@ -93,19 +93,28 @@ impl VariableRegisters {
     for var in sorted {
       let interval = intervals.for_var(var);
 
+      #[cfg(debug_assertions)]
+      let mut expired = BTreeSet::new();
+
+      let current_start = interval.segments.first().unwrap().start;
       active.retain(|active_var| {
         let active_interval = &intervals.for_var(*active_var);
 
         let active_end = active_interval.segments.last().unwrap().end;
-        let current_start = interval.segments.first().unwrap().start;
 
         if active_end.0 <= current_start.0 + 1 {
-          debug.log(format_args!("expiring {active_var} at {current_start:?}",));
+          #[cfg(debug_assertions)]
+          expired.insert(*active_var);
           false
         } else {
           true
         }
       });
+
+      #[cfg(debug_assertions)]
+      for expired in expired {
+        debug.log(format_args!("expiring {expired} at {current_start:?}",));
+      }
 
       debug.log(format_args!("activating {var} at {:?}", interval.segments.first().unwrap().start));
 
@@ -147,6 +156,7 @@ impl VariableRegisters {
         {
           // spill `active_var` to stack
           active.insert(var);
+          debug.log(format_args!("spilling {active_var} to assign {var} = {reg_index:?}",));
 
           let slot = StackId(function.stack_slots.len() as u32);
           function.stack_slots.push(StackSlot {
