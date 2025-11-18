@@ -728,6 +728,7 @@ impl<T> Default for RegisterMap<T> {
   fn default() -> Self { Self::new() }
 }
 
+#[allow(dead_code)]
 impl<T> RegisterMap<T> {
   pub fn new() -> Self { Self { values: [(); RegisterIndex::COUNT].map(|_| None) } }
 
