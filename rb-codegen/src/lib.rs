@@ -8,7 +8,7 @@ mod tvec;
 pub use instr::{BlockBuilder, FunctionBuilder, InstrBuilder};
 pub use tvec::{TIndex, TVec};
 
-#[derive(Default, PartialEq, Eq)]
+#[derive(Default, Debug, PartialEq, Eq)]
 pub struct Signature {
   pub args: Vec<VariableSize>,
   pub rets: Vec<VariableSize>,
@@ -214,6 +214,18 @@ impl Variable {
     debug_assert!(bits <= VariableSize::Bit64 as u8, "invalid VariableSize bits");
     // SAFETY: `new` ensures that the bits are valid.
     unsafe { std::mem::transmute(bits) }
+  }
+}
+
+impl VariableSize {
+  pub fn bytes(&self) -> u32 {
+    match self {
+      VariableSize::Bit1 => 1,
+      VariableSize::Bit8 => 1,
+      VariableSize::Bit16 => 2,
+      VariableSize::Bit32 => 4,
+      VariableSize::Bit64 => 8,
+    }
   }
 }
 

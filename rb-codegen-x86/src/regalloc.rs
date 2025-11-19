@@ -1,59 +1,37 @@
 use std::{
-  collections::{BTreeMap, HashMap, HashSet},
+  collections::{BTreeSet, HashMap, HashSet},
   fmt,
+  ops::Range,
 };
 
 use rb_codegen::{
-  BlockId, Function, Immediate, Instruction, InstructionInput, InstructionOutput, Math, Opcode,
-  TVec, TerminatorInstruction, Variable, VariableSize,
+  BlockId, Function, Instruction, InstructionInput, InstructionOutput, Math, Opcode, StackId,
+  StackSlot, TVec, TerminatorInstruction, Variable, VariableSize,
 };
 use rb_codegen_opt::analysis::{Analysis, dominator_tree::DominatorTree, value_uses::ValueUses};
 use smallvec::smallvec;
 
-use crate::{Register, RegisterIndex, var_to_reg_size};
+use crate::{Register, RegisterIndex, RegisterSize, var_to_reg_size};
 
 #[derive(Default)]
 pub struct VariableRegisters {
-  registers: TVec<Variable, Register>,
+  registers: TVec<Variable, Option<RegisterSpill>>,
   saved:     RegisterMap<bool>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RegisterSpill {
+  Register(Register),
+  Spill(StackId, RegisterSize),
 }
 
 trait RegallocDebug {
   fn log(&mut self, msg: fmt::Arguments) { let _ = msg; }
 }
 
-struct Regalloc<'a> {
-  dom:      &'a DominatorTree,
-  function: &'a mut Function,
-
-  state: RegallocState<'a>,
-}
-
 struct NopDebug;
 
 impl RegallocDebug for NopDebug {}
-
-struct RegallocState<'a> {
-  vu:    &'a ValueUses,
-  alloc: &'a mut VariableRegisters,
-  #[cfg(debug_assertions)]
-  debug: &'a mut dyn RegallocDebug,
-  #[cfg(not(debug_assertions))]
-  debug: &'a mut NopDebug,
-
-  active:              RegisterMap<Variable>,
-  visited:             HashSet<BlockId>,
-  current_instruction: HashSet<Variable>,
-
-  preference: HashMap<Variable, (RegisterIndex, InstructionLocation)>,
-
-  first_new_variable: u32,
-  next_variable:      u32,
-  copies:             BTreeMap<InstructionLocation, Vec<Move>>,
-
-  rehomes:         HashMap<Variable, Variable>,
-  rehomes_reverse: HashMap<Variable, Variable>,
-}
 
 #[derive(Clone, Copy)]
 struct RegisterMap<T> {
@@ -61,24 +39,30 @@ struct RegisterMap<T> {
 }
 
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct InstructionLocation {
-  block: BlockId,
-  index: usize,
-}
+struct InstructionIndex(usize);
 
-enum Move {
-  VarReg { from: Variable, to: RegisterIndex },
-  VarVar { from: Variable, to: Variable },
-  ImmVar { from: Immediate, to: Variable },
-}
-
+#[derive(Debug, Default)]
 enum Requirement {
   /// The operand must be in the given register.
   Specific(RegisterIndex),
   /// The operand must in in a register, but it does not matter which.
-  Register(VariableSize),
+  Register,
   /// The operand may be in a register or immediate.
+  #[default]
   None,
+}
+
+#[derive(Default)]
+struct LiveIntervals {
+  intervals: HashMap<Variable, Interval>,
+  calls:     BTreeSet<InstructionIndex>,
+}
+
+#[derive(Debug, Default)]
+struct Interval {
+  segments:    Vec<Range<InstructionIndex>>,
+  assigned:    Option<RegisterIndex>,
+  requirement: Requirement,
 }
 
 impl VariableRegisters {
@@ -97,104 +81,564 @@ impl VariableRegisters {
     analysis.load(DominatorTree::ID, function);
     analysis.load(ValueUses::ID, function);
 
-    let last_variable = function
+    imm_to_reg(function);
+    split_critical_variables(function);
+
+    let mut intervals = live_intervals(function);
+
+    let mut regs = VariableRegisters::default();
+    let sorted = intervals.sorted();
+
+    let mut active = HashSet::new();
+    for var in sorted {
+      let interval = intervals.for_var(var);
+
+      #[cfg(debug_assertions)]
+      let mut expired = BTreeSet::new();
+
+      let current_start = interval.segments.first().unwrap().start;
+      active.retain(|active_var| {
+        let active_interval = &intervals.for_var(*active_var);
+
+        let active_end = active_interval.segments.last().unwrap().end;
+
+        if active_end.0 <= current_start.0 + 1 {
+          #[cfg(debug_assertions)]
+          expired.insert(*active_var);
+          false
+        } else {
+          true
+        }
+      });
+
+      #[cfg(debug_assertions)]
+      for expired in expired {
+        debug.log(format_args!("expiring {expired} at {current_start:?}",));
+      }
+
+      debug.log(format_args!("activating {var} at {:?}", interval.segments.first().unwrap().start));
+
+      if let Some(reg_index) = interval.assigned {
+        if active.iter().all(|active_var| {
+          let active_interval = intervals.for_var(*active_var);
+          active_interval.assigned != Some(reg_index)
+        }) {
+          active.insert(var);
+
+          regs.registers.set_default(
+            var,
+            Some(RegisterSpill::Register(Register {
+              index: reg_index,
+              size:  var_to_reg_size(var.size()).unwrap(),
+            })),
+          );
+        } else if interval.requirement.is_none() {
+          active.insert(var);
+
+          let slot = StackId(function.stack_slots.len() as u32);
+          function.stack_slots.push(StackSlot {
+            offset: 0,
+            size:   var.size().bytes(),
+            align:  var.size().bytes(),
+          });
+
+          regs.registers.set_default(
+            var,
+            Some(RegisterSpill::Spill(slot, var_to_reg_size(var.size()).unwrap())),
+          );
+        } else if let Some(active_var) = active
+          .iter()
+          .find(|active_var| {
+            let active_interval = intervals.for_var(**active_var);
+            active_interval.assigned == Some(reg_index)
+          })
+          .copied()
+        {
+          // spill `active_var` to stack
+          active.insert(var);
+          debug.log(format_args!("spilling {active_var} to assign {var} = {reg_index:?}",));
+
+          let slot = StackId(function.stack_slots.len() as u32);
+          function.stack_slots.push(StackSlot {
+            offset: 0,
+            size:   active_var.size().bytes(),
+            align:  active_var.size().bytes(),
+          });
+
+          regs.registers.set_default(
+            active_var,
+            Some(RegisterSpill::Spill(slot, var_to_reg_size(var.size()).unwrap())),
+          );
+
+          regs.registers.set_default(
+            var,
+            Some(RegisterSpill::Register(Register {
+              index: reg_index,
+              size:  var_to_reg_size(var.size()).unwrap(),
+            })),
+          );
+        } else {
+          panic!("cannot assign required register {:?} to variable {:?}", reg_index, var);
+        }
+      } else {
+        active.insert(var);
+
+        let choices =
+          if intervals.calls.range(interval.segments.first().unwrap().clone()).next().is_some() {
+            SAVED
+          } else {
+            RegisterIndex::all()
+          };
+
+        for reg_index in choices {
+          if active.iter().all(|active_var| {
+            let active_interval = intervals.for_var(*active_var);
+            active_interval.assigned != Some(*reg_index)
+          }) {
+            intervals.assign(var, *reg_index);
+            regs.registers.set_default(
+              var,
+              Some(RegisterSpill::Register(Register {
+                index: *reg_index,
+                size:  var_to_reg_size(var.size()).unwrap(),
+              })),
+            );
+            break;
+          }
+        }
+      }
+    }
+
+    fix_requirements(function, &mut regs);
+
+    regs
+  }
+
+  #[track_caller]
+  pub fn get(&self, var: Variable) -> RegisterSpill {
+    match self.registers.get(var) {
+      Some(Some(reg)) => *reg,
+
+      _ => panic!("variable {var:?} is not in a register"),
+    }
+  }
+}
+
+struct FunctionEditor<'a> {
+  function:    &'a mut Function,
+  next_var_id: u32,
+}
+
+struct FunctionChange<'a, 'b: 'a> {
+  editor: &'a mut FunctionEditor<'b>,
+
+  block: BlockId,
+  instr: usize,
+}
+
+impl<'a> FunctionEditor<'a> {
+  pub fn new(function: &'a mut Function) -> Self {
+    let next_var_id = function
       .blocks()
       .flat_map(|b| function.block(b).instructions.iter())
       .flat_map(|instr| {
         instr
           .input
           .iter()
-          .filter_map(|input| match input {
-            InstructionInput::Var(v) => Some(v.id()),
+          .filter_map(|i| match i {
+            InstructionInput::Var(v) => Some(*v),
             _ => None,
           })
-          .chain(instr.output.iter().filter_map(|output| match output {
-            InstructionOutput::Var(v) => Some(v.id()),
+          .chain(instr.output.iter().filter_map(|o| match o {
+            InstructionOutput::Var(v) => Some(*v),
           }))
       })
-      .max();
-    let first_new_variable = last_variable.map(|v| v + 1).unwrap_or(0);
+      .max_by_key(|v| v.id())
+      .map_or(0, |id| id.id() + 1);
 
-    let mut regs = VariableRegisters::default();
-    let mut regalloc = Regalloc {
-      dom: analysis.get(),
-      function,
-      state: RegallocState {
-        vu: analysis.get(),
-        alloc: &mut regs,
-        debug,
+    FunctionEditor { function, next_var_id }
+  }
 
-        active: RegisterMap::new(),
-        visited: HashSet::new(),
-        current_instruction: HashSet::new(),
-        preference: HashMap::new(),
-        first_new_variable,
-        next_variable: first_new_variable,
-        copies: BTreeMap::new(),
+  pub fn fresh_var(&mut self, size: VariableSize) -> Variable {
+    let var = Variable::new(self.next_var_id, size);
+    self.next_var_id += 1;
+    var
+  }
 
-        rehomes: HashMap::new(),
-        rehomes_reverse: HashMap::new(),
-      },
-    };
-    regalloc.pass();
+  pub fn edit(
+    &mut self,
+    mut f: impl FnMut(&mut FunctionChange, &mut Instruction),
+    mut t: impl FnMut(&mut FunctionChange, &mut TerminatorInstruction),
+  ) {
+    self.edit_context(
+      &mut (),
+      |(), change, instr| f(change, instr),
+      |(), change, term| t(change, term),
+    );
+  }
 
-    for (loc, moves) in regalloc.state.copies.iter().rev() {
-      let block = regalloc.function.block_mut(loc.block);
-      for m in moves.iter().rev() {
-        match m {
-          Move::VarReg { from, to } => {
-            let new_var = Variable::new(regalloc.state.next_variable, from.size());
-            regalloc.state.next_variable += 1;
+  pub fn edit_context<T>(
+    &mut self,
+    context: &mut T,
+    mut f: impl FnMut(&mut T, &mut FunctionChange, &mut Instruction),
+    mut t: impl FnMut(&mut T, &mut FunctionChange, &mut TerminatorInstruction),
+  ) {
+    for block_id in self.function.blocks() {
+      let mut i = 0;
+      while i < self.function.block(block_id).instructions.len() {
+        let mut instr = self.function.block(block_id).instructions[i].clone();
 
-            block.instructions.insert(
-              loc.index,
-              Instruction {
-                opcode: Opcode::Move,
-                input:  smallvec![(*from).into()],
-                output: smallvec![new_var.into()],
-              },
-            );
-            regalloc.state.alloc.registers.set_with(
-              new_var,
-              Register { size: var_to_reg_size(new_var.size()).unwrap(), index: *to },
-              || Register::RAX,
-            );
+        let mut change = FunctionChange { editor: self, block: block_id, instr: i };
+        f(context, &mut change, &mut instr);
+
+        i = change.instr;
+        self.function.block_mut(block_id).instructions[i] = instr;
+        i += 1;
+      }
+
+      let mut terminator = self.function.block(block_id).terminator.clone();
+      let mut change = FunctionChange { editor: self, block: block_id, instr: i };
+      t(context, &mut change, &mut terminator);
+      self.function.block_mut(block_id).terminator = terminator;
+    }
+  }
+}
+
+impl FunctionChange<'_, '_> {
+  fn insert(&mut self, instr: Instruction) {
+    let block = self.editor.function.block_mut(self.block);
+    block.instructions.insert(self.instr, instr);
+    self.instr += 1;
+  }
+}
+
+fn split_critical_variables(function: &mut Function) {
+  let mut specific_defs = HashMap::<Variable, RegisterIndex>::new();
+
+  FunctionEditor::new(function).edit_context(
+    &mut specific_defs,
+    |specific_defs, change, instr| {
+      for j in 0..instr.input.len() {
+        let req = Requirement::for_input(&instr, j);
+        let input = &mut instr.input[j];
+
+        match (*input, req) {
+          (InstructionInput::Var(v), Requirement::Specific(req))
+            if specific_defs.get(&v).is_some_and(|def| *def != req) =>
+          {
+            let prev_input = input.clone();
+            let tmp = change.editor.fresh_var(VariableSize::Bit64);
+            *input = InstructionInput::Var(tmp);
+
+            change.insert(Instruction {
+              opcode: Opcode::Move,
+              input:  smallvec![prev_input],
+              output: smallvec![tmp.into()],
+            });
           }
-          Move::VarVar { from, to } => {
-            block.instructions.insert(
-              loc.index,
-              Instruction {
-                opcode: Opcode::Move,
-                input:  smallvec![(*from).into()],
-                output: smallvec![(*to).into()],
-              },
-            );
+          _ => continue,
+        }
+      }
+
+      for j in 0..instr.output.len() {
+        let req = Requirement::for_output(&instr, j);
+        let output = &instr.output[j];
+
+        match (*output, req) {
+          (InstructionOutput::Var(v), Requirement::Specific(req)) => {
+            specific_defs.insert(v, req);
           }
-          Move::ImmVar { from, to } => {
-            block.instructions.insert(
-              loc.index,
-              Instruction {
+          _ => {}
+        }
+      }
+    },
+    |specific_defs, change, term| match term {
+      TerminatorInstruction::Return(rets) => {
+        for j in 0..rets.len() {
+          let req = Requirement::for_terminator(&TerminatorInstruction::Return(rets.clone()), j);
+          let input = &mut rets[j];
+
+          match (*input, req) {
+            (InstructionInput::Var(v), Requirement::Specific(req))
+              if specific_defs.get(&v).is_some_and(|def| *def != req) =>
+            {
+              let prev_input = input.clone();
+              let tmp = change.editor.fresh_var(VariableSize::Bit64);
+
+              *input = InstructionInput::Var(tmp);
+              change.insert(Instruction {
                 opcode: Opcode::Move,
-                input:  smallvec![(*from).into()],
-                output: smallvec![(*to).into()],
-              },
-            );
+                input:  smallvec![prev_input],
+                output: smallvec![tmp.into()],
+              });
+            }
+            _ => continue,
           }
         }
       }
-    }
+      _ => {}
+    },
+  );
+}
 
-    regs
+fn imm_to_reg(function: &mut Function) {
+  FunctionEditor::new(function).edit(
+    |change, instr| {
+      for i in 0..instr.input.len() {
+        let req = Requirement::for_input(&instr, i);
+        let input = &mut instr.input[i];
+
+        match (*input, req) {
+          (_, Requirement::None) => continue,
+          (InstructionInput::Var(_), _) => continue,
+          (InstructionInput::Imm(_), _) => {
+            let prev_input = input.clone();
+            let tmp = change.editor.fresh_var(VariableSize::Bit64);
+            *input = InstructionInput::Var(tmp);
+
+            change.insert(Instruction {
+              opcode: Opcode::Move,
+              input:  smallvec![prev_input],
+              output: smallvec![tmp.into()],
+            });
+          }
+        }
+      }
+    },
+    |change, term| match term {
+      TerminatorInstruction::Return(rets) => {
+        for i in 0..rets.len() {
+          let req = Requirement::for_terminator(&term, i);
+          let input = match term {
+            TerminatorInstruction::Return(rets) => &mut rets[i],
+            _ => unreachable!(),
+          };
+
+          match (*input, req) {
+            (_, Requirement::None) => continue,
+            (InstructionInput::Var(_), _) => continue,
+            (InstructionInput::Imm(_), _) => {
+              let prev_input = input.clone();
+              let tmp = change.editor.fresh_var(VariableSize::Bit64);
+              *input = InstructionInput::Var(tmp);
+
+              change.insert(Instruction {
+                opcode: Opcode::Move,
+                input:  smallvec![prev_input],
+                output: smallvec![tmp.into()],
+              });
+            }
+          }
+        }
+      }
+      _ => {}
+    },
+  );
+}
+
+fn fix_requirements(function: &mut Function, regs: &mut VariableRegisters) {
+  FunctionEditor::new(function).edit_context(
+    regs,
+    |regs, change, instr| {
+      for j in 0..instr.input.len() {
+        let req = Requirement::for_input(&instr, j);
+        match req {
+          Requirement::None => continue,
+          _ => {}
+        }
+
+        let input = &mut instr.input[j];
+
+        match input {
+          InstructionInput::Var(v) => {
+            if regs.get(*v).is_spill() {
+              let copy = change.editor.fresh_var(v.size());
+
+              regs.registers.set_default(
+                copy,
+                Some(RegisterSpill::Register(Register {
+                  index: match req {
+                    Requirement::Specific(reg) => reg,
+                    // TODO
+                    Requirement::Register => RegisterIndex::Eax,
+                    Requirement::None => unreachable!(),
+                  },
+                  size:  var_to_reg_size(v.size()).unwrap(),
+                })),
+              );
+              change.insert(Instruction {
+                opcode: Opcode::Move,
+                input:  smallvec![InstructionInput::Var(*v)],
+                output: smallvec![InstructionOutput::Var(copy)],
+              });
+              *v = copy;
+            }
+          }
+          InstructionInput::Imm(_) => continue,
+        }
+      }
+    },
+    |regs, change, term| match term {
+      TerminatorInstruction::Return(rets) => {
+        for i in 0..rets.len() {
+          let req = Requirement::for_terminator(&term, i);
+          match req {
+            Requirement::None => continue,
+            _ => {}
+          }
+
+          let input = match term {
+            TerminatorInstruction::Return(rets) => &mut rets[i],
+            _ => unreachable!(),
+          };
+
+          match input {
+            InstructionInput::Var(v) => {
+              if regs.get(*v).is_spill() {
+                let copy = change.editor.fresh_var(v.size());
+
+                regs.registers.set_default(
+                  copy,
+                  Some(RegisterSpill::Register(Register {
+                    index: match req {
+                      Requirement::Specific(reg) => reg,
+                      Requirement::Register => {
+                        panic!("spilled slot cannot have a register requirement")
+                      }
+                      Requirement::None => unreachable!(),
+                    },
+                    size:  var_to_reg_size(v.size()).unwrap(),
+                  })),
+                );
+                change.insert(Instruction {
+                  opcode: Opcode::Move,
+                  input:  smallvec![InstructionInput::Var(*v)],
+                  output: smallvec![InstructionOutput::Var(copy)],
+                });
+                *v = copy;
+              }
+            }
+            InstructionInput::Imm(_) => continue,
+          }
+        }
+      }
+      _ => {}
+    },
+  );
+}
+
+fn live_intervals(function: &Function) -> LiveIntervals {
+  let mut intervals = LiveIntervals::default();
+
+  for (i, size) in function.sig.args.iter().enumerate() {
+    let req = calling_convention(i);
+
+    intervals.intervals.insert(
+      Variable::new(i as u32, *size),
+      Interval {
+        segments:    vec![Range { start: InstructionIndex(0), end: InstructionIndex(0) }],
+        assigned:    Some(match req {
+          Requirement::Specific(reg) => reg,
+          _ => unreachable!(),
+        }),
+        requirement: req,
+      },
+    );
   }
 
-  #[track_caller]
-  pub fn get(&self, var: Variable) -> Register {
-    match self.registers.get(var) {
-      Some(reg) => *reg,
+  // TODO: Value-uses and dominator tree, but this'll work for now.
+  let mut i = 0;
+  for block in function.blocks() {
+    let block = function.block(block);
+    for instr in block.instructions.iter() {
+      let index = InstructionIndex(i);
 
-      _ => panic!("variable {var:?} is not in a register"),
+      match instr.opcode {
+        Opcode::Call(_) | Opcode::CallExtern(_) | Opcode::Syscall => {
+          intervals.calls.insert(index);
+        }
+        _ => {}
+      }
+
+      for (j, input) in instr.input.iter().enumerate() {
+        if let InstructionInput::Var(v) = input {
+          let interval = intervals.intervals.entry(*v).or_default();
+
+          if let Some(last) = interval.segments.last_mut() {
+            last.end = InstructionIndex(index.0 + 1);
+          }
+
+          interval.requirement = Requirement::for_input(instr, j);
+          match interval.requirement {
+            Requirement::Specific(reg) => {
+              interval.assigned = Some(reg);
+            }
+            _ => {}
+          }
+        }
+      }
+
+      for (j, output) in instr.output.iter().enumerate() {
+        let InstructionOutput::Var(v) = output;
+        let interval = intervals.intervals.entry(*v).or_default();
+
+        if interval.segments.is_empty() {
+          interval.segments.push(Range { start: index, end: index });
+        }
+
+        interval.requirement = Requirement::for_output(instr, j);
+        match interval.requirement {
+          Requirement::Specific(reg) => {
+            interval.assigned = Some(reg);
+          }
+          _ => {}
+        }
+      }
+
+      i += 1;
     }
+
+    let index = InstructionIndex(i);
+
+    match &block.terminator {
+      TerminatorInstruction::Return(rets) => {
+        for (j, arg) in rets.iter().enumerate() {
+          if let InstructionInput::Var(v) = arg {
+            let interval = intervals.intervals.entry(*v).or_default();
+
+            if let Some(last) = interval.segments.last_mut() {
+              last.end = InstructionIndex(index.0 + 1);
+            }
+
+            match Requirement::for_terminator(&block.terminator, j) {
+              Requirement::Specific(reg) => {
+                interval.assigned = Some(reg);
+              }
+              _ => {}
+            }
+          }
+        }
+      }
+      _ => {}
+    }
+    i += 1;
   }
+
+  intervals
+}
+
+impl LiveIntervals {
+  pub fn sorted(&self) -> Vec<Variable> {
+    let mut sorted = self.intervals.iter().map(|(v, _)| *v).collect::<Vec<Variable>>();
+    sorted.sort_unstable_by_key(|v| self.for_var(*v).segments.first().unwrap().start);
+    sorted
+  }
+
+  pub fn assign(&mut self, var: Variable, reg: RegisterIndex) {
+    self.intervals.get_mut(&var).unwrap().assigned = Some(reg);
+  }
+
+  pub fn for_var(&self, var: Variable) -> &Interval { self.intervals.get(&var).unwrap() }
 }
 
 const SAVED: &[RegisterIndex] = &[
@@ -205,499 +649,6 @@ const SAVED: &[RegisterIndex] = &[
   RegisterIndex::R14,
   RegisterIndex::R15,
 ];
-
-impl Regalloc<'_> {
-  pub fn pass(&mut self) {
-    self.pre_allocation();
-
-    let mut live_outs = HashSet::new();
-
-    for (i, arg) in self.function.args().enumerate() {
-      let index = match calling_convention(i) {
-        Requirement::Specific(reg) => reg,
-        _ => unreachable!(),
-      };
-
-      self
-        .state
-        .alloc
-        .registers
-        .set(arg, Register { size: var_to_reg_size(arg.size()).unwrap(), index });
-    }
-
-    for block in self.dom.preorder() {
-      self.state.visited.insert(block);
-      let live_ins = HashSet::new(); // "set of instructions live into `block`"
-
-      self.state.expire_intervals(&live_ins, &live_outs);
-      self.state.start_intervals(block, &live_ins, &live_outs);
-
-      for i in 0..self.function.block(block).instructions.len() {
-        let loc = InstructionLocation { block, index: i };
-        self.visit_instr(&mut live_outs, loc);
-
-        let instr = &self.function.block(block).instructions[i];
-
-        for (i, out) in instr.output.iter().enumerate() {
-          let &InstructionOutput::Var(out) = out;
-
-          let requirement = Requirement::for_output(self, instr, i);
-
-          let used_later = self.is_used_after(InstructionLocation { block, index: i }, out);
-
-          let register = requirement
-            .unwrap_or_else(|| self.state.pick_register(loc, out, false, RegisterIndex::all()));
-
-          if used_later {
-            self.state.activate(register, out);
-            live_outs.insert(out);
-          }
-          self.state.alloc.registers.set_with(
-            out,
-            Register { size: var_to_reg_size(out.size()).unwrap(), index: register },
-            || Register::RAX,
-          );
-        }
-      }
-
-      let loc = InstructionLocation { block, index: self.function.block(block).instructions.len() };
-      let args = self.function.sig.args.len();
-      if let TerminatorInstruction::Return(ref mut inputs) =
-        self.function.block_mut(block).terminator
-      {
-        for (i, input) in inputs.iter_mut().enumerate() {
-          let requirement = calling_convention(args + i);
-
-          if let InstructionInput::Var(v) = input {
-            self.state.apply_rehomes(v);
-          }
-
-          if let Some(new_var) = self.state.satisfy_requirement(loc, *input, requirement) {
-            *input = InstructionInput::Var(new_var);
-          }
-        }
-
-        for input in inputs {
-          if let InstructionInput::Var(v) = input {
-            live_outs.remove(&v);
-            if !self.state.is_used_later(&[], &TerminatorInstruction::Trap, *v) {
-              self.state.free(*v);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  fn pre_allocation(&mut self) {
-    for block in self.function.blocks() {
-      for (i, instr) in self.function.block(block).instructions.iter().enumerate() {
-        let loc = InstructionLocation { block, index: i };
-        if !matches!(instr.opcode, Opcode::Syscall | Opcode::Call(_) | Opcode::CallExtern(_)) {
-          continue;
-        }
-
-        for (i, &input) in instr.input.iter().enumerate() {
-          let InstructionInput::Var(var) = input else { continue };
-
-          let reg_index = match (instr.opcode, i) {
-            (Opcode::Syscall, 0) => RegisterIndex::Eax,
-            (Opcode::Syscall, 1) => RegisterIndex::Edi,
-            (Opcode::Syscall, 2) => RegisterIndex::Esi,
-            (Opcode::Syscall, 3) => RegisterIndex::Edx,
-
-            (Opcode::Call(_), _) => match calling_convention(i) {
-              Requirement::Specific(reg) => reg,
-              _ => unreachable!(),
-            },
-
-            // TODO: More calling conventions?
-            (Opcode::CallExtern(_), 0) => RegisterIndex::Edi,
-            (Opcode::CallExtern(_), 1) => RegisterIndex::Esi,
-            (Opcode::CallExtern(_), 2) => RegisterIndex::Edx,
-
-            _ => unreachable!(),
-          };
-
-          self.state.prefer(var, reg_index, loc);
-        }
-      }
-
-      if let TerminatorInstruction::Return(ref inputs) = self.function.block(block).terminator {
-        for (i, input) in inputs.iter().enumerate() {
-          let InstructionInput::Var(var) = input else { continue };
-
-          let reg_index = match calling_convention(self.function.sig.args.len() + i) {
-            Requirement::Specific(reg) => reg,
-            _ => unreachable!(),
-          };
-
-          self.state.prefer(
-            *var,
-            reg_index,
-            InstructionLocation { block, index: self.function.block(block).instructions.len() },
-          );
-        }
-      }
-    }
-  }
-
-  /// Visiting an instructtion does two things:
-  /// - Satisfies register requirements. Some registers may be prefered, but
-  ///   variables won't always be allocated to their preference. So, this is
-  ///   where we add moves to fix that.
-  /// - Move registers we still need that get clobbered.
-  fn visit_instr(&mut self, live_outs: &mut HashSet<Variable>, loc: InstructionLocation) {
-    let instr = &self.function.block(loc.block).instructions[loc.index];
-    self.state.debug.log(format_args!("= {instr}"));
-
-    match instr.opcode {
-      Opcode::Call(_) | Opcode::CallExtern(_) => {
-        for (reg, &var) in self.state.active.clone().iter() {
-          if instr.input.iter().any(|input| match input {
-            InstructionInput::Var(v) => *v == var,
-            _ => false,
-          }) {
-            continue;
-          }
-
-          if !SAVED.contains(&reg) {
-            self.state.debug.log(format_args!("extern clobbers register {reg:?}, rehoming {var}"));
-            self.state.rehome_options(loc, var, SAVED);
-          }
-        }
-      }
-      _ => {}
-    }
-
-    let input_len = self.function.block(loc.block).instructions[loc.index].input.len();
-    for i in 0..input_len {
-      let instr = &mut self.function.block_mut(loc.block).instructions[loc.index];
-      let requirement = Requirement::for_input(instr, i);
-      let input = &mut instr.input[i];
-
-      if let InstructionInput::Var(v) = input {
-        self.state.apply_rehomes(v);
-      }
-
-      if let Some(new_var) = self.state.satisfy_requirement(loc, *input, requirement) {
-        *input = InstructionInput::Var(new_var);
-        self.state.activate(self.state.alloc.registers.get(new_var).unwrap().index, new_var);
-        self.state.current_instruction.insert(new_var);
-      } else {
-        match input {
-          InstructionInput::Var(v) => {
-            let reg = self.state.alloc.registers.get(*v).unwrap().index;
-            self.state.activate(reg, *v);
-            self.state.current_instruction.insert(*v);
-          }
-          _ => {}
-        }
-      }
-    }
-
-    let instr = &self.function.block(loc.block).instructions[loc.index];
-    for input in instr.input.clone() {
-      if let InstructionInput::Var(v) = input {
-        live_outs.remove(&v);
-        if !self.is_used_after(loc, v) {
-          self.state.free(v);
-        }
-      }
-    }
-
-    self.state.current_instruction.clear();
-
-    // TODO
-    /*
-    let clobbers: &[RegisterIndex] = match instr.opcode {
-      Opcode::Syscall => &[
-        RegisterIndex::Eax,
-        RegisterIndex::Ecx,
-        RegisterIndex::Edx,
-        RegisterIndex::Ebx,
-        RegisterIndex::Esi,
-        RegisterIndex::Edi,
-      ],
-      _ => &[],
-    };
-
-    for clobber in clobbers {
-      if let Some(&var) = self.active.get(clobber) {
-        self.clobber(var);
-      }
-    }
-    */
-  }
-
-  fn is_used_after(&self, loc: InstructionLocation, var: Variable) -> bool {
-    let block = self.function.block(loc.block);
-    self.state.is_used_later(&block.instructions[loc.index + 1..], &block.terminator, var)
-  }
-}
-
-impl RegallocState<'_> {
-  fn expire_intervals(&mut self, live_ins: &HashSet<Variable>, live_outs: &HashSet<Variable>) {
-    for &var in live_outs.iter().filter(|&&v| !live_ins.contains(&v)) {
-      self.free(var);
-    }
-  }
-
-  fn start_intervals(
-    &mut self,
-    block: BlockId,
-    live_ins: &HashSet<Variable>,
-    live_outs: &HashSet<Variable>,
-  ) {
-    let loc = InstructionLocation { block, index: 0 };
-    for &var in live_ins.iter().filter(|&&v| !live_outs.contains(&v)) {
-      self.allocate(loc, var);
-    }
-  }
-
-  fn satisfy_requirement(
-    &mut self,
-    loc: InstructionLocation,
-    input: InstructionInput,
-    requirement: Requirement,
-  ) -> Option<Variable> {
-    let (requirement, prev) = match requirement {
-      Requirement::None => return None,
-      Requirement::Register(size) => {
-        let new_var = self.fresh_var(size);
-        let reg = self.pick_register(loc, new_var, false, RegisterIndex::all());
-        (reg, self.active.get(reg).copied())
-      }
-      Requirement::Specific(reg) => (reg, self.active.get(reg).copied()),
-    };
-
-    let new_var = match input {
-      InstructionInput::Var(v) => match prev {
-        Some(active) if active == v => None,
-        Some(other) => {
-          self.copy(loc, Move::VarReg { from: other, to: RegisterIndex::Ebx });
-
-          let new_var = self.fresh_var(v.size());
-          self.copy(loc, Move::VarVar { from: v, to: new_var });
-          self.alloc.registers.set_with(
-            new_var,
-            Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
-            || Register::RAX,
-          );
-          Some(new_var)
-        }
-        None => {
-          if self.alloc.registers.get(v).is_some_and(|r| r.index != requirement) {
-            let new_var = self.fresh_var(v.size());
-            self.copy(loc, Move::VarVar { from: v, to: new_var });
-            self.alloc.registers.set_with(
-              new_var,
-              Register { size: var_to_reg_size(v.size()).unwrap(), index: requirement },
-              || Register::RAX,
-            );
-            Some(new_var)
-          } else {
-            None
-          }
-        }
-      },
-      InstructionInput::Imm(imm) => match prev {
-        Some(other) => {
-          self.debug.log(format_args!(
-            "while satisfying requirement {requirement:?} for {imm:?}, decided to rehome {other}",
-          ));
-          self.rehome(loc, other);
-
-          let new_var = self.fresh_var(VariableSize::Bit64);
-          self.copy(loc, Move::ImmVar { from: imm, to: new_var });
-          self.alloc.registers.set_with(
-            new_var,
-            Register { size: var_to_reg_size(VariableSize::Bit64).unwrap(), index: requirement },
-            || Register::RAX,
-          );
-          Some(new_var)
-        }
-        None => {
-          let new_var = self.fresh_var(VariableSize::Bit64);
-          self.copy(loc, Move::ImmVar { from: imm, to: new_var });
-          self.alloc.registers.set_with(
-            new_var,
-            Register { size: var_to_reg_size(VariableSize::Bit64).unwrap(), index: requirement },
-            || Register::RAX,
-          );
-          Some(new_var)
-        }
-      },
-    };
-
-    new_var
-  }
-
-  fn copy(&mut self, loc: InstructionLocation, m: Move) {
-    match m {
-      Move::VarReg { from, to } => {
-        self.debug.log(format_args!("+ mov {to:?} = {from}"));
-      }
-      Move::VarVar { from, to } => {
-        self.debug.log(format_args!("+ mov {to} = {from}"));
-      }
-      Move::ImmVar { from, to } => {
-        self.debug.log(format_args!("+ mov {to} = {from:?}"));
-      }
-    }
-
-    self.copies.entry(loc).or_default().push(m);
-  }
-
-  fn fresh_var(&mut self, size: VariableSize) -> Variable {
-    let v = Variable::new(self.next_variable, size);
-    self.next_variable += 1;
-    v
-  }
-
-  fn allocate(&mut self, loc: InstructionLocation, var: Variable) {
-    let reg = self.pick_register(loc, var, false, RegisterIndex::all());
-    self.activate(reg, var);
-    self.alloc.registers.set_with(
-      var,
-      Register { size: var_to_reg_size(var.size()).unwrap(), index: reg },
-      || Register::RAX,
-    );
-  }
-
-  fn free(&mut self, var: Variable) {
-    if let Some((reg, _)) = self.active.clone().iter().find(|&(_, &v)| v == var) {
-      self.debug.log(format_args!("freeing {var}({reg:?})"));
-      self.active.remove(reg);
-    }
-  }
-
-  fn pick_register(
-    &mut self,
-    loc: InstructionLocation,
-    var: Variable,
-    must_move: bool,
-    options: &[RegisterIndex],
-  ) -> RegisterIndex {
-    if let Some(pref) = self.preference_after(loc, var) {
-      match self.active.get(pref) {
-        // If the variable is already in the preferred register, or there is nothing in the
-        // preferred register, use that.
-        Some(&other) if other == var => {
-          if !must_move {
-            return pref;
-          }
-        }
-        None => return pref,
-
-        Some(&other) if self.current_instruction.contains(&other) => {}
-        Some(&other) => {
-          self
-            .debug
-            .log(format_args!("while picking a register for {var}, decided to rehome {other}"));
-          self.rehome(loc, other);
-          self.active.remove(pref);
-
-          return pref;
-        }
-      }
-    }
-
-    for &reg_index in options {
-      if !self.active.contains(reg_index) {
-        return reg_index;
-      }
-    }
-
-    panic!("no registers available for variable {var:?}");
-  }
-
-  fn rehome(&mut self, loc: InstructionLocation, var: Variable) {
-    self.rehome_options(loc, var, RegisterIndex::all());
-  }
-
-  fn rehome_options(&mut self, loc: InstructionLocation, var: Variable, saved: &[RegisterIndex]) {
-    let new_var = self.fresh_var(var.size());
-    let old_reg = self.alloc.registers.get(var).unwrap().index;
-    let new_reg = self.pick_register(loc, var, true, saved);
-    self.debug.log(format_args!("rehoming {var}({old_reg:?}) -> {new_var}({new_reg:?})",));
-    self.alloc.registers.set_with(
-      new_var,
-      Register { size: var_to_reg_size(var.size()).unwrap(), index: new_reg },
-      || Register::RAX,
-    );
-    self.active.remove(old_reg);
-    self.activate(new_reg, new_var);
-
-    self.copy(loc, Move::VarVar { from: var, to: new_var });
-    self.rehomes.insert(var, new_var);
-    self.rehomes_reverse.insert(new_var, var);
-  }
-
-  fn apply_rehomes(&mut self, v: &mut Variable) {
-    while let Some(&new_v) = self.rehomes.get(v) {
-      *v = new_v;
-    }
-  }
-
-  fn preference_after(&self, loc: InstructionLocation, var: Variable) -> Option<RegisterIndex> {
-    if let Some(&(pref, pref_loc)) = self.preference.get(&var) {
-      if pref_loc >= loc {
-        return Some(pref);
-      }
-    }
-
-    None
-  }
-
-  fn is_used_later(
-    &self,
-    after: &[Instruction],
-    term: &TerminatorInstruction,
-    var: Variable,
-  ) -> bool {
-    if self.is_tmp_var(var) {
-      return false;
-    }
-
-    let is_used_in_later_block = self
-      .vu
-      .variable(var)
-      .used_by
-      .iter()
-      .any(|u| !self.visited.contains(&self.vu.variables_to_block[u]));
-    let is_used_later_by_term = match term {
-      TerminatorInstruction::Return(inputs) => inputs.iter().any(|input| match input {
-        InstructionInput::Var(v) => *v == var,
-        _ => false,
-      }),
-      _ => false,
-    };
-    let is_used_in_block = is_used_later_in_block(after, var);
-
-    is_used_in_later_block || is_used_later_by_term || is_used_in_block
-  }
-
-  fn is_tmp_var(&self, var: Variable) -> bool { var.id() >= self.first_new_variable }
-
-  fn prefer(&mut self, var: Variable, reg_index: RegisterIndex, loc: InstructionLocation) {
-    match self.preference.entry(var) {
-      std::collections::hash_map::Entry::Occupied(_) => {}
-      std::collections::hash_map::Entry::Vacant(entry) => {
-        self.debug.log(format_args!("preference: {var} -> {reg_index:?} at {loc}"));
-        entry.insert((reg_index, loc));
-      }
-    }
-  }
-
-  fn activate(&mut self, register: RegisterIndex, out: Variable) {
-    self.debug.log(format_args!("marking {out}({register:?}) active"));
-    self.active.set(register, out);
-    if SAVED.contains(&register) {
-      self.alloc.saved.set(register, true);
-    }
-  }
-}
 
 fn calling_convention(index: usize) -> Requirement {
   match index {
@@ -711,6 +662,8 @@ fn calling_convention(index: usize) -> Requirement {
 }
 
 impl Requirement {
+  pub fn is_none(&self) -> bool { matches!(self, Requirement::None) }
+
   fn for_input(instr: &Instruction, index: usize) -> Requirement {
     use Requirement::*;
 
@@ -733,23 +686,20 @@ impl Requirement {
         if index == 0 {
           Specific(RegisterIndex::Eax)
         } else {
-          Register(instr.input[0].unwrap_var().size())
+          Register
         }
       }
       _ => None,
     }
   }
 
-  fn for_output(regalloc: &Regalloc, instr: &Instruction, index: usize) -> Option<RegisterIndex> {
+  fn for_output(instr: &Instruction, index: usize) -> Requirement {
+    use Requirement::*;
+
     match instr.opcode {
       Opcode::Math(m) => {
-        let InstructionInput::Var(v) = instr.input[0] else {
-          panic!("expected var input for math instruction: {instr}");
-        };
-        let input = regalloc.state.alloc.registers.get(v).unwrap();
-
         match m {
-          // In-place, any register.
+          // In-place, any register. FIXME: This should be the same as the input
           Math::Add
           | Math::Sub
           | Math::And
@@ -759,48 +709,41 @@ impl Requirement {
           | Math::Neg
           | Math::Shl
           | Math::Ishr
-          | Math::Ushr => Some(input.index),
+          | Math::Ushr => Specific(RegisterIndex::Eax),
           // In-place, only EAX.
-          Math::Imul | Math::Umul | Math::Idiv | Math::Udiv => Some(RegisterIndex::Eax),
+          Math::Imul | Math::Umul | Math::Idiv | Math::Udiv => Specific(RegisterIndex::Eax),
           // In-place, only EDX.
-          Math::Irem | Math::Urem => Some(RegisterIndex::Edx),
+          Math::Irem | Math::Urem => Specific(RegisterIndex::Edx),
         }
       }
-      Opcode::Call(_) => Some(match calling_convention(instr.input.len() + index) {
-        Requirement::Specific(reg) => reg,
-        _ => unreachable!(),
-      }),
+      Opcode::Call(_) => calling_convention(instr.input.len() + index),
       Opcode::CallExtern(_) => match index {
-        0 => Some(RegisterIndex::Eax),
+        0 => Specific(RegisterIndex::Eax),
         _ => unreachable!("call with more than 1 return"),
       },
       Opcode::Syscall => match index {
-        0 => Some(RegisterIndex::Eax),
+        0 => Specific(RegisterIndex::Eax),
         _ => unreachable!("syscalls only have 1 output"),
       },
       _ => None,
     }
   }
-}
 
-fn is_used_later_in_block(after: &[Instruction], var: Variable) -> bool {
-  for instr in after.iter() {
-    for input in &instr.input {
-      if let InstructionInput::Var(v) = input
-        && *v == var
-      {
-        return true;
-      }
+  fn for_terminator(term: &TerminatorInstruction, index: usize) -> Requirement {
+    use Requirement::*;
+
+    match term {
+      TerminatorInstruction::Return(_) => calling_convention(index),
+      _ => None,
     }
   }
-
-  false
 }
 
 impl<T> Default for RegisterMap<T> {
   fn default() -> Self { Self::new() }
 }
 
+#[allow(dead_code)]
 impl<T> RegisterMap<T> {
   pub fn new() -> Self { Self { values: [(); RegisterIndex::COUNT].map(|_| None) } }
 
@@ -818,9 +761,48 @@ impl<T> RegisterMap<T> {
   }
 }
 
-impl fmt::Display for InstructionLocation {
+impl RegisterSpill {
+  pub fn size(&self) -> RegisterSize {
+    match self {
+      RegisterSpill::Register(reg) => reg.size,
+      RegisterSpill::Spill(_, size) => *size,
+    }
+  }
+
+  pub fn is_register(&self) -> bool { matches!(self, RegisterSpill::Register(_)) }
+  pub fn is_spill(&self) -> bool { matches!(self, RegisterSpill::Spill(_, _)) }
+
+  pub fn is_register_and(&self, f: impl Fn(Register) -> bool) -> bool {
+    match self {
+      RegisterSpill::Register(reg) => f(*reg),
+      RegisterSpill::Spill(_, _) => false,
+    }
+  }
+
+  #[track_caller]
+  pub fn unwrap_register(&self) -> Register {
+    match self {
+      RegisterSpill::Register(reg) => *reg,
+      RegisterSpill::Spill(_, _) => panic!("not a register"),
+    }
+  }
+}
+
+impl PartialEq<Register> for RegisterSpill {
+  fn eq(&self, other: &Register) -> bool {
+    match self {
+      RegisterSpill::Register(reg) => reg == other,
+      RegisterSpill::Spill(_, _) => false,
+    }
+  }
+}
+
+impl fmt::Display for RegisterSpill {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "<{}, instr {}>", self.block, self.index)
+    match self {
+      RegisterSpill::Register(reg) => write!(f, "{reg}"),
+      RegisterSpill::Spill(stack, _) => write!(f, "s{}", stack.0),
+    }
   }
 }
 
@@ -872,7 +854,7 @@ mod tests {
 
   #[test]
   fn simple_syscall() {
-    check(
+    check_v(
       "
       block 0:
         mov r0 = 0x01
@@ -884,16 +866,34 @@ mod tests {
         syscall r6 = r5, r1
       ",
       expect![@r#"
+        activating r0 at InstructionIndex(0)
+        activating r1 at InstructionIndex(1)
+        activating r2 at InstructionIndex(2)
+        spilling r0 to assign r2 = Eax
+        expiring r2 at InstructionIndex(3)
+        activating r3 at InstructionIndex(3)
+        spilling r1 to assign r3 = Edi
+        expiring r0 at InstructionIndex(4)
+        expiring r3 at InstructionIndex(4)
+        activating r4 at InstructionIndex(4)
+        expiring r4 at InstructionIndex(5)
+        activating r5 at InstructionIndex(5)
+        expiring r1 at InstructionIndex(6)
+        expiring r5 at InstructionIndex(6)
+        activating r6 at InstructionIndex(6)
+
         block 0:
-          mov rax(0) = 0x01
-          mov rdi(1) = 0x00
-          syscall rax(2) = rax(0), rdi(1)
-          mov rcx(7) = rdi(1)
+          mov s0(0) = 0x01
+          mov s1(1) = 0x00
+          mov rax(7) = s0(0)
+          mov rdi(8) = s1(1)
+          syscall rax(2) = rax(7), rdi(8)
           mov rdi(3) = 0x02
-          syscall rax(4) = rax(0), rdi(3)
+          mov rax(9) = s0(0)
+          syscall rax(4) = rax(9), rdi(3)
           mov rax(5) = 0x03
-          mov rdi(8) = rcx(7)
-          syscall rax(6) = rax(5), rdi(8)
+          mov rdi(10) = s1(1)
+          syscall rax(6) = rax(5), rdi(10)
           trap
       "#
       ],
@@ -955,10 +955,10 @@ mod tests {
       expect![@r#"
         block 0:
           mov rax(1) = 0x02
-          mov rcx(3) = 0x03
-          math(imul) rax(0) = rax(1), rcx(3)
-          mov rdi(4) = rax(0)
-          return r4
+          mov rcx(2) = 0x03
+          math(imul) rax(0) = rax(1), rcx(2)
+          mov rdi(3) = rax(0)
+          return r3
       "#
       ],
     );
@@ -976,16 +976,32 @@ mod tests {
       ",
       expect![@r#"
         block 0:
-          call function 0 rdi(0), rsi(1) =
-          mov rax(3) = rdi(0)
-          mov rdi(2) = rsi(1)
-          mov rbx(8) = rdi(2)
-          mov rdi(4) = rax(3)
-          mov rsi(5) = 0x01
-          call function 0 = rdi(4), rsi(5)
-          mov rbx(6) = rax(3)
-          mov rsi(7) = 0x02
-          call function 0 = rdi(2), rsi(7)
+          call function 0 rdi(0), s1(1) =
+          mov rsi(2) = 0x01
+          call function 0 = rdi(0), rsi(2)
+          mov rsi(3) = 0x02
+          mov rdi(4) = s1(1)
+          call function 0 = rdi(4), rsi(3)
+          trap
+      "#
+      ],
+    );
+  }
+
+  #[test]
+  fn split_critical() {
+    check(
+      "
+      block 0:
+        call 0 r0 = 0x01
+        call 1 = r0
+      ",
+      expect![@r#"
+        block 0:
+          mov rdi(1) = 0x01
+          call function 0 rsi(0) = rdi(1)
+          mov rdi(2) = rsi(0)
+          call function 0 = rdi(2)
           trap
       "#
       ],
@@ -1002,26 +1018,16 @@ mod tests {
         return r0
       ",
       expect![@r#"
-        preference: r0 -> Edi at <block 0, instr 2>
-        = mov r0 = 0x01
-        marking r0(Edi) active
-        = call function 0 = 0x02
-        extern clobbers register Edi, rehoming r0
-        rehoming r0(Edi) -> r1(Ebx)
-        marking r1(Ebx) active
-        + mov r1 = r0
-        + mov r2 = Unsigned(2)
-        marking r2(Edi) active
-        freeing r2(Edi)
-        + mov r3 = r1
+        activating r0 at InstructionIndex(0)
+        activating r1 at InstructionIndex(1)
+        spilling r0 to assign r1 = Edi
 
         block 0:
-          mov rdi(0) = 0x01
-          mov rbx(1) = rdi(0)
-          mov rdi(2) = 0x02
-          call function 0 = rdi(2)
-          mov rdi(3) = rbx(1)
-          return r3
+          mov s0(0) = 0x01
+          mov rdi(1) = 0x02
+          call function 0 = rdi(1)
+          mov rdi(2) = s0(0)
+          return r2
       "#
       ],
     );
@@ -1038,37 +1044,41 @@ mod tests {
         return r0, r1
       ",
       expect![@r#"
-        preference: r0 -> Edi at <block 0, instr 3>
-        preference: r1 -> Esi at <block 0, instr 3>
-        = mov r0 = 0x01
-        marking r0(Edi) active
-        = mov r1 = 0x02
-        marking r1(Esi) active
-        = call extern 0 = 0x02
-        extern clobbers register Esi, rehoming r1
-        rehoming r1(Esi) -> r2(Ebx)
-        marking r2(Ebx) active
-        + mov r2 = r1
-        extern clobbers register Edi, rehoming r0
-        rehoming r0(Edi) -> r3(Ebp)
-        marking r3(Ebp) active
-        + mov r3 = r0
-        + mov r4 = Unsigned(2)
-        marking r4(Edi) active
-        freeing r4(Edi)
-        + mov r5 = r3
-        + mov r6 = r2
+        activating r0 at InstructionIndex(0)
+        activating r1 at InstructionIndex(1)
+        activating r2 at InstructionIndex(2)
+        spilling r0 to assign r2 = Edi
 
         block 0:
-          mov rdi(0) = 0x01
+          mov s0(0) = 0x01
           mov rsi(1) = 0x02
-          mov rbx(2) = rsi(1)
-          mov rbp(3) = rdi(0)
-          mov rdi(4) = 0x02
-          call extern 0 = rdi(4)
-          mov rdi(5) = rbp(3)
-          mov rsi(6) = rbx(2)
-          return r5, r6
+          mov rdi(2) = 0x02
+          call extern 0 = rdi(2)
+          mov rdi(3) = s0(0)
+          return r3, r1
+      "#
+      ],
+    );
+  }
+
+  #[test]
+  fn allocate_unused() {
+    check_v(
+      "
+      block 0:
+        mov r0 = 0x01
+        mov r1 = 0x02
+        trap
+      ",
+      expect![@r#"
+        activating r0 at InstructionIndex(0)
+        expiring r0 at InstructionIndex(1)
+        activating r1 at InstructionIndex(1)
+
+        block 0:
+          mov rax(0) = 0x01
+          mov rax(1) = 0x02
+          trap
       "#
       ],
     );

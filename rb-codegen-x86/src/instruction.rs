@@ -1,6 +1,6 @@
 use bitflags::bitflags;
 
-use crate::RegisterSize;
+use crate::{RegisterSize, regalloc::RegisterSpill};
 
 pub struct Instruction {
   pub prefix:       Prefix,
@@ -229,6 +229,15 @@ impl Instruction {
     }
     self.mod_reg.as_mut().unwrap().set_mod_rm(modifier, rm as u8);
     self
+  }
+
+  pub const fn with_rm(self, reg: RegisterSpill) -> Self {
+    match reg {
+      RegisterSpill::Register(reg) => self.with_mod(0b11, reg.index),
+      RegisterSpill::Spill(slot, _) => self
+        .with_sib(0, RegisterIndex::Esp, RegisterIndex::Esp)
+        .with_displacement(Immediate::i8((8 * (slot.0 as i32)) as u8)),
+    }
   }
 
   /// Sets the ModR/M byte to assign to the given register with a constant
