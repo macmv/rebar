@@ -54,6 +54,12 @@ pub fn parse(asm: &str) -> Function {
       "math(ishr)" => Opcode::Math(Math::Ishr),
       "math(not)" => Opcode::Math(Math::Not),
       "math(neg)" => Opcode::Math(Math::Neg),
+      "compare(eq)" => Opcode::Compare(rb_codegen::Condition::Equal),
+      "compare(ne)" => Opcode::Compare(rb_codegen::Condition::NotEqual),
+      "compare(gt)" => Opcode::Compare(rb_codegen::Condition::Greater),
+      "compare(lt)" => Opcode::Compare(rb_codegen::Condition::Less),
+      "compare(ge)" => Opcode::Compare(rb_codegen::Condition::GreaterEqual),
+      "compare(le)" => Opcode::Compare(rb_codegen::Condition::LessEqual),
       "syscall" => Opcode::Syscall,
 
       "call" => {

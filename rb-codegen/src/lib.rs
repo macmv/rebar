@@ -533,8 +533,8 @@ impl fmt::Display for Opcode {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       Opcode::Math(m) => write!(f, "math({m})"),
+      Opcode::Compare(c) => write!(f, "compare({c})"),
       Opcode::Branch(c, target) => write!(f, "branch {c:?} to {target}"),
-      Opcode::Compare(c) => write!(f, "compare {c:?}"),
       Opcode::Call(func) => write!(f, "call function {}", func.0),
       Opcode::CallExtern(id) => write!(f, "call extern {}", id.0),
       Opcode::Lea(symbol) => write!(f, "lea symbol {}", symbol.index),
@@ -567,6 +567,19 @@ impl fmt::Display for Math {
       Math::Ishr => write!(f, "ishr"),
       Math::Not => write!(f, "not"),
       Math::Neg => write!(f, "neg"),
+    }
+  }
+}
+
+impl fmt::Display for Condition {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Condition::Equal => write!(f, "eq"),
+      Condition::NotEqual => write!(f, "ne"),
+      Condition::Greater => write!(f, "gt"),
+      Condition::Less => write!(f, "lt"),
+      Condition::GreaterEqual => write!(f, "ge"),
+      Condition::LessEqual => write!(f, "le"),
     }
   }
 }
