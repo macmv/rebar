@@ -727,7 +727,11 @@ impl Requirement {
         _ => todo!("more arguments"),
       },
       Opcode::Math(Math::Imul | Math::Umul | Math::Idiv | Math::Udiv | Math::Irem | Math::Urem) => {
-        Specific(RegisterIndex::Eax)
+        if index == 0 {
+          Specific(RegisterIndex::Eax)
+        } else {
+          Register
+        }
       }
       Opcode::Math(_) => {
         if index == 0 {
