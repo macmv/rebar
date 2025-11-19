@@ -1,12 +1,10 @@
-use rb_codegen::{
-  BlockId, Condition, Immediate, Instruction, InstructionInput, InstructionOutput, Opcode,
-};
+use rb_codegen::{BlockId, Instruction, InstructionInput, InstructionOutput, Opcode};
 
 use super::*;
 use crate::analysis::{
   control_flow_graph::ControlFlowGraph,
   dominator_tree::DominatorTree,
-  value_uses::{ValueUses, VariableValue},
+  value_uses::{ValueUses, VariableValue, const_condition},
 };
 
 #[derive(FromAnalysis)]
@@ -84,18 +82,6 @@ impl ConstantFold<'_> {
   }
 }
 
-fn const_condition(cond: Condition, a: Immediate, b: Immediate) -> Option<bool> {
-  match cond {
-    Condition::Equal => rb_codegen::immediate!(a, b, |a, b| a == b),
-    Condition::NotEqual => rb_codegen::immediate!(a, b, |a, b| a != b),
-    // TODO: Signed-ness
-    Condition::Less => rb_codegen::immediate!(a, b, |a, b| a < b),
-    Condition::Greater => rb_codegen::immediate!(a, b, |a, b| a > b),
-    Condition::LessEqual => rb_codegen::immediate!(a, b, |a, b| a <= b),
-    Condition::GreaterEqual => rb_codegen::immediate!(a, b, |a, b| a >= b),
-  }
-}
-
 #[cfg(test)]
 mod tests {
   use crate::tests::check_transform;
@@ -153,6 +139,19 @@ mod tests {
         +   mov r1 = 0x02
         +   mov r2 = 0x03
         +   mov r3 = 0x01
+            trap
+      "#],
+    );
+  }
+
+  #[test]
+  fn folds_compare() {
+    check_transform(
+      "constant_fold",
+      expect![@r#"
+          block 0:
+        -   compare(eq) r1 = 0x02, 0x01
+        +   mov r1 = 0x00
             trap
       "#],
     );

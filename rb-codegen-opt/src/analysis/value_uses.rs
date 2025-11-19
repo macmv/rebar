@@ -1,7 +1,8 @@
 use std::collections::{BTreeMap, HashMap, HashSet, hash_map::Entry};
 
 use rb_codegen::{
-  BlockId, Immediate, Instruction, InstructionInput, InstructionOutput, Math, Opcode, Variable,
+  BlockId, Condition, Immediate, Instruction, InstructionInput, InstructionOutput, Math, Opcode,
+  Variable,
 };
 use smallvec::SmallVec;
 
@@ -28,7 +29,7 @@ pub enum VariableValue {
   Unknown,
   Immediate(Immediate),
   Variable(Variable),
-  Compare { inputs: Box<(VariableValue, VariableValue)> },
+  Compare { condition: Condition, inputs: Box<(VariableValue, VariableValue)> },
   Math { math: Math, input: Vec<VariableValue> },
 
   Phi { from: BTreeMap<BlockId, VariableValue> },
@@ -144,8 +145,9 @@ impl ValueUses {
         }
       }
       Opcode::Syscall => {}
-      Opcode::Compare(_) => {
+      Opcode::Compare(condition) => {
         let cmp = VariableValue::Compare {
+          condition,
           inputs: Box::new((
             self.input_to_value(instr.input[0]),
             self.input_to_value(instr.input[1]),
@@ -244,12 +246,6 @@ impl ValueUses {
         }
       }
       VariableValue::Immediate(_) => value,
-      VariableValue::Compare { inputs } => {
-        let a = self.simplify_value(phis, seen, inputs.0);
-        let b = self.simplify_value(phis, seen, inputs.1);
-
-        VariableValue::Compare { inputs: Box::new((a, b)) }
-      }
 
       VariableValue::Phi { from } => {
         let mut new_from = BTreeMap::new();
@@ -274,6 +270,20 @@ impl ValueUses {
           VariableValue::Immediate(c)
         } else {
           VariableValue::Math { math, input: simplified.into_vec() }
+        }
+      }
+
+      VariableValue::Compare { condition, inputs } => {
+        let a = self.simplify_value(phis, seen, inputs.0);
+        let b = self.simplify_value(phis, seen, inputs.1);
+
+        match (a, b) {
+          (VariableValue::Immediate(a), VariableValue::Immediate(b)) => {
+            return VariableValue::Immediate(Immediate::Unsigned(
+              if const_condition(condition, a, b).unwrap() { 1 } else { 0 },
+            ));
+          }
+          (a, b) => VariableValue::Compare { condition, inputs: Box::new((a, b)) },
         }
       }
 
@@ -338,6 +348,18 @@ fn const_eval(m: Math, args: &[VariableValue]) -> Option<Immediate> {
   bin_op!(And, bitand);
 
   None
+}
+
+pub fn const_condition(cond: Condition, a: Immediate, b: Immediate) -> Option<bool> {
+  match cond {
+    Condition::Equal => rb_codegen::immediate!(a, b, |a, b| a == b),
+    Condition::NotEqual => rb_codegen::immediate!(a, b, |a, b| a != b),
+    // TODO: Signed-ness
+    Condition::Less => rb_codegen::immediate!(a, b, |a, b| a < b),
+    Condition::Greater => rb_codegen::immediate!(a, b, |a, b| a > b),
+    Condition::LessEqual => rb_codegen::immediate!(a, b, |a, b| a <= b),
+    Condition::GreaterEqual => rb_codegen::immediate!(a, b, |a, b| a >= b),
+  }
 }
 
 #[cfg(test)]
