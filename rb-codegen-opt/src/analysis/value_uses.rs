@@ -329,7 +329,13 @@ fn const_eval(m: Math, args: &[VariableValue]) -> Option<Immediate> {
     };
   }
 
+  use std::ops::{BitAnd, BitOr, BitXor};
+
   bin_op!(Add, wrapping_add);
+  bin_op!(Sub, wrapping_sub);
+  bin_op!(Xor, bitxor);
+  bin_op!(Or, bitor);
+  bin_op!(And, bitand);
 
   None
 }

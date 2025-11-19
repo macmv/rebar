@@ -50,7 +50,9 @@ enum InstrChange {
 impl ConstantFold<'_> {
   fn pass_instr(&self, instr: &mut Instruction) -> InstrChange {
     if let &[InstructionOutput::Var(v)] = instr.output.as_slice() {
-      if let VariableValue::Immediate(d) = self.value_uses.actual_value(rb_codegen::InstructionInput::Var(v)) {
+      if let VariableValue::Immediate(d) =
+        self.value_uses.actual_value(rb_codegen::InstructionInput::Var(v))
+      {
         instr.opcode = Opcode::Move;
         instr.input = smallvec![d.into()];
         instr.output = smallvec![v.into()];
@@ -68,13 +70,14 @@ impl ConstantFold<'_> {
 
     if let Opcode::Branch(cond, target) = instr.opcode {
       if let &[InstructionInput::Imm(a), InstructionInput::Imm(b)] = instr.input.as_slice()
-        && let Some(res) = const_condition(cond, a, b) {
-          if res {
-            return InstrChange::ReplaceWithJump { target };
-          } else {
-            return InstrChange::Remove;
-          }
+        && let Some(res) = const_condition(cond, a, b)
+      {
+        if res {
+          return InstrChange::ReplaceWithJump { target };
+        } else {
+          return InstrChange::Remove;
         }
+      }
     }
 
     InstrChange::None
@@ -133,6 +136,23 @@ mod tests {
             mov r0 = 0x01
         -   math(add) r1 = r0, 0x02
         +   mov r1 = 0x03
+            trap
+      "#],
+    );
+  }
+
+  #[test]
+  fn folds_bitwise() {
+    check_transform(
+      "constant_fold",
+      expect![@r#"
+          block 0:
+        -   math(xor) r1 = 0x03, 0x01
+        -   math(or) r2 = 0x03, 0x01
+        -   math(and) r3 = 0x03, 0x01
+        +   mov r1 = 0x02
+        +   mov r2 = 0x03
+        +   mov r3 = 0x01
             trap
       "#],
     );
