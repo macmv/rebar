@@ -192,7 +192,16 @@ fn params(p: &mut Parser) {
 
   p.expect(T!['(']);
 
+  // test ok
+  // fn foo(
+  //   bar: int,
+  //   baz: float
+  // )
   while !p.at(EOF) && !p.at(T![')']) {
+    while p.at(T![nl]) {
+      p.eat(T![nl]);
+    }
+
     let m = p.start();
     p.expect(T![ident]);
     p.expect(T![:]);
@@ -201,6 +210,10 @@ fn params(p: &mut Parser) {
     if p.at(T![,]) {
       p.eat(T![,]);
       m.complete(p, PARAM);
+      while p.at(T![nl]) {
+        p.eat(T![nl]);
+      }
+
       if p.at(T![')']) {
         break;
       }
@@ -210,6 +223,9 @@ fn params(p: &mut Parser) {
     }
   }
 
+  while p.at(T![nl]) {
+    p.eat(T![nl]);
+  }
   p.expect(T![')']);
 
   if p.at(T![->]) {
@@ -366,6 +382,62 @@ mod tests {
                 NAME_TYPE
                   IDENT 'int'
               CLOSE_PAREN ')'
+          NL_KW '\n'
+          WHITESPACE '      '
+      "#],
+    );
+  }
+
+  #[test]
+  fn multiline_args() {
+    check(
+      r#"
+        fn write_str(
+          foo: str,
+          bar: i32
+        ) -> i64 { }
+      "#,
+      expect![@r#"
+        SOURCE_FILE
+          NL_KW '\n'
+          WHITESPACE '        '
+          FUNCTION
+            FN_KW 'fn'
+            WHITESPACE ' '
+            IDENT 'write_str'
+            PARAMS
+              OPEN_PAREN '('
+              NL_KW '\n'
+              WHITESPACE '          '
+              PARAM
+                IDENT 'foo'
+                COLON ':'
+                WHITESPACE ' '
+                NAME_TYPE
+                  IDENT 'str'
+                COMMA ','
+              NL_KW '\n'
+              WHITESPACE '          '
+              PARAM
+                IDENT 'bar'
+                COLON ':'
+                WHITESPACE ' '
+                NAME_TYPE
+                  IDENT 'i32'
+              NL_KW '\n'
+              WHITESPACE '        '
+              CLOSE_PAREN ')'
+              WHITESPACE ' '
+              RETURN_TYPE
+                THIN_ARROW '->'
+                WHITESPACE ' '
+                NAME_TYPE
+                  IDENT 'i64'
+            WHITESPACE ' '
+            BLOCK
+              OPEN_CURLY '{'
+              WHITESPACE ' '
+              CLOSE_CURLY '}'
           NL_KW '\n'
           WHITESPACE '      '
       "#],
