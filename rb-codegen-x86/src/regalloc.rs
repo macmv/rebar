@@ -47,6 +47,9 @@ enum Requirement {
   Specific(RegisterIndex),
   /// The operand must in in a register, but it does not matter which.
   Register,
+  /// Only applicable to outputs: the output register must be the same as the
+  /// first argument.
+  InPlace,
   /// The operand may be in a register or immediate.
   #[default]
   None,
@@ -473,6 +476,7 @@ fn fix_requirements(function: &mut Function, regs: &mut VariableRegisters) {
                     Requirement::Specific(reg) => reg,
                     // TODO
                     Requirement::Register => RegisterIndex::Eax,
+                    Requirement::InPlace => todo!("in-place requirements"),
                     Requirement::None => unreachable!(),
                   },
                   size:  var_to_reg_size(v.size()).unwrap(),
@@ -517,6 +521,7 @@ fn fix_requirements(function: &mut Function, regs: &mut VariableRegisters) {
                       Requirement::Register => {
                         panic!("spilled slot cannot have a register requirement")
                       }
+                      Requirement::InPlace => todo!("in-place requirements"),
                       Requirement::None => unreachable!(),
                     },
                     size:  var_to_reg_size(v.size()).unwrap(),
@@ -585,6 +590,7 @@ fn live_intervals(function: &Function) -> LiveIntervals {
             Requirement::Specific(reg) => {
               interval.assigned = Some(reg);
             }
+            Requirement::InPlace => unreachable!("in-place requirements not allowed for inputs"),
             _ => {}
           }
         }
@@ -603,6 +609,7 @@ fn live_intervals(function: &Function) -> LiveIntervals {
           Requirement::Specific(reg) => {
             interval.assigned = Some(reg);
           }
+          Requirement::InPlace => todo!("in-place requirements"),
           _ => {}
         }
       }
@@ -714,7 +721,7 @@ impl Requirement {
     match instr.opcode {
       Opcode::Math(m) => {
         match m {
-          // In-place, any register. FIXME: This should be the same as the input
+          // In-place, any register.
           Math::Add
           | Math::Sub
           | Math::And
@@ -724,7 +731,7 @@ impl Requirement {
           | Math::Neg
           | Math::Shl
           | Math::Ishr
-          | Math::Ushr => Specific(RegisterIndex::Eax),
+          | Math::Ushr => InPlace,
           // In-place, only EAX.
           Math::Imul | Math::Umul | Math::Idiv | Math::Udiv => Specific(RegisterIndex::Eax),
           // In-place, only EDX.
