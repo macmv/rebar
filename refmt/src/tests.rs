@@ -743,3 +743,23 @@ fn type_exprs() {
     "#],
   );
 }
+
+#[test]
+fn impls() {
+  check(
+    r#"
+      impl Foo for Bar {
+        fn baz(x: int) -> int {
+          x + 1
+        }
+      }
+    "#,
+    expect![@r#"
+      impl Foo for Bar {
+        fn baz(
+          x: int
+        ) -> int { x + 1 }
+      }
+    "#],
+  );
+}

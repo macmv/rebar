@@ -109,7 +109,10 @@ impl FormatterContext<'_> {
 
       // The opening brace in if statements and defs needs some extra whitespace.
       (T!['{'], BLOCK)
-        if matches!(token.parent().unwrap().parent().unwrap().kind(), IF_EXPR | FUNCTION) =>
+        if matches!(
+          token.parent().unwrap().parent().unwrap().kind(),
+          IF_EXPR | FUNCTION | IMPL
+        ) =>
       {
         (Space, if self.multiline { Newline } else { Space })
       }
@@ -141,8 +144,10 @@ impl FormatterContext<'_> {
           (None, Space)
         }
       }
+      (T![impl], _) => (None, Space),
+      (T![for], _) => (Space, Space),
       (T![->], _) => (Space, Space),
-      (T![mod] | T![use] | T![let] | T![if] | T![fn] | T![extern] | T![struct], _) => (None, Space),
+      (T![mod] | T![use] | T![let] | T![if] | T![extern] | T![struct], _) => (None, Space),
       (T![else], _) => (Space, None),
 
       (_, BINARY_OP) | (T![as], _) => {
@@ -227,6 +232,7 @@ impl FormatterContext<'_> {
           // Any blocks with multiple expressions are always multiline.
           let always_multiline = match n.kind() {
             STRUCT_BLOCK => true,
+            BLOCK if n.parent().unwrap().kind() == IMPL => true,
             BLOCK if n.children().count() > 1 => true,
             _ => false,
           };
