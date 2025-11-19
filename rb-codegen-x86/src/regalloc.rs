@@ -315,6 +315,18 @@ impl FunctionChange<'_, '_> {
 fn split_critical_variables(function: &mut Function) {
   let mut specific_defs = HashMap::<Variable, RegisterIndex>::new();
 
+  for (i, size) in function.sig.args.iter().enumerate() {
+    let req = calling_convention(i);
+
+    specific_defs.insert(
+      Variable::new(i as u32, *size),
+      match req {
+        Requirement::Specific(reg) => reg,
+        _ => unreachable!(),
+      },
+    );
+  }
+
   FunctionEditor::new(function).edit_context(
     &mut specific_defs,
     |specific_defs, change, instr| {
