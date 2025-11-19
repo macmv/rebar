@@ -65,6 +65,7 @@ struct LiveIntervals {
 struct Interval {
   segments:    Vec<Range<InstructionIndex>>,
   assigned:    Option<RegisterIndex>,
+  must_match:  Option<Variable>,
   requirement: Requirement,
 }
 
@@ -120,6 +121,24 @@ impl VariableRegisters {
       }
 
       debug.log(format_args!("activating {var} at {:?}", interval.segments.first().unwrap().start));
+
+      if let Some(v) = interval.must_match {
+        if let Some(index) = intervals.for_var(v).assigned {
+          active.insert(var);
+
+          regs.registers.set_default(
+            var,
+            Some(RegisterSpill::Register(Register {
+              index: index,
+              size:  var_to_reg_size(var.size()).unwrap(),
+            })),
+          );
+
+          continue;
+        } else {
+          panic!("cannot assign in-place requirement for variable {var} to match {v}");
+        }
+      }
 
       if let Some(reg_index) = interval.assigned {
         if active.iter().all(|active_var| {
@@ -558,6 +577,7 @@ fn live_intervals(function: &Function) -> LiveIntervals {
           Requirement::Specific(reg) => reg,
           _ => unreachable!(),
         }),
+        must_match:  None,
         requirement: req,
       },
     );
@@ -609,7 +629,12 @@ fn live_intervals(function: &Function) -> LiveIntervals {
           Requirement::Specific(reg) => {
             interval.assigned = Some(reg);
           }
-          Requirement::InPlace => todo!("in-place requirements"),
+          Requirement::InPlace => {
+            interval.must_match = Some(match instr.input[0] {
+              InstructionInput::Var(v) => v,
+              _ => unreachable!("in-place requirements must have variable input"),
+            });
+          }
           _ => {}
         }
       }
@@ -1123,8 +1148,8 @@ mod tests {
       ",
       expect![@r#"
         block 0:
-          math(xor) rax(1) = rdi(0), 0x01
-          branch Equal to block 1 rax(2) = rax(1), 0x00
+          math(xor) rdi(1) = rdi(0), 0x01
+          branch Equal to block 1 rax(2) = rdi(1), 0x00
           mov rsi(3) = 0x5555
           mov rdi(6) = 0x01
           mov rdx(7) = 0x11
