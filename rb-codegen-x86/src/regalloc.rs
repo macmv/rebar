@@ -694,11 +694,14 @@ impl Requirement {
         2 => Specific(RegisterIndex::Edx),
         _ => todo!("more arguments"),
       },
+      Opcode::Math(Math::Imul | Math::Umul | Math::Idiv | Math::Udiv | Math::Irem | Math::Urem) => {
+        Specific(RegisterIndex::Eax)
+      }
       Opcode::Math(_) => {
         if index == 0 {
-          Specific(RegisterIndex::Eax)
-        } else {
           Register
+        } else {
+          None
         }
       }
       _ => None,
