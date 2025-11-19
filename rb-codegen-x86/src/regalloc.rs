@@ -1099,6 +1099,37 @@ mod tests {
     );
   }
 
+  #[test]
+  fn assert_works() {
+    check(
+      "
+      arg r0
+      block 0:
+        math(xor) r1 = r0, 0x01
+        branch(eq) r2 = r1, 0x00
+        mov r3 = 0x5555
+        call 2 r4 = 0x01, r3, 0x11
+        call 6 r5 =
+        jump to block 1
+      block 1:
+        return
+      ",
+      expect![@r#"
+        block 0:
+          math(xor) rax(1) = rdi(0), 0x01
+          branch Equal to block 1 rax(2) = rax(1), 0x00
+          mov rsi(3) = 0x5555
+          mov rdi(6) = 0x01
+          mov rdx(7) = 0x11
+          call function 0 rbx(4) = rdi(6), rsi(3), rdx(7)
+          call function 0 rdi(5) =
+          jump to block 1
+        block 1:
+          return
+      "#],
+    );
+  }
+
   #[ignore]
   #[test]
   fn big_syscall() {
