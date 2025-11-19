@@ -853,7 +853,10 @@ pub fn lower(mut function: rb_codegen::Function) -> Builder {
 
 fn var_to_reg_size(v: VariableSize) -> Option<RegisterSize> {
   match v {
-    VariableSize::Bit1 => None,
+    // TODO: The idea of a 1-bit variable is somewhat interesting, but I don't think it's all that
+    // practical. I was hoping to turn it into a flag when possible, but that doesn't really end up
+    // happening all that often.
+    VariableSize::Bit1 => Some(RegisterSize::Bit8),
     VariableSize::Bit8 => Some(RegisterSize::Bit8),
     VariableSize::Bit16 => Some(RegisterSize::Bit16),
     VariableSize::Bit32 => Some(RegisterSize::Bit32),
