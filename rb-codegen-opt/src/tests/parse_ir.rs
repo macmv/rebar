@@ -23,6 +23,12 @@ pub fn parse(asm: &str) -> Function {
       continue;
     }
 
+    if let Some(reg) = line.strip_prefix("arg ") {
+      let var = parse_variable_id(reg).unwrap();
+      function.sig.args.push(var.size());
+      continue;
+    }
+
     if let Some(id) = line.strip_prefix("block ") {
       let id = id.strip_suffix(':').unwrap();
       let id = id.parse::<u32>().unwrap();
@@ -60,6 +66,7 @@ pub fn parse(asm: &str) -> Function {
       "compare(lt)" => Opcode::Compare(rb_codegen::Condition::Less),
       "compare(ge)" => Opcode::Compare(rb_codegen::Condition::GreaterEqual),
       "compare(le)" => Opcode::Compare(rb_codegen::Condition::LessEqual),
+      "branch(eq)" => Opcode::Branch(rb_codegen::Condition::Equal, BlockId::new(1)),
       "syscall" => Opcode::Syscall,
 
       "call" => {
