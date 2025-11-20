@@ -41,7 +41,7 @@ struct RegisterMap<T> {
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct InstructionIndex(usize);
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 enum Requirement {
   /// The operand must be in the given register.
   Specific(RegisterIndex),
@@ -50,9 +50,6 @@ enum Requirement {
   /// Only applicable to outputs: the output register must be the same as the
   /// first argument.
   InPlace,
-  /// The operand may be in a register or immediate.
-  #[default]
-  None,
 }
 
 #[derive(Default)]
@@ -66,7 +63,7 @@ struct Interval {
   segments:    Vec<Range<InstructionIndex>>,
   assigned:    Option<RegisterIndex>,
   must_match:  Option<Variable>,
-  requirement: Requirement,
+  requirement: Option<Requirement>,
 }
 
 impl VariableRegisters {
@@ -357,7 +354,7 @@ fn split_critical_variables(function: &mut Function) {
         let input = &mut instr.input[j];
 
         match (*input, req) {
-          (InstructionInput::Var(v), Requirement::Specific(req))
+          (InstructionInput::Var(v), Some(Requirement::Specific(req)))
             if specific_defs.get(&v).is_some_and(|def| *def != req) =>
           {
             let prev_input = input.clone();
@@ -379,7 +376,7 @@ fn split_critical_variables(function: &mut Function) {
         let output = &instr.output[j];
 
         match (*output, req) {
-          (InstructionOutput::Var(v), Requirement::Specific(req)) => {
+          (InstructionOutput::Var(v), Some(Requirement::Specific(req))) => {
             specific_defs.insert(v, req);
           }
           _ => {}
@@ -393,7 +390,7 @@ fn split_critical_variables(function: &mut Function) {
           let input = &mut rets[j];
 
           match (*input, req) {
-            (InstructionInput::Var(v), Requirement::Specific(req))
+            (InstructionInput::Var(v), Some(Requirement::Specific(req)))
               if specific_defs.get(&v).is_some_and(|def| *def != req) =>
             {
               let prev_input = input.clone();
@@ -423,7 +420,7 @@ fn imm_to_reg(function: &mut Function) {
         let input = &mut instr.input[i];
 
         match (*input, req) {
-          (_, Requirement::None) => continue,
+          (_, None) => continue,
           (InstructionInput::Var(_), _) => continue,
           (InstructionInput::Imm(_), _) => {
             let prev_input = input.clone();
@@ -449,7 +446,7 @@ fn imm_to_reg(function: &mut Function) {
           };
 
           match (*input, req) {
-            (_, Requirement::None) => continue,
+            (_, None) => continue,
             (InstructionInput::Var(_), _) => continue,
             (InstructionInput::Imm(_), _) => {
               let prev_input = input.clone();
@@ -476,9 +473,8 @@ fn fix_requirements(function: &mut Function, regs: &mut VariableRegisters) {
     |regs, change, instr| {
       for j in 0..instr.input.len() {
         let req = Requirement::for_input(&instr, j);
-        match req {
-          Requirement::None => continue,
-          _ => {}
+        if req.is_none() {
+          continue;
         }
 
         let input = &mut instr.input[j];
@@ -492,11 +488,11 @@ fn fix_requirements(function: &mut Function, regs: &mut VariableRegisters) {
                 copy,
                 Some(RegisterSpill::Register(Register {
                   index: match req {
-                    Requirement::Specific(reg) => reg,
+                    Some(Requirement::Specific(reg)) => reg,
                     // TODO
-                    Requirement::Register => RegisterIndex::Eax,
-                    Requirement::InPlace => todo!("in-place requirements"),
-                    Requirement::None => unreachable!(),
+                    Some(Requirement::Register) => RegisterIndex::Eax,
+                    Some(Requirement::InPlace) => todo!("in-place requirements"),
+                    None => unreachable!(),
                   },
                   size:  var_to_reg_size(v.size()).unwrap(),
                 })),
@@ -517,9 +513,8 @@ fn fix_requirements(function: &mut Function, regs: &mut VariableRegisters) {
       TerminatorInstruction::Return(rets) => {
         for i in 0..rets.len() {
           let req = Requirement::for_terminator(&term, i);
-          match req {
-            Requirement::None => continue,
-            _ => {}
+          if req.is_none() {
+            continue;
           }
 
           let input = match term {
@@ -536,12 +531,12 @@ fn fix_requirements(function: &mut Function, regs: &mut VariableRegisters) {
                   copy,
                   Some(RegisterSpill::Register(Register {
                     index: match req {
-                      Requirement::Specific(reg) => reg,
-                      Requirement::Register => {
+                      Some(Requirement::Specific(reg)) => reg,
+                      Some(Requirement::Register) => {
                         panic!("spilled slot cannot have a register requirement")
                       }
-                      Requirement::InPlace => todo!("in-place requirements"),
-                      Requirement::None => unreachable!(),
+                      Some(Requirement::InPlace) => todo!("in-place requirements"),
+                      None => unreachable!(),
                     },
                     size:  var_to_reg_size(v.size()).unwrap(),
                   })),
@@ -578,7 +573,7 @@ fn live_intervals(function: &Function) -> LiveIntervals {
           _ => unreachable!(),
         }),
         must_match:  None,
-        requirement: req,
+        requirement: Some(req),
       },
     );
   }
@@ -607,10 +602,12 @@ fn live_intervals(function: &Function) -> LiveIntervals {
 
           interval.requirement = Requirement::for_input(instr, j);
           match interval.requirement {
-            Requirement::Specific(reg) => {
+            Some(Requirement::Specific(reg)) => {
               interval.assigned = Some(reg);
             }
-            Requirement::InPlace => unreachable!("in-place requirements not allowed for inputs"),
+            Some(Requirement::InPlace) => {
+              unreachable!("in-place requirements not allowed for inputs")
+            }
             _ => {}
           }
         }
@@ -626,10 +623,10 @@ fn live_intervals(function: &Function) -> LiveIntervals {
 
         interval.requirement = Requirement::for_output(instr, j);
         match interval.requirement {
-          Requirement::Specific(reg) => {
+          Some(Requirement::Specific(reg)) => {
             interval.assigned = Some(reg);
           }
-          Requirement::InPlace => {
+          Some(Requirement::InPlace) => {
             interval.must_match = Some(match instr.input[0] {
               InstructionInput::Var(v) => v,
               _ => unreachable!("in-place requirements must have variable input"),
@@ -655,7 +652,7 @@ fn live_intervals(function: &Function) -> LiveIntervals {
             }
 
             match Requirement::for_terminator(&block.terminator, j) {
-              Requirement::Specific(reg) => {
+              Some(Requirement::Specific(reg)) => {
                 interval.assigned = Some(reg);
               }
               _ => {}
@@ -706,12 +703,10 @@ fn calling_convention(index: usize) -> Requirement {
 }
 
 impl Requirement {
-  pub fn is_none(&self) -> bool { matches!(self, Requirement::None) }
-
-  fn for_input(instr: &Instruction, index: usize) -> Requirement {
+  fn for_input(instr: &Instruction, index: usize) -> Option<Requirement> {
     use Requirement::*;
 
-    match instr.opcode {
+    Some(match instr.opcode {
       Opcode::Syscall => match index {
         0 => Specific(RegisterIndex::Eax),
         1 => Specific(RegisterIndex::Edi),
@@ -737,17 +732,17 @@ impl Requirement {
         if index == 0 {
           Register
         } else {
-          None
+          return None;
         }
       }
-      _ => None,
-    }
+      _ => return None,
+    })
   }
 
-  fn for_output(instr: &Instruction, index: usize) -> Requirement {
+  fn for_output(instr: &Instruction, index: usize) -> Option<Requirement> {
     use Requirement::*;
 
-    match instr.opcode {
+    Some(match instr.opcode {
       Opcode::Math(m) => {
         match m {
           // In-place, any register.
@@ -776,15 +771,13 @@ impl Requirement {
         0 => Specific(RegisterIndex::Eax),
         _ => unreachable!("syscalls only have 1 output"),
       },
-      _ => None,
-    }
+      _ => return None,
+    })
   }
 
-  fn for_terminator(term: &TerminatorInstruction, index: usize) -> Requirement {
-    use Requirement::*;
-
+  fn for_terminator(term: &TerminatorInstruction, index: usize) -> Option<Requirement> {
     match term {
-      TerminatorInstruction::Return(_) => calling_convention(index),
+      TerminatorInstruction::Return(_) => Some(calling_convention(index)),
       _ => None,
     }
   }
