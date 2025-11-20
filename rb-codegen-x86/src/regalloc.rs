@@ -379,6 +379,13 @@ fn split_critical_variables(function: &mut Function) {
           (InstructionOutput::Var(v), Some(Requirement::Specific(req))) => {
             specific_defs.insert(v, req);
           }
+          (InstructionOutput::Var(v), Some(Requirement::InPlace)) => {
+            if let InstructionInput::Var(input_var) = &instr.input[0] {
+              if let Some(reg) = specific_defs.get(input_var) {
+                specific_defs.insert(v, *reg);
+              }
+            }
+          }
           _ => {}
         }
       }
