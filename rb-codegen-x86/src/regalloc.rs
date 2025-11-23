@@ -1091,6 +1091,32 @@ mod tests {
   }
 
   #[test]
+  fn struct_return() {
+    check(
+      "
+      block 0:
+        call 1 r0, r1 =
+        mov r2 = 0x2a
+        call 9 = r0, r2
+        mov r3 = 0x54
+        mov r4 = r1
+        call 9 = r4, r3
+        return
+      ",
+      expect![@r#"
+        block 0:
+          call function 0 rdi(0), s1(1) =
+          mov rsi(2) = 0x2a
+          call function 0 = rdi(0), rsi(2)
+          mov rsi(3) = 0x54
+          mov rdi(4) = s1(1)
+          call function 0 = rdi(4), rsi(3)
+          return
+      "#],
+    );
+  }
+
+  #[test]
   fn split_critical() {
     check(
       "
