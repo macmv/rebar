@@ -173,27 +173,49 @@ impl VariableRegisters {
           })
           .copied()
         {
-          // spill `active_var` to stack
-          active.insert(var);
-          debug.log(format_args!("spilling {active_var} to assign {var} = {reg_index:?}",));
+          // Conflict: we need to spill either `active_var` or `var`.
+
+          let active_interval = &intervals.intervals[&active_var];
+          let var_interval = &intervals.intervals[&var];
+
+          let spill_var = if active_interval.requirement.is_none() {
+            true
+          } else if var_interval.requirement.is_none() {
+            false
+          } else {
+            // Both have requirements; spill the shorter interval.
+            let active_length =
+              active_interval.segments.iter().map(|seg| seg.end.0 - seg.start.0).sum::<usize>();
+            let var_length =
+              var_interval.segments.iter().map(|seg| seg.end.0 - seg.start.0).sum::<usize>();
+
+            active_length < var_length
+          };
+
+          let to_spill = if spill_var { var } else { active_var };
+          let new_active = if spill_var { active_var } else { var };
+
+          // Spill `to_spill`.
+          debug.log(format_args!("spilling {to_spill} to assign {var} = {reg_index:?}",));
 
           let slot = StackId(function.stack_slots.len() as u32);
           function.stack_slots.push(StackSlot {
             offset: 0,
-            size:   active_var.size().bytes(),
-            align:  active_var.size().bytes(),
+            size:   to_spill.size().bytes(),
+            align:  to_spill.size().bytes(),
           });
 
           regs.registers.set_default(
-            active_var,
-            Some(RegisterSpill::Spill(slot, var_to_reg_size(var.size()).unwrap())),
+            to_spill,
+            Some(RegisterSpill::Spill(slot, var_to_reg_size(to_spill.size()).unwrap())),
           );
 
+          active.insert(new_active);
           regs.registers.set_default(
-            var,
+            new_active,
             Some(RegisterSpill::Register(Register {
               index: reg_index,
-              size:  var_to_reg_size(var.size()).unwrap(),
+              size:  var_to_reg_size(new_active.size()).unwrap(),
             })),
           );
         } else {
