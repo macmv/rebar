@@ -545,6 +545,43 @@ fn fix_requirements(function: &mut Function, regs: &mut VariableRegisters) {
           InstructionInput::Imm(_) => continue,
         }
       }
+
+      for j in 0..instr.output.len() {
+        let req = Requirement::for_output(&instr, j);
+        if req.is_none() {
+          continue;
+        }
+
+        let output = &mut instr.output[j];
+
+        match output {
+          InstructionOutput::Var(v) => {
+            if regs.get(*v).is_spill() {
+              let copy = change.editor.fresh_var(v.size());
+
+              regs.registers.set_default(
+                copy,
+                Some(RegisterSpill::Register(Register {
+                  index: match req {
+                    Some(Requirement::Specific(reg)) => reg,
+                    // TODO
+                    Some(Requirement::Register) => RegisterIndex::Eax,
+                    Some(Requirement::InPlace) => todo!("in-place requirements"),
+                    None => unreachable!(),
+                  },
+                  size:  var_to_reg_size(v.size()).unwrap(),
+                })),
+              );
+              change.insert_after(Instruction {
+                opcode: Opcode::Move,
+                input:  smallvec![InstructionInput::Var(*v)],
+                output: smallvec![InstructionOutput::Var(copy)],
+              });
+              *v = copy;
+            }
+          }
+        }
+      }
     },
     |regs, change, term| match term {
       TerminatorInstruction::Return(rets) => {
@@ -1108,7 +1145,8 @@ mod tests {
       ",
       expect![@r#"
         block 0:
-          call function 0 rdi(0), s1(1) =
+          call function 0 rdi(0), rsi(5) =
+          mov rsi(5) = s1(1)
           mov rsi(2) = 0x01
           call function 0 = rdi(0), rsi(2)
           mov rsi(3) = 0x02
@@ -1135,7 +1173,8 @@ mod tests {
       ",
       expect![@r#"
         block 0:
-          call function 0 rdi(0), s1(1) =
+          call function 0 rdi(0), rsi(5) =
+          mov rsi(5) = s1(1)
           mov rsi(2) = 0x2a
           call function 0 = rdi(0), rsi(2)
           mov rsi(3) = 0x54
