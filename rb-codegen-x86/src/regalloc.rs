@@ -178,9 +178,9 @@ impl VariableRegisters {
           let active_interval = &intervals.intervals[&active_var];
           let var_interval = &intervals.intervals[&var];
 
-          let spill_var = if active_interval.requirement.is_none() {
+          let spill_var = if var_interval.requirement.is_none() {
             true
-          } else if var_interval.requirement.is_none() {
+          } else if active_interval.requirement.is_none() {
             false
           } else {
             // Both have requirements; spill the shorter interval.
