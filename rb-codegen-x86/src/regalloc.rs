@@ -41,7 +41,7 @@ struct RegisterMap<T> {
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct InstructionIndex(usize);
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Requirement {
   /// The operand must be in the given register.
   Specific(RegisterIndex),
@@ -607,15 +607,33 @@ fn live_intervals(function: &Function) -> LiveIntervals {
             last.end = InstructionIndex(index.0 + 1);
           }
 
-          interval.requirement = Requirement::for_input(instr, j);
-          match interval.requirement {
-            Some(Requirement::Specific(reg)) => {
-              interval.assigned = Some(reg);
+          if let Some(req) = Requirement::for_input(instr, j) {
+            let req = if let Some(r) = interval.requirement {
+              match (req, r) {
+                (a, b) if a == b => a,
+
+                (Requirement::Register, b) => b,
+                (a, Requirement::Register) => a,
+
+                _ => panic!(
+                  "multiple requirements for variable {}: {:?} and {:?}",
+                  v, interval.requirement, req
+                ),
+              }
+            } else {
+              req
+            };
+
+            interval.requirement = Some(req);
+            match interval.requirement {
+              Some(Requirement::Specific(reg)) => {
+                interval.assigned = Some(reg);
+              }
+              Some(Requirement::InPlace) => {
+                unreachable!("in-place requirements not allowed for inputs")
+              }
+              _ => {}
             }
-            Some(Requirement::InPlace) => {
-              unreachable!("in-place requirements not allowed for inputs")
-            }
-            _ => {}
           }
         }
       }
@@ -628,18 +646,26 @@ fn live_intervals(function: &Function) -> LiveIntervals {
           interval.segments.push(Range { start: index, end: index });
         }
 
-        interval.requirement = Requirement::for_output(instr, j);
-        match interval.requirement {
-          Some(Requirement::Specific(reg)) => {
-            interval.assigned = Some(reg);
+        if let Some(req) = Requirement::for_output(instr, j) {
+          if interval.requirement.as_ref().is_some_and(|r| *r != req) {
+            panic!(
+              "multiple requirements for variable {}: {:?} and {:?}",
+              v, interval.requirement, req
+            );
           }
-          Some(Requirement::InPlace) => {
-            interval.must_match = Some(match instr.input[0] {
-              InstructionInput::Var(v) => v,
-              _ => unreachable!("in-place requirements must have variable input"),
-            });
+          interval.requirement = Some(req);
+          match interval.requirement {
+            Some(Requirement::Specific(reg)) => {
+              interval.assigned = Some(reg);
+            }
+            Some(Requirement::InPlace) => {
+              interval.must_match = Some(match instr.input[0] {
+                InstructionInput::Var(v) => v,
+                _ => unreachable!("in-place requirements must have variable input"),
+              });
+            }
+            _ => {}
           }
-          _ => {}
         }
       }
 
