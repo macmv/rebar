@@ -601,7 +601,7 @@ fn live_intervals(function: &Function) -> LiveIntervals {
 
       for (j, input) in instr.input.iter().enumerate() {
         if let InstructionInput::Var(v) = input {
-          let interval = intervals.intervals.entry(*v).or_default();
+          let mut interval = intervals.intervals.remove(v).unwrap_or_default();
 
           if let Some(last) = interval.segments.last_mut() {
             last.end = InstructionIndex(index.0 + 1);
@@ -615,10 +615,21 @@ fn live_intervals(function: &Function) -> LiveIntervals {
                 (Requirement::Register, b) => b,
                 (a, Requirement::Register) => a,
 
-                _ => panic!(
-                  "multiple requirements for variable {}: {:?} and {:?}",
-                  v, interval.requirement, req
-                ),
+                (a, Requirement::InPlace) => {
+                  let other = &intervals.intervals[&interval.must_match.unwrap()];
+                  if a.matches(other.requirement) {
+                    a
+                  } else {
+                    panic!("conflicting in-place requirement for variable {}", v);
+                  }
+                }
+
+                _ => {
+                  panic!(
+                    "multiple requirements for variable {}: {:?} and {:?}",
+                    v, interval.requirement, req,
+                  );
+                }
               }
             } else {
               req
@@ -635,6 +646,8 @@ fn live_intervals(function: &Function) -> LiveIntervals {
               _ => {}
             }
           }
+
+          intervals.intervals.insert(*v, interval);
         }
       }
 
@@ -812,6 +825,18 @@ impl Requirement {
     match term {
       TerminatorInstruction::Return(_) => Some(calling_convention(index)),
       _ => None,
+    }
+  }
+
+  /// Returns `true` if `self` matches `o` (ie, self is as specific or more
+  /// specific than `o`).
+  fn matches(&self, o: Option<Requirement>) -> bool {
+    match (*self, o) {
+      (_, None) => true,
+      (_, Some(o)) if *self == o => true,
+      (Requirement::Specific(a), Some(Requirement::Specific(b))) => a == b,
+      (Requirement::Specific(_), Some(Requirement::Register)) => true,
+      _ => false,
     }
   }
 }
