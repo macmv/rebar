@@ -575,8 +575,8 @@ fn fix_requirements(function: &mut Function, regs: &mut VariableRegisters) {
               );
               change.insert_after(Instruction {
                 opcode: Opcode::Move,
-                input:  smallvec![InstructionInput::Var(*v)],
-                output: smallvec![InstructionOutput::Var(copy)],
+                input:  smallvec![InstructionInput::Var(copy)],
+                output: smallvec![InstructionOutput::Var(*v)],
               });
               *v = copy;
             }
@@ -1145,7 +1145,7 @@ mod tests {
       expect![@r#"
         block 0:
           call function 0 rdi(0), rsi(5) =
-          mov rsi(5) = s0(1)
+          mov s0(1) = rsi(5)
           mov rsi(2) = 0x01
           call function 0 = rdi(0), rsi(2)
           mov rsi(3) = 0x02
@@ -1173,7 +1173,7 @@ mod tests {
       expect![@r#"
         block 0:
           call function 0 rdi(0), rsi(5) =
-          mov rsi(5) = s0(1)
+          mov s0(1) = rsi(5)
           mov rsi(2) = 0x2a
           call function 0 = rdi(0), rsi(2)
           mov rsi(3) = 0x54
