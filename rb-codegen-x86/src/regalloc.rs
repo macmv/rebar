@@ -205,6 +205,7 @@ impl VariableRegisters {
             align:  to_spill.size().bytes(),
           });
 
+          active.remove(&to_spill);
           regs.registers.set_default(
             to_spill,
             Some(RegisterSpill::Spill(slot, var_to_reg_size(to_spill.size()).unwrap())),
@@ -1042,12 +1043,10 @@ mod tests {
         expiring r2 at InstructionIndex(3)
         activating r3 at InstructionIndex(3)
         spilling r1 to assign r3 = Edi
-        expiring r0 at InstructionIndex(4)
         expiring r3 at InstructionIndex(4)
         activating r4 at InstructionIndex(4)
         expiring r4 at InstructionIndex(5)
         activating r5 at InstructionIndex(5)
-        expiring r1 at InstructionIndex(6)
         expiring r5 at InstructionIndex(6)
         activating r6 at InstructionIndex(6)
 
@@ -1146,11 +1145,11 @@ mod tests {
       expect![@r#"
         block 0:
           call function 0 rdi(0), rsi(5) =
-          mov rsi(5) = s1(1)
+          mov rsi(5) = s0(1)
           mov rsi(2) = 0x01
           call function 0 = rdi(0), rsi(2)
           mov rsi(3) = 0x02
-          mov rdi(4) = s1(1)
+          mov rdi(4) = s0(1)
           call function 0 = rdi(4), rsi(3)
           trap
       "#
@@ -1174,11 +1173,11 @@ mod tests {
       expect![@r#"
         block 0:
           call function 0 rdi(0), rsi(5) =
-          mov rsi(5) = s1(1)
+          mov rsi(5) = s0(1)
           mov rsi(2) = 0x2a
           call function 0 = rdi(0), rsi(2)
           mov rsi(3) = 0x54
-          mov rdi(4) = s1(1)
+          mov rdi(4) = s0(1)
           call function 0 = rdi(4), rsi(3)
           return
       "#],
