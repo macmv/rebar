@@ -196,7 +196,7 @@ impl VariableRegisters {
           let new_active = if spill_var { active_var } else { var };
 
           // Spill `to_spill`.
-          debug.log(format_args!("spilling {to_spill} to assign {var} = {reg_index:?}",));
+          debug.log(format_args!("spilling {to_spill} to assign {new_active} = {reg_index:?}",));
 
           let slot = StackId(function.stack_slots.len() as u32);
           function.stack_slots.push(StackSlot {
