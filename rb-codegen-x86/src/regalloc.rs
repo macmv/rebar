@@ -275,6 +275,7 @@ struct FunctionChange<'a, 'b: 'a> {
 
   block: BlockId,
   instr: usize,
+  after: usize,
 }
 
 impl<'a> FunctionEditor<'a> {
@@ -329,16 +330,17 @@ impl<'a> FunctionEditor<'a> {
       while i < self.function.block(block_id).instructions.len() {
         let mut instr = self.function.block(block_id).instructions[i].clone();
 
-        let mut change = FunctionChange { editor: self, block: block_id, instr: i };
+        let mut change = FunctionChange { editor: self, block: block_id, instr: i, after: 0 };
         f(context, &mut change, &mut instr);
 
         i = change.instr;
+        let after = change.after;
         self.function.block_mut(block_id).instructions[i] = instr;
-        i += 1;
+        i += after + 1;
       }
 
       let mut terminator = self.function.block(block_id).terminator.clone();
-      let mut change = FunctionChange { editor: self, block: block_id, instr: i };
+      let mut change = FunctionChange { editor: self, block: block_id, instr: i, after: 0 };
       t(context, &mut change, &mut terminator);
       self.function.block_mut(block_id).terminator = terminator;
     }
@@ -350,6 +352,12 @@ impl FunctionChange<'_, '_> {
     let block = self.editor.function.block_mut(self.block);
     block.instructions.insert(self.instr, instr);
     self.instr += 1;
+  }
+
+  fn insert_after(&mut self, instr: Instruction) {
+    let block = self.editor.function.block_mut(self.block);
+    block.instructions.insert(self.instr + 1, instr);
+    self.after += 1;
   }
 }
 
