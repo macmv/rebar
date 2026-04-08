@@ -5,12 +5,20 @@ use std::{
   sync::atomic::Ordering,
 };
 
+#[derive(clap::Parser)]
+struct Args {
+  /// Filters tests to only run ones that contain this name.
+  filter: Option<String>,
+}
+
 fn main() -> ExitCode {
-  let filter = std::env::args().nth(1).unwrap_or_default();
+  let args = <Args as clap::Parser>::parse();
 
   let mut files = gather_files(Path::new("test/integration"));
   let total = files.len();
-  files.retain(|path| path.display().to_string().contains(&filter));
+  files.retain(|path| {
+    path.display().to_string().contains(&args.filter.as_deref().unwrap_or_default())
+  });
 
   println!("running tests...");
 
