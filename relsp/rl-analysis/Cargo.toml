@@ -10,8 +10,8 @@ rb-hir-lower.workspace = true
 rb-typer.workspace = true
 rb-diagnostic.workspace = true
 
-serde_json = "1.0.145"
-log = "0.4.28"
+serde_json = "1.0.149"
+log = "0.4.29"
 crossbeam-channel = "0.5.15"
 line-index = "0.1.2"
 la-arena = "0.3.1"
