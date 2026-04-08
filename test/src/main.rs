@@ -34,8 +34,8 @@ fn main() -> ExitCode {
           let object = out_dir.join(format!("{name}.o"));
           let binary = out_dir.join(&*name);
 
-          let res = catch_unwind(|| match rb_runtime::compile_test(path, std, &object) {
-            (_, Ok(_)) => {
+          match catch_unwind(|| rb_runtime::compile_test(path, std, &object)) {
+            Ok((_, Ok(_))) => {
               let status =
                 std::process::Command::new(binary).status().expect("failed to execute binary");
               if !status.success() {
@@ -46,17 +46,14 @@ fn main() -> ExitCode {
               }
             }
 
-            (sources, Err(diagnostics)) => {
+            Ok((sources, Err(diagnostics))) => {
               failed.fetch_add(1, Ordering::Relaxed);
               println!("{}... \x1b[31mfail\x1b[0m", stringified);
               for d in diagnostics {
                 println!("{}", d.render_with_color(&sources));
               }
             }
-          });
 
-          match res {
-            Ok(_) => {}
             Err(e) => {
               failed.fetch_add(1, Ordering::Relaxed);
               println!("{}... \x1b[31mpanic\x1b[0m", stringified);
