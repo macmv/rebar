@@ -3,12 +3,6 @@ use std::num::NonZero;
 use rb_hir::ast::Type;
 use rb_mir::{MirContext, ast::StructId};
 
-mod arg;
-mod array;
-
-pub use arg::RebarArgs;
-pub use array::RbVec;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValueType {
   Nil,
