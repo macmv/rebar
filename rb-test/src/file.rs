@@ -24,6 +24,8 @@ pub struct TempDir {
 
 #[cfg(target_os = "linux")]
 const BASE: &str = "/dev/shm";
+#[cfg(target_os = "macos")]
+const BASE: &str = "/tmp";
 
 static KEEP_TEMP_DIR: LazyLock<bool> = LazyLock::new(|| std::env::var("KEEP_TEMP").is_ok());
 
